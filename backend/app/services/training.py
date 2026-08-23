@@ -237,16 +237,98 @@ DRILLS_CATALOG: Dict[str, List[Dict[str, Any]]] = {
 }
 
 
+# Master catalog for prominent NBA players and legends to ensure 100% position accuracy
+PLAYER_POSITION_MASTER_CATALOG: Dict[str, Tuple[str, str]] = {
+    "Stephen Curry": ("PG", "Guard"),
+    "Luka Doncic": ("PG", "Guard"),
+    "Luka Dončić": ("PG", "Guard"),
+    "Nikola Jokic": ("C", "Center"),
+    "Nikola Jokić": ("C", "Center"),
+    "LeBron James": ("SF", "Forward"),
+    "Kevin Durant": ("SF", "Forward"),
+    "Kawhi Leonard": ("SF", "Forward"),
+    "Giannis Antetokounmpo": ("PF", "Forward"),
+    "Anthony Edwards": ("SG", "Guard"),
+    "Michael Jordan": ("SG", "Guard"),
+    "Kobe Bryant": ("SG", "Guard"),
+    "Shaquille O'Neal": ("C", "Center"),
+    "Tim Duncan": ("PF", "Forward"),
+    "Magic Johnson": ("PG", "Guard"),
+    "Larry Bird": ("SF", "Forward"),
+    "Hakeem Olajuwon": ("C", "Center"),
+    "Joel Embiid": ("C", "Center"),
+    "Damian Lillard": ("PG", "Guard"),
+    "Kyrie Irving": ("PG", "Guard"),
+    "Jimmy Butler": ("SF", "Forward"),
+    "Paul George": ("SF", "Forward"),
+    "James Harden": ("SG", "Guard"),
+    "Russell Westbrook": ("PG", "Guard"),
+    "Anthony Davis": ("C", "Center"),
+    "Jayson Tatum": ("SF", "Forward"),
+    "Jaylen Brown": ("SG", "Guard"),
+    "Devin Booker": ("SG", "Guard"),
+    "Shai Gilgeous-Alexander": ("PG", "Guard"),
+    "Tyrese Haliburton": ("PG", "Guard"),
+    "Jalen Brunson": ("PG", "Guard"),
+    "Donovan Mitchell": ("SG", "Guard"),
+    "Ja Morant": ("PG", "Guard"),
+    "Trae Young": ("PG", "Guard"),
+    "Victor Wembanyama": ("C", "Center"),
+    "Chet Holmgren": ("C", "Center"),
+    "Bam Adebayo": ("C", "Center"),
+    "Domantas Sabonis": ("C", "Center"),
+    "Rudy Gobert": ("C", "Center"),
+    "Zion Williamson": ("PF", "Forward"),
+    "Karl-Anthony Towns": ("C", "Center"),
+    "Pascal Siakam": ("PF", "Forward"),
+    "DeMar DeRozan": ("SG", "Guard"),
+    "Dwyane Wade": ("SG", "Guard"),
+    "Chris Paul": ("PG", "Guard"),
+    "Steve Nash": ("PG", "Guard"),
+    "Allen Iverson": ("SG", "Guard"),
+    "Dirk Nowitzki": ("PF", "Forward"),
+    "Kevin Garnett": ("PF", "Forward"),
+    "Charles Barkley": ("PF", "Forward"),
+    "Karl Malone": ("PF", "Forward"),
+    "David Robinson": ("C", "Center"),
+    "Patrick Ewing": ("C", "Center"),
+    "Scottie Pippen": ("SF", "Forward"),
+    "John Stockton": ("PG", "Guard"),
+    "Isiah Thomas": ("PG", "Guard"),
+    "Reggie Miller": ("SG", "Guard"),
+    "Ray Allen": ("SG", "Guard"),
+    "Klay Thompson": ("SG", "Guard"),
+    "Draymond Green": ("PF", "Forward"),
+}
+
+
 class TrainingService:
     def __init__(self, session: Session):
         self.session = session
 
-    def _infer_position_group(self, position: Optional[str], height_cm: Optional[int], archetype_id: Optional[int]) -> Tuple[str, str]:
+    def _infer_position_group(
+        self,
+        player_name: Optional[str],
+        position: Optional[str],
+        height_cm: Optional[int],
+        archetype_id: Optional[int],
+        ast_pg: float = 0.0,
+        reb_pg: float = 0.0,
+        blk_pg: float = 0.0,
+    ) -> Tuple[str, str]:
         """
         Infers exact position label (PG, SG, SF, PF, C) and general group (Guard, Forward, Center).
+        Uses a 3-tier cascade: Master catalog -> Database position -> Statistical fingerprint.
         """
-        pos = (position or "").strip().upper()
+        # Tier 1: Master Catalog
+        if player_name:
+            clean_name = _normalize_str(player_name)
+            for cat_name, pos_tuple in PLAYER_POSITION_MASTER_CATALOG.items():
+                if _normalize_str(cat_name) == clean_name:
+                    return pos_tuple
 
+        # Tier 2: Explicit Position in DB
+        pos = (position or "").strip().upper()
         if pos in ["PG", "POINT GUARD", "BASE"]:
             return "PG", "Guard"
         if pos in ["SG", "SHOOTING GUARD", "ESCOLTA"]:
@@ -265,7 +347,17 @@ class TrainingService:
         if "F" in pos:
             return "SF", "Forward"
 
-        # Fallback using archetype or height
+        # Tier 3: Statistical and Physical Fingerprint
+        if ast_pg >= 5.5:
+            return "PG", "Guard"
+        if reb_pg >= 9.0 or (height_cm and height_cm >= 208):
+            return "C", "Center"
+        if reb_pg >= 6.5 or (height_cm and height_cm >= 203):
+            return "PF", "Forward"
+        if ast_pg <= 3.5 and (height_cm and height_cm <= 196):
+            return "SG", "Guard"
+
+        # Fallback using archetype
         if archetype_id in [0, 2]:
             return "C", "Center"
         elif archetype_id in [1, 6]:
@@ -275,15 +367,8 @@ class TrainingService:
         elif archetype_id == 3:
             return "SF", "Forward"
 
-        if height_cm:
-            if height_cm >= 208:
-                return "C", "Center"
-            elif height_cm >= 198:
-                return "SF", "Forward"
-            else:
-                return "PG", "Guard"
-
         return "SF", "Forward"
+
 
     def get_training_analysis(
         self,
@@ -291,36 +376,45 @@ class TrainingService:
         season_id: Optional[int] = None,
         intensity: str = "standard",
     ) -> TrainingAnalysisResponse:
-        # Find player using robust exact and normalized match
-        player = self.session.exec(select(Player).where(Player.full_name == player_name)).first()
-        if not player:
-            clean_target = _normalize_str(player_name)
-            all_players = self.session.exec(select(Player)).all()
-            candidates = []
-            for p in all_players:
-                clean_p = _normalize_str(p.full_name)
-                if clean_p == clean_target:
-                    candidates.append((p, 3))
-                elif clean_p.startswith(clean_target) or clean_target.startswith(clean_p):
-                    candidates.append((p, 2))
-                elif clean_target in clean_p or clean_p in clean_target:
-                    candidates.append((p, 1))
+        # Find player using robust exact and normalized match with stats validation
+        clean_target = _normalize_str(player_name)
+        all_players = self.session.exec(select(Player)).all()
+        candidates = []
+        for p in all_players:
+            clean_p = _normalize_str(p.full_name)
+            if clean_p == clean_target:
+                candidates.append((p, 3))
+            elif clean_p.startswith(clean_target) or clean_target.startswith(clean_p):
+                candidates.append((p, 2))
+            elif clean_target in clean_p or clean_p in clean_target:
+                candidates.append((p, 1))
 
-            if candidates:
-                stats_map = {}
-                for p, _ in candidates:
-                    st_count = len(
-                        self.session.exec(
-                            select(PlayerSeasonStats).where(PlayerSeasonStats.player_id == p.id)
-                        ).all()
-                    )
-                    stats_map[p.id] = st_count
+        player = None
+        if candidates:
+            stats_map = {}
+            for p, _ in candidates:
+                st_count = len(
+                    self.session.exec(
+                        select(PlayerSeasonStats).where(PlayerSeasonStats.player_id == p.id)
+                    ).all()
+                )
+                stats_map[p.id] = st_count
 
-                candidates.sort(key=lambda x: (x[1], stats_map.get(x[0].id, 0)), reverse=True)
-                player = candidates[0][0]
+            candidates.sort(
+                key=lambda x: (
+                    1 if stats_map.get(x[0].id, 0) > 0 else 0,
+                    x[1],
+                    stats_map.get(x[0].id, 0),
+                ),
+                reverse=True,
+            )
+            best_candidate = candidates[0][0]
+            if stats_map.get(best_candidate.id, 0) > 0:
+                player = best_candidate
 
         if not player:
             raise ValueError(f"Player '{player_name}' not found")
+
 
 
         # Find player stats for the season
@@ -352,10 +446,6 @@ class TrainingService:
         arch_name_en = arch_meta["name_en"]
         arch_color = arch_meta["color"]
 
-        pos_specific, pos_group = self._infer_position_group(
-            player.position, player.height_cm, arch_id
-        )
-
         # Player Per-Game metrics
         gp = max(player_stat.gp or 1, 1)
         p_pts = round((player_stat.pts or 0.0) / gp, 1)
@@ -372,6 +462,10 @@ class TrainingService:
         p_fg_pct = round(player_stat.fg_pct or 0.44, 3)
         p_fg3_pct = round(player_stat.fg3_pct or 0.32, 3)
         p_ft_pct = round(player_stat.ft_pct or 0.75, 3)
+
+        pos_specific, pos_group = self._infer_position_group(
+            player.full_name, player.position, player.height_cm, arch_id, p_ast, p_reb, p_blk
+        )
 
         player_metrics = {
             "pts": p_pts,
@@ -406,8 +500,13 @@ class TrainingService:
             if not p_item:
                 continue
 
+            c_gp = max(s.gp or 1, 1)
+            c_ast = round((s.ast or 0.0) / c_gp, 1)
+            c_reb = round((s.reb or 0.0) / c_gp, 1)
+            c_blk = round((s.blk or 0.0) / c_gp, 1)
+
             item_pos_spec, item_pos_grp = self._infer_position_group(
-                p_item.position, p_item.height_cm, s.cluster_id
+                p_item.full_name, p_item.position, p_item.height_cm, s.cluster_id, c_ast, c_reb, c_blk
             )
             # Match by specific position or group
             if item_pos_grp == pos_group or s.cluster_id == arch_id:
@@ -422,11 +521,18 @@ class TrainingService:
                 p_item = self.session.get(Player, s.player_id)
                 if not p_item:
                     continue
-                _, item_grp = self._infer_position_group(p_item.position, p_item.height_cm, s.cluster_id)
+                c_gp = max(s.gp or 1, 1)
+                c_ast = round((s.ast or 0.0) / c_gp, 1)
+                c_reb = round((s.reb or 0.0) / c_gp, 1)
+                c_blk = round((s.blk or 0.0) / c_gp, 1)
+                _, item_grp = self._infer_position_group(
+                    p_item.full_name, p_item.position, p_item.height_cm, s.cluster_id, c_ast, c_reb, c_blk
+                )
                 if item_grp == pos_group:
                     cohort_stats.append(s)
                 if len(cohort_stats) >= 50:
                     break
+
 
         total_peers = len(cohort_stats)
 
