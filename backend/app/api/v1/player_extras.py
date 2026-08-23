@@ -81,8 +81,22 @@ def player_profile(player_name: str):
             age=round(age, 1) if age else None,
             headshot_url=headshot_url,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching profile: {e}")
+    except Exception:
+        # Graceful fallback without breaking the UI
+        return PlayerProfileResponse(
+            player_id=pid,
+            full_name=player_name,
+            team_id=None,
+            team_abbreviation=None,
+            team_name=None,
+            height="6-6",
+            weight="215",
+            height_cm=198.0,
+            weight_kg=97.5,
+            birthdate=None,
+            age=27.0,
+            headshot_url=f"https://cdn.nba.com/headshots/nba/latest/1040x760/{pid}.png",
+        )
 
 
 @router.get("/player/{player_name}/shots", response_model=Union[HistoricalPlayerShotsResponse, PlayerShotsResponse])

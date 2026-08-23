@@ -2,11 +2,24 @@ from contextlib import contextmanager
 from sqlmodel import Session, create_engine, SQLModel
 from app.config import settings
 
-engine = create_engine(
-    settings.DATABASE_URL,
-    pool_pre_ping=True,
-    echo=settings.DEBUG,
-)
+
+def _init_engine():
+    raw_url = settings.DATABASE_URL
+    if raw_url.startswith("postgresql://"):
+        url = raw_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    else:
+        url = raw_url
+
+    connect_args = {"check_same_thread": False} if "sqlite" in url else {}
+    return create_engine(
+        url,
+        pool_pre_ping=True,
+        echo=settings.DEBUG,
+        connect_args=connect_args,
+    )
+
+
+engine = _init_engine()
 
 
 def get_db_session():
