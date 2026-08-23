@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api.v1 import health, teams, players, cluster, data, player_extras, historical, seasons, hall_of_fame, analytics, versus, lineup
+from app.api.v1 import health, teams, players, cluster, data, player_extras, historical, seasons, hall_of_fame, analytics, versus, lineup, training
 
 app = FastAPI(
     title="NBA Analytics Platform API",
@@ -38,5 +38,7 @@ app.include_router(hall_of_fame.router, prefix="/api/v1", tags=["hall-of-fame"])
 app.include_router(analytics.router, prefix="/api/v1", tags=["analytics"])
 app.include_router(versus.router, prefix="/api/v1", tags=["versus"])
 app.include_router(lineup.router, prefix="/api/v1", tags=["lineup"])
+app.include_router(training.router, prefix="/api/v1", tags=["training"])
+
 
 

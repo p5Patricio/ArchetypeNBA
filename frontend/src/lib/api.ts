@@ -835,4 +835,111 @@ export async function simulate5v5Matchup(
   return await res.json();
 }
 
+// ============================================================================
+// Training Camp & Positional Analysis Types & API
+// ============================================================================
+
+export type DrillRecommendation = {
+  id: string;
+  name_es: string;
+  name_en: string;
+  category: string;
+  stat_target: string;
+  intensity: "standard" | "high" | "elite";
+  sets_and_reps: string;
+  description_es: string;
+  description_en: string;
+  projected_impact_es: string;
+  projected_impact_en: string;
+};
+
+export type StatGapItem = {
+  stat_key: string;
+  label_es: string;
+  label_en: string;
+  player_value: number;
+  position_avg: number;
+  position_median: number;
+  position_p75: number;
+  diff: number;
+  pct_diff: number;
+  status: "elite" | "strength" | "average" | "weakness" | "critical_deficit";
+  needs_training: boolean;
+};
+
+export type RoleFulfillment = {
+  overall_score: number;
+  letter_grade: string;
+  grade_label_es: string;
+  grade_label_en: string;
+  verdict_es: string;
+  verdict_en: string;
+  key_strengths_es: string[];
+  key_strengths_en: string[];
+  primary_deficits_es: string[];
+  primary_deficits_en: string[];
+  projected_score: number;
+  projected_grade: string;
+};
+
+export type TrainingRegimePlan = {
+  regime_id: string;
+  title_es: string;
+  title_en: string;
+  description_es: string;
+  description_en: string;
+  weekly_frequency: string;
+  target_focus_es: string;
+  target_focus_en: string;
+  drills: DrillRecommendation[];
+};
+
+export type TrainingAnalysisResponse = {
+  player_id: number;
+  player_name: string;
+  team_abbreviation: string;
+  team_name: string;
+  headshot_url: string;
+  position: string;
+  position_group: string;
+  archetype_id: number;
+  archetype_name_es: string;
+  archetype_name_en: string;
+  archetype_color: string;
+  season_id: number;
+  season_label: string;
+  total_position_peers: number;
+  current_stats: Record<string, number>;
+  positional_benchmark: Record<string, number>;
+  projected_stats: Record<string, number>;
+  stat_gaps: StatGapItem[];
+  role_fulfillment: RoleFulfillment;
+  recommended_drills: DrillRecommendation[];
+  training_regimes: TrainingRegimePlan[];
+  radar_labels: string[];
+  radar_player_values: number[];
+  radar_benchmark_values: number[];
+  radar_projected_values: number[];
+};
+
+export async function getTrainingAnalysis(
+  playerName: string,
+  seasonId?: number,
+  intensity: string = "standard"
+): Promise<TrainingAnalysisResponse> {
+  const params = new URLSearchParams();
+  params.set("player_name", playerName);
+  if (seasonId !== undefined) params.set("season_id", String(seasonId));
+  if (intensity) params.set("intensity", intensity);
+
+  return await getJson<TrainingAnalysisResponse>(
+    `${API_BASE}/training/analyze?${params.toString()}`
+  );
+}
+
+export async function getDrillsCatalog(): Promise<DrillRecommendation[]> {
+  return await getJson<DrillRecommendation[]>(`${API_BASE}/training/drills`);
+}
+
+
 

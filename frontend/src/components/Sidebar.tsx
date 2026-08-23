@@ -15,6 +15,7 @@ import {
   X,
   Swords,
   Users,
+  Dumbbell,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -34,6 +35,14 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       active: pathname === "/",
       accent: "text-orange-600",
       activeBg: "bg-orange-50 text-orange-800 border-orange-200 font-extrabold",
+    },
+    {
+      href: "/training",
+      label: t("nav_training_camp") || "Campo de Entrenamiento",
+      icon: Dumbbell,
+      active: pathname.startsWith("/training"),
+      accent: "text-cyan-600",
+      activeBg: "bg-cyan-50 text-cyan-800 border-cyan-200 font-extrabold",
     },
     {
       href: "/versus",
