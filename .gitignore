@@ -1,27 +1,53 @@
-﻿.atl/
 # Python
 __pycache__/
 *.py[cod]
-*.class
+*$py.class
 *.so
 .venv/
 venv/
 env/
 ENV/
+*.egg-info/
+dist/
+build/
+*.db
+*.sqlite
+*.sqlite3
 
-# Environment
+# Node / Next.js
+node_modules/
+.next/
+out/
+.pnp
+.pnp.js
+next-env.d.ts
+*.tsbuildinfo
+
+# Environment & Credentials
 .env
-.env.local
+.env*.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# IDE
+# IDE & Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
+*.sublime-workspace
+.project
 
-# OS
+# OS Files
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Agent Teams Lite
+# AI Agents & Assistants Workspace caches
 .atl/
+.codegraph/
+.claude/
+.gemini/
+.agents/
+skills-lock.json
+*.log
