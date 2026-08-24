@@ -4,26 +4,31 @@ import React, { useState, useEffect } from "react";
 import { usePreferences } from "@/context/PreferencesContext";
 import { Navbar } from "@/components/Navbar";
 import { CommandPalette } from "@/components/CommandPalette";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 
 interface DoppelgangerMatch {
-  player_id: number;
+  similar_player_id: number;
   player_name: string;
+  headshot_url: string;
   season_label: string;
-  era: string;
-  archetype_name: string;
+  age_in_season?: number;
   similarity_pct: number;
-  matching_traits_es: string[];
-  matching_traits_en: string[];
-  key_comparison_stat_es: string;
-  key_comparison_stat_en: string;
+  archetype_name_es: string;
+  archetype_name_en: string;
+  archetype_color: string;
+  shared_traits_es: string[];
+  shared_traits_en: string[];
+  key_comparison_stats: Record<string, { target: number; comp: number }>;
 }
 
 interface DoppelgangerData {
   target_player_id: number;
   target_player_name: string;
-  target_season: string;
-  target_archetype: string;
+  target_season_label: string;
+  target_position: string;
   matches: DoppelgangerMatch[];
+  scouting_takeaway_es: string;
+  scouting_takeaway_en: string;
 }
 
 const POPULAR_PLAYERS = [
@@ -47,7 +52,6 @@ export default function DoppelgangersPage() {
   const [data, setData] = useState<DoppelgangerData | null>(null);
   const [playerList, setPlayerList] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
-
 
   // Fetch all players for autocomplete
   useEffect(() => {
@@ -73,12 +77,9 @@ export default function DoppelgangersPage() {
     setLoading(true);
     setError(null);
 
-    fetch(`http://localhost:8000/api/v1/doppelgangers?player_id_or_name=${encodeURIComponent(selectedPlayer)}&top_k=5`)
-      .then(async (res) => {
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.detail || "Player not found");
-        }
+    fetch(`http://localhost:8000/api/v1/doppelgangers?player_id_or_name=${encodeURIComponent(selectedPlayer)}&top_k=6`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to calculate historical doppelgängers");
         return res.json();
       })
       .then((resData: DoppelgangerData) => {
@@ -103,205 +104,244 @@ export default function DoppelgangersPage() {
       <div className="md:pl-64 p-6 md:p-10">
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <span className="px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                AI Historical Clones
-              </span>
-              <span className="text-xs text-gray-400">
-                CraftedNBA / Multi-Dimensional Cosine Similarity (40 Years)
-              </span>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <span className="px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                  AI Historical Clones
+                </span>
+                <span className="text-xs text-gray-400">
+                  CraftedNBA / Multi-Dimensional Cosine Similarity (40 Years)
+                </span>
+              </div>
+              <h1 className="text-3xl md:text-5xl font-black tracking-tight mt-2 bg-gradient-to-r from-white via-gray-100 to-purple-400 bg-clip-text text-transparent">
+                {language === "es" ? "Doppelgängers Históricos" : "Historical Doppelgängers"}
+              </h1>
+              <p className="text-sm text-gray-400 max-w-2xl mt-1">
+                {language === "es"
+                  ? "Encuentra los clones históricos más parecidos de cualquier jugador en 40 años de datos de la NBA usando similitud de coseno y arquetipos tácticos."
+                  : "Find the most accurate historical player clones across 40 years of NBA data using multi-dimensional cosine similarity and tactical archetypes."}
+              </p>
             </div>
-            <h1 className="text-3xl md:text-5xl font-black tracking-tight mt-2 bg-gradient-to-r from-white via-gray-100 to-purple-400 bg-clip-text text-transparent">
-              {language === "es" ? "Doppelgängers Históricos" : "Historical Doppelgängers"}
-            </h1>
-            <p className="text-sm text-gray-400 max-w-2xl mt-1">
-              {language === "es"
-                ? "Encuentra los clones históricos más parecidos de cualquier jugador en 40 años de datos de la NBA usando similitud de coseno y arquetipos tácticos."
-                : "Discover the closest historical player clones across 40 years of NBA data using multi-dimensional cosine similarity and tactical archetypes."}
-            </p>
           </div>
 
-          {/* Quick Presets */}
-          <div className="flex flex-wrap gap-1.5 max-w-md">
-            {POPULAR_PLAYERS.map((p) => (
-              <button
-                key={p}
-                onClick={() => {
-                  setSearchQuery(p);
-                  setSelectedPlayer(p);
-                }}
-                className={`px-2.5 py-1 text-xs rounded-lg transition-all ${
-                  selectedPlayer === p
-                    ? "bg-purple-500/30 text-purple-300 border border-purple-500/50 font-bold"
-                    : "bg-white/5 text-gray-400 hover:text-white border border-white/5 hover:bg-white/10"
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Search Bar with Autocomplete */}
-        <div className="relative max-w-xl">
-          <div className="relative">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={language === "es" ? "Buscar jugador (ej. Stephen Curry, Nikola Jokic)..." : "Search player (e.g. Stephen Curry, Nikola Jokic)..."}
-              className="w-full bg-slate-900/90 border border-white/15 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/60 focus:ring-1 focus:ring-purple-500/40 shadow-inner"
-            />
-            {loading && (
-              <div className="absolute right-3.5 top-3.5 w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-            )}
-          </div>
-
-          {/* Suggestions Dropdown */}
-          {suggestions.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1.5 bg-slate-900/95 border border-white/15 rounded-xl shadow-2xl overflow-hidden z-30 backdrop-blur-xl">
-              {suggestions.map((name) => (
-                <button
-                  key={name}
-                  onClick={() => {
-                    setSelectedPlayer(name);
-                    setSearchQuery(name);
+          {/* Search Input & Quick Preset Buttons */}
+          <div className="space-y-4">
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && suggestions.length > 0) {
+                    setSelectedPlayer(suggestions[0]);
+                    setSearchQuery(suggestions[0]);
                     setSuggestions([]);
+                  }
+                }}
+                placeholder={
+                  language === "es"
+                    ? "Buscar jugador para clonar (ej. Stephen Curry, LeBron James, Nikola Jokic)..."
+                    : "Search player to match (e.g. Stephen Curry, LeBron James, Nikola Jokic)..."
+                }
+                className="w-full bg-slate-900/90 border border-white/15 rounded-2xl px-5 py-4 text-white text-base placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 backdrop-blur-xl shadow-2xl"
+              />
+
+              {/* Autocomplete Dropdown */}
+              {suggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-white/15 rounded-2xl overflow-hidden z-50 shadow-2xl backdrop-blur-2xl">
+                  {suggestions.map((name, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setSelectedPlayer(name);
+                        setSearchQuery(name);
+                        setSuggestions([]);
+                      }}
+                      className="w-full px-5 py-3 text-left text-sm text-gray-200 hover:bg-purple-600/30 hover:text-white flex items-center justify-between border-b border-white/5 last:border-none transition"
+                    >
+                      <span className="font-semibold">{name}</span>
+                      <span className="text-xs text-gray-400 font-mono">Seleccionar →</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Quick Preset Buttons */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+              <span className="text-xs font-bold uppercase text-gray-400 shrink-0">
+                {language === "es" ? "Populares:" : "Popular:"}
+              </span>
+              {POPULAR_PLAYERS.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => {
+                    setSelectedPlayer(p);
+                    setSearchQuery(p);
                   }}
-                  className="w-full text-left px-4 py-2.5 text-sm text-gray-200 hover:bg-purple-600/20 hover:text-white transition-colors border-b border-white/5 last:border-0"
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                    selectedPlayer === p
+                      ? "bg-purple-500 text-white shadow-lg shadow-purple-500/30 border border-purple-400"
+                      : "bg-white/5 text-gray-300 hover:bg-white/10 border border-white/10"
+                  }`}
                 >
-                  {name}
+                  {p}
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Loading State */}
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-20 space-y-3">
+              <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-xs font-bold text-gray-400 font-mono">
+                {language === "es" ? "Calculando vectores de similitud..." : "Computing multi-dimensional cosine vectors..."}
+              </p>
+            </div>
           )}
-        </div>
 
-        {/* Error State */}
-        {error && (
-          <div className="p-4 bg-rose-500/20 border border-rose-500/30 rounded-xl text-rose-300 text-sm">
-            {error}
-          </div>
-        )}
-
-        {/* Target Player Card */}
-        {data && (
-          <div className="bg-[#111827]/80 border border-white/10 rounded-2xl p-6 backdrop-blur-xl shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div>
-              <span className="text-xs uppercase font-bold text-gray-400 tracking-wider">
-                {language === "es" ? "Jugador Objetivo" : "Target Subject"}
-              </span>
-              <h2 className="text-3xl font-black text-white mt-0.5">{data.target_player_name}</h2>
-              <div className="flex items-center gap-3 text-sm text-gray-300 mt-1">
-                <span className="font-mono text-purple-400 font-bold">{data.target_season}</span>
-                <span>•</span>
-                <span className="px-2.5 py-0.5 rounded-md bg-purple-500/20 text-purple-300 text-xs font-semibold border border-purple-500/30">
-                  {data.target_archetype}
-                </span>
-              </div>
+          {/* Error State */}
+          {error && (
+            <div className="p-4 bg-rose-500/20 border border-rose-500/30 rounded-2xl text-rose-300 text-sm">
+              {error}
             </div>
+          )}
 
-            <div className="bg-white/5 border border-white/10 px-5 py-3 rounded-xl">
-              <div className="text-xs text-gray-400 uppercase font-medium">
-                {language === "es" ? "Algoritmo de Rastreo" : "Match Engine"}
+          {/* Match Results */}
+          {!loading && data && data.matches && (
+            <div className="space-y-6">
+              {/* Target Player Card Header */}
+              <div className="bg-gradient-to-r from-purple-950/40 via-slate-900/60 to-slate-900/40 border border-purple-500/30 rounded-3xl p-6 backdrop-blur-xl shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center font-mono text-2xl font-black text-purple-300">
+                    🧬
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold uppercase text-purple-400 tracking-wider">
+                      {language === "es" ? "Jugador Analizado" : "Analyzed Target Player"}
+                    </div>
+                    <h2 className="text-2xl font-black text-white">{data.target_player_name}</h2>
+                    <p className="text-xs text-gray-400">
+                      {data.target_season_label} • {data.target_position}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-black/40 border border-white/10 rounded-2xl p-3.5 max-w-md">
+                  <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                    {language === "es" ? "Diagnóstico de Scouting" : "Scouting Takeaway"}
+                  </div>
+                  <p className="text-xs text-gray-200 mt-1 leading-relaxed">
+                    {language === "es" ? data.scouting_takeaway_es : data.scouting_takeaway_en}
+                  </p>
+                </div>
               </div>
-              <div className="text-sm font-bold text-gray-200 mt-0.5">
-                40-Year Historical Cohort Matrix
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Doppelgänger Matches List */}
-        {data && (
-          <div className="space-y-4">
-            <h3 className="text-lg font-bold text-gray-200 flex items-center gap-2">
-              <span>{language === "es" ? "Top 5 Clones Históricos Identificados" : "Top 5 Historical Clones Found"}</span>
-              <span className="text-xs font-normal text-gray-400">({data.matches.length} matches)</span>
-            </h3>
+              {/* Top 6 Matches Grid */}
+              <h3 className="text-lg font-extrabold text-white flex items-center gap-2">
+                <span>{language === "es" ? "Top Clones Históricos Identificados" : "Top Historical Clones Found"}</span>
+                <span className="text-xs font-normal text-gray-400">({data.matches.length} matches)</span>
+              </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {data.matches.map((m, idx) => {
-                const isTopMatch = idx === 0;
-                return (
-                  <div
-                    key={`${m.player_id}-${m.season_label}`}
-                    className={`bg-slate-900/90 border rounded-2xl p-5 backdrop-blur-xl shadow-xl transition-all duration-300 relative overflow-hidden flex flex-col justify-between ${
-                      isTopMatch
-                        ? "border-amber-500/40 hover:border-amber-500/70 shadow-amber-500/10"
-                        : "border-white/10 hover:border-white/20"
-                    }`}
-                  >
-                    {isTopMatch && (
-                      <div className="absolute top-0 right-0 bg-amber-500/20 border-b border-l border-amber-500/40 text-amber-300 text-[10px] font-bold px-3 py-1 rounded-bl-xl tracking-wider">
-                        ★ TOP CLONE
-                      </div>
-                    )}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {data.matches.map((m, idx) => {
+                  const isTopMatch = idx === 0;
+                  const traits = language === "es" ? (m.shared_traits_es || []) : (m.shared_traits_en || []);
+                  const archetype = language === "es" ? m.archetype_name_es : m.archetype_name_en;
 
-                    <div>
-                      {/* Similarity Badge */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono text-gray-400">#{idx + 1} Match</span>
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-xs font-black font-mono ${
-                            m.similarity_pct >= 90
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                              : "bg-purple-500/20 text-purple-300 border border-purple-500/40"
-                          }`}
-                        >
-                          {m.similarity_pct.toFixed(1)}% {language === "es" ? "Similitud" : "Similarity"}
-                        </span>
-                      </div>
-
-                      {/* Player Name & Era */}
-                      <h4 className="text-xl font-bold text-white mt-2.5">{m.player_name}</h4>
-                      <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
-                        <span className="font-mono font-bold text-gray-300">{m.season_label}</span>
-                        <span>•</span>
-                        <span>{m.era}</span>
-                      </div>
-
-                      {/* Archetype */}
-                      <div className="mt-2.5">
-                        <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-semibold bg-white/5 text-gray-300 border border-white/10">
-                          {m.archetype_name}
-                        </span>
-                      </div>
-
-                      {/* Matching Tactical Traits */}
-                      <div className="mt-4 space-y-1.5">
-                        <div className="text-[11px] uppercase font-bold text-gray-400 tracking-wider">
-                          {language === "es" ? "Rasgos Compartidos:" : "Matching Traits:"}
+                  return (
+                    <div
+                      key={`${m.similar_player_id}-${m.season_label}`}
+                      className={`bg-slate-900/90 border rounded-2xl p-5 backdrop-blur-xl shadow-xl transition-all duration-300 relative overflow-hidden flex flex-col justify-between ${
+                        isTopMatch
+                          ? "border-amber-500/40 hover:border-amber-500/70 shadow-amber-500/10"
+                          : "border-white/10 hover:border-white/20"
+                      }`}
+                    >
+                      {isTopMatch && (
+                        <div className="absolute top-0 right-0 bg-amber-500/20 border-b border-l border-amber-500/40 text-amber-300 text-[10px] font-bold px-3 py-1 rounded-bl-xl tracking-wider">
+                          ★ TOP CLONE
                         </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {(language === "es" ? m.matching_traits_es : m.matching_traits_en).map((trait, tIdx) => (
-                            <span
-                              key={tIdx}
-                              className="text-[11px] bg-slate-800/90 text-gray-200 px-2 py-0.5 rounded-md border border-white/5"
-                            >
-                              ✓ {trait}
-                            </span>
+                      )}
+
+                      <div>
+                        {/* Similarity Badge & Avatar */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <PlayerAvatar
+                              headshotUrl={m.headshot_url}
+                              playerName={m.player_name}
+                              size={44}
+                              className="ring-2 ring-white/10"
+                            />
+                            <div>
+                              <span className="text-xs font-mono text-gray-400">#{idx + 1} Match</span>
+                              <h4 className="text-base font-bold text-white leading-tight">{m.player_name}</h4>
+                            </div>
+                          </div>
+
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-xs font-black font-mono ${
+                              m.similarity_pct >= 90
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                : "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                            }`}
+                          >
+                            {m.similarity_pct.toFixed(1)}%
+                          </span>
+                        </div>
+
+                        {/* Season & Age */}
+                        <div className="flex items-center gap-2 text-xs text-gray-400 mt-2.5">
+                          <span className="font-mono font-bold text-gray-300">{m.season_label}</span>
+                          {m.age_in_season && <span>• {m.age_in_season} {language === "es" ? "años" : "yrs"}</span>}
+                        </div>
+
+                        {/* Archetype */}
+                        <div className="mt-2">
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-white/5 text-purple-300 border border-purple-500/30">
+                            {archetype}
+                          </span>
+                        </div>
+
+                        {/* Matching Tactical Traits */}
+                        <div className="mt-3.5 space-y-1.5">
+                          <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                            {language === "es" ? "Rasgos Compartidos:" : "Matching Traits:"}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {traits.map((trait, tIdx) => (
+                              <span
+                                key={tIdx}
+                                className="text-[10px] bg-slate-800/90 text-gray-200 px-2 py-0.5 rounded-md border border-white/5"
+                              >
+                                ✓ {trait}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Key Comparison Metric Stats */}
+                      {m.key_comparison_stats && (
+                        <div className="mt-4 pt-3 border-t border-white/10 grid grid-cols-3 gap-2 text-center text-[10px] font-mono">
+                          {Object.entries(m.key_comparison_stats).slice(0, 3).map(([k, vals], sIdx) => (
+                            <div key={sIdx} className="bg-black/30 p-1.5 rounded-lg">
+                              <div className="text-gray-500 uppercase">{k}</div>
+                              <div className="text-gray-200 font-bold">{vals.comp} vs {vals.target}</div>
+                            </div>
                           ))}
                         </div>
-                      </div>
+                      )}
                     </div>
-
-                    {/* Key Comparison Metric Footer */}
-                    <div className="mt-5 pt-3 border-t border-white/10">
-                      <div className="text-xs text-gray-300 font-mono">
-                        {language === "es" ? m.key_comparison_stat_es : m.key_comparison_stat_en}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
-

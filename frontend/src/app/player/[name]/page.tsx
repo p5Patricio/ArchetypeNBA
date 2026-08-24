@@ -519,34 +519,68 @@ export default function PlayerPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {doppelData.matches?.map((m: any, idx: number) => (
-                    <div
-                      key={idx}
-                      className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 flex flex-col justify-between"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-400">#{idx + 1} Match</span>
-                          <span className="px-2.5 py-0.5 rounded-full text-xs font-black font-mono bg-purple-100 text-purple-700">
-                            {m.similarity_pct.toFixed(1)}% {language === "es" ? "Similitud" : "Similarity"}
-                          </span>
-                        </div>
-                        <h4 className="text-lg font-bold text-slate-900 mt-2">{m.player_name}</h4>
-                        <div className="text-xs text-slate-500 font-medium mt-0.5">
-                          {m.season_label} • {m.era}
-                        </div>
-                        <div className="mt-3">
-                          <span className="px-2 py-0.5 rounded bg-white text-[11px] font-bold text-purple-700 border border-purple-200">
-                            {m.archetype_name}
-                          </span>
-                        </div>
-                      </div>
+                  {doppelData.matches?.map((m: any, idx: number) => {
+                    const traits = language === "es" ? (m.shared_traits_es || []) : (m.shared_traits_en || []);
+                    const archetype = language === "es" ? (m.archetype_name_es || m.archetype_name) : (m.archetype_name_en || m.archetype_name);
 
-                      <div className="mt-4 pt-3 border-t border-slate-200 text-xs text-slate-600 font-mono">
-                        {language === "es" ? m.key_comparison_stat_es : m.key_comparison_stat_en}
+                    return (
+                      <div
+                        key={idx}
+                        className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 flex flex-col justify-between hover:border-purple-300 transition"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-400">#{idx + 1} Match</span>
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-black font-mono bg-purple-100 text-purple-700">
+                              {(m.similarity_pct || 90).toFixed(1)}% {language === "es" ? "Similitud" : "Similarity"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3 mt-3">
+                            <PlayerAvatar
+                              headshotUrl={m.headshot_url}
+                              playerName={m.player_name}
+                              size={40}
+                              className="ring-1 ring-slate-200"
+                            />
+                            <div>
+                              <h4 className="text-base font-bold text-slate-900 leading-tight">{m.player_name}</h4>
+                              <div className="text-xs text-slate-500 font-medium">
+                                {m.season_label} {m.age_in_season ? `• ${m.age_in_season} ${language === "es" ? "años" : "yrs"}` : ""}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-3">
+                            <span className="px-2 py-0.5 rounded bg-white text-[11px] font-bold text-purple-700 border border-purple-200">
+                              {archetype}
+                            </span>
+                          </div>
+
+                          {traits.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-1">
+                              {traits.slice(0, 3).map((t: string, tIdx: number) => (
+                                <span key={tIdx} className="text-[10px] bg-white text-slate-700 px-2 py-0.5 rounded border border-slate-200 font-medium">
+                                  ✓ {t}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {m.key_comparison_stats && (
+                          <div className="mt-4 pt-3 border-t border-slate-200 grid grid-cols-3 gap-1.5 text-center text-[10px] font-mono">
+                            {Object.entries(m.key_comparison_stats).slice(0, 3).map(([k, vals]: any, sIdx) => (
+                              <div key={sIdx} className="bg-white p-1 rounded border border-slate-100">
+                                <div className="text-slate-400 uppercase font-bold">{k}</div>
+                                <div className="text-slate-800 font-extrabold">{vals.comp} vs {vals.target}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : (
