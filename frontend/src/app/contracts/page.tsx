@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { usePreferences } from "@/context/PreferencesContext";
+import { Navbar } from "@/components/Navbar";
+import { CommandPalette } from "@/components/CommandPalette";
 
 
 interface ContractDetail {
@@ -45,7 +47,7 @@ interface FinancialData {
 export default function ContractsPage() {
   const { language } = usePreferences();
   const [activeTab, setActiveTab] = useState<"bargains" | "salaries" | "payrolls">("bargains");
-
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [data, setData] = useState<FinancialData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,14 +94,17 @@ export default function ContractsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0E17] text-white p-6 md:p-10 relative overflow-hidden">
+    <div className="min-h-screen bg-[#0A0E17] text-white relative overflow-hidden">
+      <Navbar onOpenSearch={() => setIsCommandOpen(true)} />
+      <CommandPalette isOpen={isCommandOpen} onClose={() => setIsCommandOpen(false)} />
+
       {/* Background Neon Brand Glow */}
       <div className="absolute top-0 right-1/3 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-96 h-96 bg-amber-600/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Hero Header */}
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
+      <div className="md:pl-64 p-6 md:p-10">
+        <div className="max-w-6xl mx-auto space-y-6">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
           <div>
             <div className="flex items-center gap-2.5">
               <span className="px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
@@ -350,9 +355,11 @@ export default function ContractsPage() {
           </div>
         )}
       </div>
+      </div>
     </div>
   );
 }
+
 
 function roundVal(v: number): number {
   return Math.round(v * 10) / 10;

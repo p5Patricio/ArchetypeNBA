@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { usePreferences } from "@/context/PreferencesContext";
-
+import { Navbar } from "@/components/Navbar";
+import { CommandPalette } from "@/components/CommandPalette";
 
 interface DoppelgangerMatch {
   player_id: number;
@@ -39,13 +40,14 @@ const POPULAR_PLAYERS = [
 export default function DoppelgangersPage() {
   const { language } = usePreferences();
   const [searchQuery, setSearchQuery] = useState("Stephen Curry");
-
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState("Stephen Curry");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DoppelgangerData | null>(null);
   const [playerList, setPlayerList] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+
 
   // Fetch all players for autocomplete
   useEffect(() => {
@@ -90,14 +92,17 @@ export default function DoppelgangersPage() {
   }, [selectedPlayer]);
 
   return (
-    <div className="min-h-screen bg-[#0A0E17] text-white p-6 md:p-10 relative overflow-hidden">
+    <div className="min-h-screen bg-[#0A0E17] text-white relative overflow-hidden">
+      <Navbar onOpenSearch={() => setIsCommandOpen(true)} />
+      <CommandPalette isOpen={isCommandOpen} onClose={() => setIsCommandOpen(false)} />
+
       {/* Background Neon Brand Glow */}
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-10 left-1/4 w-96 h-96 bg-cyan-600/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Hero Header */}
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
+      <div className="md:pl-64 p-6 md:p-10">
+        <div className="max-w-6xl mx-auto space-y-6">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
           <div>
             <div className="flex items-center gap-2.5">
               <span className="px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30">
@@ -295,6 +300,8 @@ export default function DoppelgangersPage() {
           </div>
         )}
       </div>
+      </div>
     </div>
   );
 }
+

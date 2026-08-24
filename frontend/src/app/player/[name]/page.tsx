@@ -126,15 +126,16 @@ export default function PlayerPage() {
       <Navbar onOpenSearch={() => setIsCommandOpen(true)} />
       <CommandPalette isOpen={isCommandOpen} onClose={() => setIsCommandOpen(false)} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-6">
-        {/* Back Link */}
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors uppercase tracking-wider"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t("nav_scouting_hub")}
-        </Link>
+      <div className="md:pl-64">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-6">
+          {/* Back Link */}
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors uppercase tracking-wider"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {t("nav_scouting_hub")}
+          </Link>
 
         {/* Player Header Card */}
         <div className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs relative overflow-hidden">
@@ -556,6 +557,8 @@ export default function PlayerPage() {
           </div>
         )}
       </main>
+      </div>
     </div>
   );
 }
+
