@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { usePreferences } from "@/context/PreferencesContext";
+import { Target } from "lucide-react";
 
 export interface ShotCoordinate {
   id: number;
@@ -92,58 +93,54 @@ export const RealShotChart: React.FC<RealShotChartProps> = ({ data }) => {
   };
 
   return (
-    <div className="bg-[#111827]/90 border border-white/10 rounded-2xl p-6 backdrop-blur-xl shadow-2xl relative overflow-hidden">
-      {/* Background Neon Brand Glow */}
-      <div className="absolute -top-24 -left-24 w-72 h-72 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
-
+    <div className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-xs">
       {/* Header & Filter Controls */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-6 border-b border-white/10 gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-6 border-b border-slate-100 gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <span className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wider rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30">
+            <span className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg bg-cyan-50 text-cyan-800 border border-cyan-200">
               NBA Official Spatial Coordinates
             </span>
-            <span className="text-xs text-gray-400">
-              {totalShots} {language === "es" ? "tiros analizados" : "shots plotted"}
+            <span className="text-xs font-semibold text-slate-500">
+              {totalShots} {language === "es" ? "tiros registrados" : "shots plotted"}
             </span>
           </div>
-          <h2 className="text-2xl font-bold text-white tracking-wide mt-1.5 flex items-center gap-2">
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight mt-1.5 flex items-center gap-2">
             <span>{data.player_name}</span>
-            <span className="text-sm font-normal text-gray-400">({data.season_label || "Active"})</span>
+            <span className="text-sm font-semibold text-slate-400">({data.season_label || "2023-24"})</span>
           </h2>
         </div>
 
         {/* Filter Buttons */}
-        <div className="flex items-center gap-1.5 bg-black/40 p-1.5 rounded-xl border border-white/10">
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl border border-slate-200/80">
           <button
             onClick={() => setFilterMode("all")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              filterMode === "all" ? "bg-white/20 text-white shadow-sm" : "text-gray-400 hover:text-white"
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              filterMode === "all" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500 hover:text-slate-800"
             }`}
           >
             {language === "es" ? "Todos" : "All"} ({totalShots})
           </button>
           <button
             onClick={() => setFilterMode("makes")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              filterMode === "makes" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "text-emerald-500/70 hover:text-emerald-400"
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              filterMode === "makes" ? "bg-emerald-600 text-white shadow-xs" : "text-emerald-700 hover:text-emerald-800"
             }`}
           >
             ● {language === "es" ? "Aciertos" : "Makes"} ({totalMade})
           </button>
           <button
             onClick={() => setFilterMode("misses")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              filterMode === "misses" ? "bg-rose-500/20 text-rose-300 border border-rose-500/40" : "text-rose-500/70 hover:text-rose-400"
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              filterMode === "misses" ? "bg-rose-600 text-white shadow-xs" : "text-rose-700 hover:text-rose-800"
             }`}
           >
             ✕ {language === "es" ? "Fallos" : "Misses"} ({totalMissed})
           </button>
           <button
             onClick={() => setFilterMode("zones")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              filterMode === "zones" ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40" : "text-indigo-400/70 hover:text-indigo-300"
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              filterMode === "zones" ? "bg-indigo-600 text-white shadow-xs" : "text-indigo-700 hover:text-indigo-800"
             }`}
           >
             {language === "es" ? "Zonas" : "Zones"}
@@ -155,41 +152,49 @@ export const RealShotChart: React.FC<RealShotChartProps> = ({ data }) => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mt-6">
         {/* Half Court SVG Visualization (7 cols) */}
         <div className="lg:col-span-7 flex flex-col items-center justify-center relative">
-          <div className="w-full max-w-[460px] bg-slate-950/80 rounded-2xl p-4 border border-white/10 shadow-2xl relative">
-            <svg viewBox="0 0 500 470" className="w-full h-auto drop-shadow-lg select-none">
-              {/* Outer Court Boundary */}
-              <rect x="0" y="0" width="500" height="470" fill="#0B0F19" stroke="#374151" strokeWidth="2" rx="8" />
+          <div className="w-full max-w-[460px] bg-white rounded-3xl p-4 border border-slate-200 shadow-xs relative">
+            <svg viewBox="0 0 500 470" className="w-full h-auto select-none">
+              <defs>
+                <pattern id="halfCourtGrid" width="30" height="30" patternUnits="userSpaceOnUse">
+                  <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#F1F5F9" strokeWidth="0.8" />
+                </pattern>
+              </defs>
 
-              {/* Paint Key Box (160 wide, 190 deep) */}
-              <rect x="170" y="0" width="160" height="190" fill="#111827" stroke="#4B5563" strokeWidth="2" />
-              <rect x="190" y="0" width="120" height="190" fill="none" stroke="#374151" strokeWidth="1" strokeDasharray="4 4" />
+              {/* Court Floor with subtle grid */}
+              <rect x="0" y="0" width="500" height="470" fill="#FAFAFA" rx="16" />
+              <rect x="0" y="0" width="500" height="470" fill="url(#halfCourtGrid)" rx="16" />
+              <rect x="0" y="0" width="500" height="470" fill="none" stroke="#CBD5E1" strokeWidth="2" rx="16" />
+
+              {/* Paint Key Box */}
+              <rect x="170" y="0" width="160" height="190" fill="#FFF7ED" stroke="#F97316" strokeWidth="1.8" />
+              <rect x="190" y="0" width="120" height="190" fill="none" stroke="#FDBA74" strokeWidth="1" strokeDasharray="4 4" />
 
               {/* Free Throw Circle */}
-              <circle cx="250" cy="190" r="60" fill="none" stroke="#4B5563" strokeWidth="2" />
-              <circle cx="250" cy="190" r="60" fill="none" stroke="#374151" strokeWidth="1" strokeDasharray="4 4" />
+              <circle cx="250" cy="190" r="60" fill="none" stroke="#EA580C" strokeWidth="1.8" />
+              <circle cx="250" cy="190" r="60" fill="none" stroke="#FDBA74" strokeWidth="1" strokeDasharray="4 4" />
 
               {/* Restricted Area Arc */}
-              <path d="M 210 52.5 A 40 40 0 0 0 290 52.5" fill="none" stroke="#4B5563" strokeWidth="2" />
+              <path d="M 210 52.5 A 40 40 0 0 0 290 52.5" fill="none" stroke="#EA580C" strokeWidth="1.8" />
 
               {/* Backboard & Hoop */}
-              <line x1="220" y1="40" x2="280" y2="40" stroke="#F3F4F6" strokeWidth="3" />
-              <circle cx="250" cy="52.5" r="7.5" fill="none" stroke="#F97316" strokeWidth="2.5" />
-              <line x1="250" y1="40" x2="250" y2="45" stroke="#F3F4F6" strokeWidth="2" />
+              <line x1="220" y1="40" x2="280" y2="40" stroke="#1E293B" strokeWidth="3.5" strokeLinecap="round" />
+              <circle cx="250" cy="52.5" r="8" fill="#FFEDD5" stroke="#EA580C" strokeWidth="2.5" />
+              <line x1="250" y1="40" x2="250" y2="44.5" stroke="#1E293B" strokeWidth="2.5" />
 
               {/* Corner 3 Straight Lines */}
-              <line x1="30" y1="0" x2="30" y2="140" stroke="#4B5563" strokeWidth="2" />
-              <line x1="470" y1="0" x2="470" y2="140" stroke="#4B5563" strokeWidth="2" />
+              <line x1="30" y1="0" x2="30" y2="140" stroke="#475569" strokeWidth="2" />
+              <line x1="470" y1="0" x2="470" y2="140" stroke="#475569" strokeWidth="2" />
 
               {/* 3-Point Arc */}
               <path
                 d="M 30 140 A 237.5 237.5 0 0 0 470 140"
                 fill="none"
-                stroke="#4B5563"
+                stroke="#475569"
                 strokeWidth="2"
               />
 
               {/* Center Court Circle Top Arc */}
-              <path d="M 190 470 A 60 60 0 0 1 310 470" fill="none" stroke="#374151" strokeWidth="2" />
+              <path d="M 190 470 A 60 60 0 0 1 310 470" fill="none" stroke="#64748B" strokeWidth="2" />
 
               {/* Individual Shot Points */}
               {filterMode !== "zones" &&
@@ -208,8 +213,8 @@ export const RealShotChart: React.FC<RealShotChartProps> = ({ data }) => {
                         fill="#10B981"
                         stroke="#064E3B"
                         strokeWidth={1.5}
-                        className="cursor-pointer transition-all duration-150 hover:opacity-100"
-                        opacity={hoveredShot && !isHovered ? 0.3 : 0.85}
+                        className="cursor-pointer transition-all duration-150"
+                        opacity={hoveredShot && !isHovered ? 0.35 : 0.9}
                         onMouseEnter={() => setHoveredShot(shot)}
                         onMouseLeave={() => setHoveredShot(null)}
                       />
@@ -219,7 +224,7 @@ export const RealShotChart: React.FC<RealShotChartProps> = ({ data }) => {
                       <g
                         key={shot.id}
                         className="cursor-pointer transition-all duration-150"
-                        opacity={hoveredShot && !isHovered ? 0.3 : 0.75}
+                        opacity={hoveredShot && !isHovered ? 0.35 : 0.8}
                         onMouseEnter={() => setHoveredShot(shot)}
                         onMouseLeave={() => setHoveredShot(null)}
                       >
@@ -229,7 +234,7 @@ export const RealShotChart: React.FC<RealShotChartProps> = ({ data }) => {
                           x2={x + (isHovered ? 5 : 3.5)}
                           y2={y + (isHovered ? 5 : 3.5)}
                           stroke="#EF4444"
-                          strokeWidth={isHovered ? 2.5 : 1.5}
+                          strokeWidth={isHovered ? 2.5 : 1.8}
                         />
                         <line
                           x1={x + (isHovered ? 5 : 3.5)}
@@ -237,7 +242,7 @@ export const RealShotChart: React.FC<RealShotChartProps> = ({ data }) => {
                           x2={x - (isHovered ? 5 : 3.5)}
                           y2={y + (isHovered ? 5 : 3.5)}
                           stroke="#EF4444"
-                          strokeWidth={isHovered ? 2.5 : 1.5}
+                          strokeWidth={isHovered ? 2.5 : 1.8}
                         />
                       </g>
                     );
@@ -247,7 +252,7 @@ export const RealShotChart: React.FC<RealShotChartProps> = ({ data }) => {
 
             {/* Hover Tooltip Overlay */}
             {hoveredShot && (
-              <div className="absolute top-6 left-6 bg-slate-900/95 border border-white/20 rounded-xl p-3 shadow-2xl backdrop-blur-md text-xs text-white max-w-[220px] pointer-events-none animate-in fade-in zoom-in-95">
+              <div className="absolute top-6 left-6 bg-slate-900 text-white rounded-xl p-3 shadow-xl text-xs max-w-[220px] pointer-events-none animate-in fade-in">
                 <div className="flex items-center gap-2">
                   <span
                     className={`w-2.5 h-2.5 rounded-full ${
@@ -260,7 +265,7 @@ export const RealShotChart: React.FC<RealShotChartProps> = ({ data }) => {
                       : language === "es" ? "Fallo" : "Missed"}
                   </span>
                 </div>
-                <div className="text-gray-300 font-mono text-[11px] mt-1.5">
+                <div className="text-slate-300 font-mono text-[11px] mt-1">
                   {hoveredShot.action_type || "Tiro de Campo"}
                 </div>
               </div>
@@ -270,11 +275,11 @@ export const RealShotChart: React.FC<RealShotChartProps> = ({ data }) => {
 
         {/* 6 Zone Efficiency Breakdown List (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="flex items-center justify-between pb-2 border-b border-white/10">
-            <h3 className="text-sm font-bold text-gray-200 uppercase tracking-wider">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
               {language === "es" ? "Eficiencia por Zonas vs Promedio NBA" : "Zone Efficiency vs League Avg"}
             </h3>
-            <span className="text-xs font-bold text-emerald-400 font-mono">
+            <span className="text-xs font-black text-emerald-700 font-mono">
               FG% {overallFgPct.toFixed(1)}%
             </span>
           </div>
@@ -292,38 +297,38 @@ export const RealShotChart: React.FC<RealShotChartProps> = ({ data }) => {
                   key={zone.zone_key}
                   onMouseEnter={() => setHoveredZone(zone)}
                   onMouseLeave={() => setHoveredZone(null)}
-                  className="bg-black/30 border border-white/5 rounded-xl p-3 hover:border-white/15 transition-all"
+                  className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-3 hover:border-slate-300 hover:bg-slate-50 transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-xs font-bold text-gray-200">
+                      <div className="text-xs font-bold text-slate-900">
                         {language === "es" ? zone.zone_name_es : zone.zone_name_en}
                       </div>
-                      <div className="text-[11px] text-gray-400 font-mono mt-0.5">
+                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">
                         {zone.fgm} / {zone.fga} FGA ({fgPct.toFixed(1)}%)
                       </div>
                     </div>
 
                     <div className="text-right">
                       <span
-                        className="text-xs font-bold font-mono px-2 py-0.5 rounded-full"
+                        className="text-xs font-black font-mono px-2 py-0.5 rounded-full"
                         style={{
-                          backgroundColor: `${tierColor}25`,
+                          backgroundColor: `${tierColor}18`,
                           color: tierColor,
-                          border: `1px solid ${tierColor}40`,
+                          border: `1px solid ${tierColor}35`,
                         }}
                       >
                         {diffSign}
                         {diffVal.toFixed(1)}%
                       </span>
-                      <div className="text-[10px] text-gray-500 mt-1">
+                      <div className="text-[10px] text-slate-400 mt-0.5 font-medium">
                         {language === "es" ? "Media:" : "Avg:"} {leagueAvg.toFixed(1)}%
                       </div>
                     </div>
                   </div>
 
                   {/* Visual Progress Comparison Bar */}
-                  <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden mt-2.5 relative">
+                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mt-2.5 relative">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{
@@ -333,7 +338,7 @@ export const RealShotChart: React.FC<RealShotChartProps> = ({ data }) => {
                     />
                     {/* League Average Marker */}
                     <div
-                      className="absolute top-0 bottom-0 w-0.5 bg-white opacity-80"
+                      className="absolute top-0 bottom-0 w-1 bg-slate-700 opacity-90 rounded-full"
                       style={{ left: `${Math.min(leagueAvg, 100)}%` }}
                       title={`League Avg: ${leagueAvg}%`}
                     />

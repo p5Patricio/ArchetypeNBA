@@ -5,6 +5,8 @@ import { usePreferences } from "@/context/PreferencesContext";
 import { Navbar } from "@/components/Navbar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { Users, Search, Sparkles, Trophy, ArrowRight, Activity, ArrowLeft } from "lucide-react";
+import Link from "next/link";
 
 interface DoppelgangerMatch {
   similar_player_id: number;
@@ -43,7 +45,7 @@ const POPULAR_PLAYERS = [
 ];
 
 export default function DoppelgangersPage() {
-  const { language } = usePreferences();
+  const { language, t } = usePreferences();
   const [searchQuery, setSearchQuery] = useState("Stephen Curry");
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState("Stephen Curry");
@@ -93,155 +95,167 @@ export default function DoppelgangersPage() {
   }, [selectedPlayer]);
 
   return (
-    <div className="min-h-screen bg-[#0A0E17] text-white relative overflow-hidden">
+    <div className="min-h-screen bg-slate-50 text-slate-900 md:pl-64 pb-20">
       <Navbar onOpenSearch={() => setIsCommandOpen(true)} />
       <CommandPalette isOpen={isCommandOpen} onClose={() => setIsCommandOpen(false)} />
 
-      {/* Background Neon Brand Glow */}
-      <div className="absolute top-0 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 left-1/4 w-96 h-96 bg-cyan-600/10 rounded-full blur-3xl pointer-events-none" />
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
+        {/* Back Link */}
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors uppercase tracking-wider"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {t("nav_scouting_hub")}
+        </Link>
 
-      <div className="md:pl-64 p-6 md:p-10">
-        <div className="max-w-6xl mx-auto space-y-6">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
+        {/* Header Title Section */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200/80 pb-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-600 text-white shadow-md shadow-purple-600/20">
+              <Users className="h-5 w-5" />
+            </div>
             <div>
-              <div className="flex items-center gap-2.5">
-                <span className="px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                  AI Historical Clones
-                </span>
-                <span className="text-xs text-gray-400">
-                  CraftedNBA / Multi-Dimensional Cosine Similarity (40 Years)
-                </span>
-              </div>
-              <h1 className="text-3xl md:text-5xl font-black tracking-tight mt-2 bg-gradient-to-r from-white via-gray-100 to-purple-400 bg-clip-text text-transparent">
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 flex items-center gap-2">
                 {language === "es" ? "Doppelgängers Históricos" : "Historical Doppelgängers"}
+                <span className="rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-black uppercase text-purple-800 tracking-wider">
+                  40-Year Cosine Engine
+                </span>
               </h1>
-              <p className="text-sm text-gray-400 max-w-2xl mt-1">
+              <p className="text-xs sm:text-sm font-medium text-slate-500 mt-0.5 max-w-3xl">
                 {language === "es"
-                  ? "Encuentra los clones históricos más parecidos de cualquier jugador en 40 años de datos de la NBA usando similitud de coseno y arquetipos tácticos."
-                  : "Find the most accurate historical player clones across 40 years of NBA data using multi-dimensional cosine similarity and tactical archetypes."}
+                  ? "Búsqueda multidimensional de clones estadísticos y similitud táctica a lo largo de 40 años de historia de la NBA."
+                  : "Multi-dimensional statistical clone matchmaking across 40 years of NBA historical player cohorts."}
               </p>
             </div>
           </div>
+        </div>
 
-          {/* Search Input & Quick Preset Buttons */}
-          <div className="space-y-4">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && suggestions.length > 0) {
-                    setSelectedPlayer(suggestions[0]);
-                    setSearchQuery(suggestions[0]);
-                    setSuggestions([]);
-                  }
-                }}
-                placeholder={
-                  language === "es"
-                    ? "Buscar jugador para clonar (ej. Stephen Curry, LeBron James, Nikola Jokic)..."
-                    : "Search player to match (e.g. Stephen Curry, LeBron James, Nikola Jokic)..."
+        {/* Search & Quick Preset Chips */}
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+              <Search className="h-4 w-4" />
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && suggestions.length > 0) {
+                  setSelectedPlayer(suggestions[0]);
+                  setSearchQuery(suggestions[0]);
+                  setSuggestions([]);
                 }
-                className="w-full bg-slate-900/90 border border-white/15 rounded-2xl px-5 py-4 text-white text-base placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 backdrop-blur-xl shadow-2xl"
-              />
+              }}
+              placeholder={
+                language === "es"
+                  ? "Buscar jugador para emparejar clones (ej. Stephen Curry, LeBron James, Nikola Jokic)..."
+                  : "Search player to find historical clones (e.g. Stephen Curry, LeBron James, Nikola Jokic)..."
+              }
+              className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:bg-white focus:ring-2 focus:ring-purple-500/20 transition"
+            />
 
-              {/* Autocomplete Dropdown */}
-              {suggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-slate-900 border border-white/15 rounded-2xl overflow-hidden z-50 shadow-2xl backdrop-blur-2xl">
-                  {suggestions.map((name, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        setSelectedPlayer(name);
-                        setSearchQuery(name);
-                        setSuggestions([]);
-                      }}
-                      className="w-full px-5 py-3 text-left text-sm text-gray-200 hover:bg-purple-600/30 hover:text-white flex items-center justify-between border-b border-white/5 last:border-none transition"
-                    >
-                      <span className="font-semibold">{name}</span>
-                      <span className="text-xs text-gray-400 font-mono">Seleccionar →</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Quick Preset Buttons */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-              <span className="text-xs font-bold uppercase text-gray-400 shrink-0">
-                {language === "es" ? "Populares:" : "Popular:"}
-              </span>
-              {POPULAR_PLAYERS.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => {
-                    setSelectedPlayer(p);
-                    setSearchQuery(p);
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                    selectedPlayer === p
-                      ? "bg-purple-500 text-white shadow-lg shadow-purple-500/30 border border-purple-400"
-                      : "bg-white/5 text-gray-300 hover:bg-white/10 border border-white/10"
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
+            {/* Autocomplete Dropdown */}
+            {suggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl overflow-hidden z-50 shadow-xl divide-y divide-slate-100">
+                {suggestions.map((name, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setSelectedPlayer(name);
+                      setSearchQuery(name);
+                      setSuggestions([]);
+                    }}
+                    className="w-full px-5 py-3 text-left text-xs font-semibold text-slate-700 hover:bg-purple-50 hover:text-purple-900 flex items-center justify-between transition"
+                  >
+                    <span>{name}</span>
+                    <span className="text-[10px] text-purple-600 font-mono font-bold">Seleccionar →</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Loading State */}
-          {loading && (
-            <div className="flex flex-col items-center justify-center py-20 space-y-3">
-              <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
-              <p className="text-xs font-bold text-gray-400 font-mono">
-                {language === "es" ? "Calculando vectores de similitud..." : "Computing multi-dimensional cosine vectors..."}
-              </p>
-            </div>
-          )}
+          {/* Quick Preset Buttons */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-xs font-bold uppercase text-slate-400 mr-1">
+              {language === "es" ? "Explorar Casos Rápidos:" : "Quick Cases:"}
+            </span>
+            {POPULAR_PLAYERS.map((p) => (
+              <button
+                key={p}
+                onClick={() => {
+                  setSelectedPlayer(p);
+                  setSearchQuery(p);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  selectedPlayer === p
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200/60"
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          {/* Error State */}
-          {error && (
-            <div className="p-4 bg-rose-500/20 border border-rose-500/30 rounded-2xl text-rose-300 text-sm">
-              {error}
-            </div>
-          )}
+        {/* Loading State */}
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-16 space-y-3">
+            <div className="w-9 h-9 border-3 border-purple-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs font-bold text-slate-500 font-mono">
+              {language === "es" ? "Calculando vectores de similitud de coseno..." : "Computing multi-dimensional cosine vectors..."}
+            </p>
+          </div>
+        )}
 
-          {/* Match Results */}
-          {!loading && data && data.matches && (
-            <div className="space-y-6">
-              {/* Target Player Card Header */}
-              <div className="bg-gradient-to-r from-purple-950/40 via-slate-900/60 to-slate-900/40 border border-purple-500/30 rounded-3xl p-6 backdrop-blur-xl shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center font-mono text-2xl font-black text-purple-300">
-                    🧬
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold uppercase text-purple-400 tracking-wider">
-                      {language === "es" ? "Jugador Analizado" : "Analyzed Target Player"}
-                    </div>
-                    <h2 className="text-2xl font-black text-white">{data.target_player_name}</h2>
-                    <p className="text-xs text-gray-400">
-                      {data.target_season_label} • {data.target_position}
-                    </p>
-                  </div>
+        {/* Error State */}
+        {error && (
+          <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs font-semibold">
+            {error}
+          </div>
+        )}
+
+        {/* Match Results */}
+        {!loading && data && data.matches && (
+          <div className="space-y-6">
+            {/* Target Player Card Header */}
+            <div className="bg-white border border-purple-200 rounded-3xl p-6 sm:p-7 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-50 border border-purple-200 font-mono text-2xl font-black text-purple-700">
+                  🧬
                 </div>
-
-                <div className="bg-black/40 border border-white/10 rounded-2xl p-3.5 max-w-md">
-                  <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
-                    {language === "es" ? "Diagnóstico de Scouting" : "Scouting Takeaway"}
+                <div>
+                  <div className="text-[10px] font-extrabold uppercase text-purple-600 tracking-wider">
+                    {language === "es" ? "Jugador Analizado" : "Target Analyzed Player"}
                   </div>
-                  <p className="text-xs text-gray-200 mt-1 leading-relaxed">
-                    {language === "es" ? data.scouting_takeaway_es : data.scouting_takeaway_en}
+                  <h2 className="text-2xl font-black text-slate-900">{data.target_player_name}</h2>
+                  <p className="text-xs font-medium text-slate-500 mt-0.5">
+                    {data.target_season_label} • {data.target_position}
                   </p>
                 </div>
               </div>
 
-              {/* Top 6 Matches Grid */}
-              <h3 className="text-lg font-extrabold text-white flex items-center gap-2">
-                <span>{language === "es" ? "Top Clones Históricos Identificados" : "Top Historical Clones Found"}</span>
-                <span className="text-xs font-normal text-gray-400">({data.matches.length} matches)</span>
+              <div className="bg-purple-50/60 border border-purple-100 rounded-2xl p-4 max-w-md">
+                <div className="text-[10px] uppercase font-bold text-purple-800 tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-purple-600" />
+                  {language === "es" ? "Diagnóstico de Scouting" : "Scouting Takeaway"}
+                </div>
+                <p className="text-xs text-slate-700 mt-1.5 leading-relaxed font-medium">
+                  {language === "es" ? data.scouting_takeaway_es : data.scouting_takeaway_en}
+                </p>
+              </div>
+            </div>
+
+            {/* Top 6 Matches Grid */}
+            <div className="space-y-4">
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center justify-between">
+                <span>{language === "es" ? "Clones Históricos de Mayor Coincidencia" : "Top Historical Matches"}</span>
+                <span className="text-xs font-semibold text-slate-500">
+                  {data.matches.length} {language === "es" ? "resultados" : "results"}
+                </span>
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -253,68 +267,65 @@ export default function DoppelgangersPage() {
                   return (
                     <div
                       key={`${m.similar_player_id}-${m.season_label}`}
-                      className={`bg-slate-900/90 border rounded-2xl p-5 backdrop-blur-xl shadow-xl transition-all duration-300 relative overflow-hidden flex flex-col justify-between ${
+                      className={`rounded-3xl border bg-white p-6 shadow-xs flex flex-col justify-between transition-all duration-200 relative ${
                         isTopMatch
-                          ? "border-amber-500/40 hover:border-amber-500/70 shadow-amber-500/10"
-                          : "border-white/10 hover:border-white/20"
+                          ? "border-purple-300 ring-2 ring-purple-400/30"
+                          : "border-slate-200 hover:border-slate-300 hover:shadow-sm"
                       }`}
                     >
                       {isTopMatch && (
-                        <div className="absolute top-0 right-0 bg-amber-500/20 border-b border-l border-amber-500/40 text-amber-300 text-[10px] font-bold px-3 py-1 rounded-bl-xl tracking-wider">
-                          ★ TOP CLONE
+                        <div className="absolute top-0 right-0 bg-purple-600 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-wider">
+                          ★ TOP MATCH
                         </div>
                       )}
 
                       <div>
-                        {/* Similarity Badge & Avatar */}
-                        <div className="flex items-center justify-between">
+                        {/* Header: Avatar, Name and Match % */}
+                        <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <PlayerAvatar
                               headshotUrl={m.headshot_url}
                               playerName={m.player_name}
-                              size={44}
-                              className="ring-2 ring-white/10"
+                              size={48}
+                              className="ring-2 ring-slate-100 shadow-xs"
                             />
                             <div>
-                              <span className="text-xs font-mono text-gray-400">#{idx + 1} Match</span>
-                              <h4 className="text-base font-bold text-white leading-tight">{m.player_name}</h4>
+                              <span className="text-[10px] font-mono font-bold text-slate-400">#{idx + 1} CLONE</span>
+                              <h4 className="text-base font-black text-slate-900 leading-tight">{m.player_name}</h4>
+                              <div className="text-xs text-slate-500 font-medium">
+                                {m.season_label} {m.age_in_season ? `• ${m.age_in_season} ${language === "es" ? "años" : "yrs"}` : ""}
+                              </div>
                             </div>
                           </div>
 
                           <span
-                            className={`px-2.5 py-1 rounded-full text-xs font-black font-mono ${
-                              m.similarity_pct >= 90
-                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                                : "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                            className={`px-2.5 py-1 rounded-full text-xs font-black font-mono shrink-0 ${
+                              m.similarity_pct >= 95
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-purple-50 text-purple-700 border border-purple-200"
                             }`}
                           >
                             {m.similarity_pct.toFixed(1)}%
                           </span>
                         </div>
 
-                        {/* Season & Age */}
-                        <div className="flex items-center gap-2 text-xs text-gray-400 mt-2.5">
-                          <span className="font-mono font-bold text-gray-300">{m.season_label}</span>
-                          {m.age_in_season && <span>• {m.age_in_season} {language === "es" ? "años" : "yrs"}</span>}
-                        </div>
-
-                        {/* Archetype */}
-                        <div className="mt-2">
-                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-white/5 text-purple-300 border border-purple-500/30">
+                        {/* Archetype Pill */}
+                        <div className="mt-3.5">
+                          <span className="inline-block px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-purple-50 text-purple-800 border border-purple-200">
                             {archetype}
                           </span>
                         </div>
 
                         {/* Matching Tactical Traits */}
                         <div className="mt-3.5 space-y-1.5">
-                          <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
-                            {language === "es" ? "Rasgos Compartidos:" : "Matching Traits:"}
+                          <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                            {language === "es" ? "Rasgos Compartidos:" : "Shared Traits:"}
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             {traits.map((trait, tIdx) => (
                               <span
                                 key={tIdx}
-                                className="text-[10px] bg-slate-800/90 text-gray-200 px-2 py-0.5 rounded-md border border-white/5"
+                                className="text-[11px] bg-slate-50 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200 font-medium"
                               >
                                 ✓ {trait}
                               </span>
@@ -323,13 +334,13 @@ export default function DoppelgangersPage() {
                         </div>
                       </div>
 
-                      {/* Key Comparison Metric Stats */}
+                      {/* Stat Comparisons */}
                       {m.key_comparison_stats && (
-                        <div className="mt-4 pt-3 border-t border-white/10 grid grid-cols-3 gap-2 text-center text-[10px] font-mono">
+                        <div className="mt-5 pt-3 border-t border-slate-100 grid grid-cols-3 gap-1.5 text-center text-[10px] font-mono">
                           {Object.entries(m.key_comparison_stats).slice(0, 3).map(([k, vals], sIdx) => (
-                            <div key={sIdx} className="bg-black/30 p-1.5 rounded-lg">
-                              <div className="text-gray-500 uppercase">{k}</div>
-                              <div className="text-gray-200 font-bold">{vals.comp} vs {vals.target}</div>
+                            <div key={sIdx} className="bg-slate-50 p-1.5 rounded-xl border border-slate-100">
+                              <div className="text-slate-400 uppercase font-bold text-[9px]">{k}</div>
+                              <div className="text-slate-900 font-black">{vals.comp} <span className="text-slate-400 font-normal">vs {vals.target}</span></div>
                             </div>
                           ))}
                         </div>
@@ -339,9 +350,9 @@ export default function DoppelgangersPage() {
                 })}
               </div>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
