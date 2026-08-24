@@ -61,6 +61,22 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       activeBg: "bg-emerald-50 text-emerald-800 border-emerald-200 font-extrabold",
     },
     {
+      href: "/doppelgangers",
+      label: language === "es" ? "Doppelgängers" : "Doppelgängers",
+      icon: Users,
+      active: pathname.startsWith("/doppelgangers"),
+      accent: "text-indigo-600",
+      activeBg: "bg-indigo-50 text-indigo-800 border-indigo-200 font-extrabold",
+    },
+    {
+      href: "/contracts",
+      label: language === "es" ? "Contratos & Cap" : "Contracts & Cap",
+      icon: Layers,
+      active: pathname.startsWith("/contracts"),
+      accent: "text-emerald-600",
+      activeBg: "bg-emerald-50 text-emerald-800 border-emerald-200 font-extrabold",
+    },
+    {
       href: "/galaxy",
       label: t("nav_galaxy"),
       icon: Sparkles,

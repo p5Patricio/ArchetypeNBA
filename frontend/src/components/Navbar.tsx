@@ -23,6 +23,8 @@ export function Navbar({ currentSeasonId = 1, onSeasonChange, onOpenSearch }: Na
     if (pathname === "/") return language === "es" ? "Scouting Hub" : "Scouting Hub";
     if (pathname.startsWith("/versus")) return language === "es" ? "Coliseo 1 vs 1" : "1 vs 1 Colosseum";
     if (pathname.startsWith("/lineup")) return language === "es" ? "Armador 5 vs 5" : "5 vs 5 Lineup Builder";
+    if (pathname.startsWith("/doppelgangers")) return language === "es" ? "Doppelgängers Históricos" : "Historical Doppelgängers";
+    if (pathname.startsWith("/contracts")) return language === "es" ? "Finanzas & Contratos NBA" : "NBA Contracts & Payroll";
     if (pathname.startsWith("/galaxy")) return language === "es" ? "Galaxia Táctica" : "Tactical Galaxy";
     if (pathname.startsWith("/hall-of-fame")) return language === "es" ? "Salón de la Fama" : "Hall of Fame";
     if (pathname.startsWith("/teams")) return language === "es" ? "Franquicias NBA" : "NBA Franchises";

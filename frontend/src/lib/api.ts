@@ -771,6 +771,26 @@ export type LineupPlayerBoxScore = {
   plus_minus: number;
 };
 
+export type MatchMomentumPoint = {
+  minute: number;
+  quarter: number;
+  score_differential: number;
+  possession_momentum: number;
+  lead_team: number;
+  event_highlight_es?: string;
+  event_highlight_en?: string;
+};
+
+export type MatchMomentumTimelineData = {
+  team1_name: string;
+  team2_name: string;
+  points: MatchMomentumPoint[];
+  largest_lead_team1: number;
+  largest_lead_team2: number;
+  lead_changes: number;
+  clutch_swing_minute: number;
+};
+
 export type Lineup5v5SimulationResponse = {
   team1_name: string;
   team2_name: string;
@@ -790,8 +810,7 @@ export type Lineup5v5SimulationResponse = {
   team2_boxscore: LineupPlayerBoxScore[];
   tactical_summary_es: string;
   tactical_summary_en: string;
-  key_matchups_es: string[];
-  key_matchups_en: string[];
+  momentum_timeline?: MatchMomentumTimelineData;
 };
 
 export type ClassicPresetLineup = {

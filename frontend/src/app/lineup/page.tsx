@@ -33,6 +33,7 @@ import {
 import { Navbar } from "@/components/Navbar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { HorizontalCourt } from "@/components/HorizontalCourt";
+import { MatchMomentumChart } from "@/components/MatchMomentumChart";
 import {
   getVersusPlayers,
   getLineupPresets,
@@ -638,6 +639,13 @@ export default function LineupPage() {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* 48-Minute Match Momentum Timeline Chart */}
+                  {simulation.momentum_timeline && (
+                    <div className="pt-2">
+                      <MatchMomentumChart timeline={simulation.momentum_timeline} />
+                    </div>
+                  )}
 
                   {/* MVP Badge */}
                   <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
