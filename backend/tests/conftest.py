@@ -27,11 +27,13 @@ def override_get_db_session():
 app.dependency_overrides[get_db_session] = override_get_db_session
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def setup_db():
+    SQLModel.metadata.drop_all(test_engine)
     SQLModel.metadata.create_all(test_engine)
     yield
     SQLModel.metadata.drop_all(test_engine)
+
 
 
 @pytest.fixture

@@ -1,7 +1,9 @@
 import math
 import random
 from typing import List, Dict, Any, Optional
+import numpy as np
 from sqlmodel import Session, select
+
 from app.models import Player, Team, Season, PlayerSeasonStats, PlayerAdvancedStats
 from app.schemas import (
     LineupSlotRequest,
@@ -396,6 +398,79 @@ class LineupService:
             f"Battle in the Paint: {t1_eval.slots[-1].player_name if t1_eval.slots else 'C1'} vs {t2_eval.slots[-1].player_name if t2_eval.slots else 'C2'}",
         ]
 
+        # Build 48-minute tactical match momentum flow
+        from app.schemas import MatchMomentumPoint, MatchMomentumTimeline
+        momentum_points: List[MatchMomentumPoint] = []
+        largest_lead_t1 = 0
+        largest_lead_t2 = 0
+        lead_changes = 0
+        last_leader = 0
+        rng_m = random.Random(t1_total_pts * 1000 + t2_total_pts)
+        q_minutes = [12, 24, 36, 48]
+
+        for minute_idx in range(1, 49):
+            q = 1 if minute_idx <= 12 else (2 if minute_idx <= 24 else (3 if minute_idx <= 36 else 4))
+            q_start = 0 if q == 1 else q_minutes[q - 2]
+            q_fraction = (minute_idx - q_start) / 12.0
+
+            target_q_t1 = q_t1[q - 1]
+            target_q_t2 = q_t2[q - 1]
+
+            prev_q_sum_t1 = sum(q_t1[:q - 1])
+            prev_q_sum_t2 = sum(q_t2[:q - 1])
+
+            cur_t1 = prev_q_sum_t1 + int(target_q_t1 * q_fraction) + rng_m.randint(-1, 1)
+            cur_t2 = prev_q_sum_t2 + int(target_q_t2 * q_fraction) + rng_m.randint(-1, 1)
+
+            if minute_idx == 48:
+                cur_t1 = t1_total_pts
+                cur_t2 = t2_total_pts
+
+            diff = cur_t1 - cur_t2
+            if diff > largest_lead_t1:
+                largest_lead_t1 = diff
+            if -diff > largest_lead_t2:
+                largest_lead_t2 = -diff
+
+            current_leader = 1 if diff > 0 else (2 if diff < 0 else 0)
+            if current_leader != 0 and last_leader != 0 and current_leader != last_leader:
+                lead_changes += 1
+            if current_leader != 0:
+                last_leader = current_leader
+
+            mom_val = float(np.clip(diff * 4.5 + rng_m.uniform(-8, 8), -100.0, 100.0))
+
+            highlight_es = None
+            highlight_en = None
+            if minute_idx in [12, 24, 36]:
+                highlight_es = f"Final del Q{q}: {cur_t1} - {cur_t2}"
+                highlight_en = f"End of Q{q}: {cur_t1} - {cur_t2}"
+            elif minute_idx == 44 and abs(diff) <= 6:
+                highlight_es = "Momento Clutch: Duelo decisivo en el cierre del partido"
+                highlight_en = "Clutch Time: Decisive showdown in closing minutes"
+
+            momentum_points.append(
+                MatchMomentumPoint(
+                    minute=float(minute_idx),
+                    quarter=q,
+                    score_differential=diff,
+                    possession_momentum=round(mom_val, 1),
+                    lead_team=current_leader,
+                    event_highlight_es=highlight_es,
+                    event_highlight_en=highlight_en,
+                )
+            )
+
+        momentum_timeline = MatchMomentumTimeline(
+            team1_name=team1_req.team_name,
+            team2_name=team2_req.team_name,
+            points=momentum_points,
+            largest_lead_team1=max(largest_lead_t1, 0),
+            largest_lead_team2=max(largest_lead_t2, 0),
+            lead_changes=max(lead_changes, 1),
+            clutch_swing_minute=44.0 if abs(t1_total_pts - t2_total_pts) <= 6 else 34.0,
+        )
+
         return Lineup5v5SimulationResponse(
             team1_name=team1_req.team_name,
             team2_name=team2_req.team_name,
@@ -415,8 +490,7 @@ class LineupService:
             team2_boxscore=box2,
             tactical_summary_es=summary_es,
             tactical_summary_en=summary_en,
-            key_matchups_es=matchups_es,
-            key_matchups_en=matchups_en,
+            momentum_timeline=momentum_timeline,
         )
 
     def get_classic_presets(self) -> List[ClassicPresetLineup]:

@@ -282,3 +282,20 @@ class PlayerSimilarity(SQLModel, table=True):
 
     player: "Player" = Relationship(back_populates="similarities", sa_relationship_kwargs={"foreign_keys": "PlayerSimilarity.player_id"})
     season: "Season" = Relationship(back_populates="similarities")
+
+
+class PlayerContract(SQLModel, table=True):
+    __tablename__ = "player_contract"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    player_id: int = Field(foreign_key="player.id", index=True)
+    team_id: Optional[int] = Field(default=None, foreign_key="team.id")
+    season_id: Optional[int] = Field(default=None, foreign_key="season.id")
+
+    annual_salary: float = 0.0  # in USD, e.g. 51915615.0
+    cap_hit_pct: float = 0.0    # e.g. 35.0 (%)
+    contract_type: str = "Standard"  # Supermax, Max, Veteran Minimum, Rookie Scale, Mid-Level
+    years_remaining: int = 1
+    free_agency_year: int = 2026
+    is_guaranteed: bool = True
+

@@ -1,12 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api.v1 import health, teams, players, cluster, data, player_extras, historical, seasons, hall_of_fame, analytics, versus, lineup, training
+from app.api.v1 import (
+    health, teams, players, cluster, data, player_extras, historical,
+    seasons, hall_of_fame, analytics, versus, lineup, training,
+    pizza_chart, shotchart, doppelgangers, financial
+)
 
 app = FastAPI(
     title="NBA Analytics Platform API",
-    version="0.2.0",
-    description="Backend API for NBA player and team analytics",
+    version="0.3.0",
+    description="Next-Generation Sports Science, Tactical Scouting & AI Analytics Platform",
 )
 
 app.add_middleware(
@@ -21,8 +25,8 @@ app.add_middleware(
 @app.get("/")
 def root():
     return {
-        "message": "NBA Analytics Platform API",
-        "version": "0.2.0",
+        "message": "ArchetypeNBA Analytics Platform API",
+        "version": "0.3.0",
         "docs": "/docs",
     }
 
@@ -39,6 +43,11 @@ app.include_router(analytics.router, prefix="/api/v1", tags=["analytics"])
 app.include_router(versus.router, prefix="/api/v1", tags=["versus"])
 app.include_router(lineup.router, prefix="/api/v1", tags=["lineup"])
 app.include_router(training.router, prefix="/api/v1", tags=["training"])
+app.include_router(pizza_chart.router, prefix="/api/v1", tags=["pizza-chart"])
+app.include_router(shotchart.router, prefix="/api/v1", tags=["shot-chart"])
+app.include_router(doppelgangers.router, prefix="/api/v1", tags=["doppelgangers"])
+app.include_router(financial.router, prefix="/api/v1", tags=["financial"])
+
 
 
 

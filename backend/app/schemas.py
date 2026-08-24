@@ -449,6 +449,26 @@ class LineupPlayerBoxScore(BaseModel):
     plus_minus: int
 
 
+class MatchMomentumPoint(BaseModel):
+    minute: float  # 0.0 to 48.0
+    quarter: int  # 1 to 4
+    score_differential: int  # Team 1 margin (positive = Team 1 leading)
+    possession_momentum: float  # -100 to 100 (smooth tactical momentum)
+    lead_team: int  # 1, 2 or 0
+    event_highlight_es: Optional[str] = None
+    event_highlight_en: Optional[str] = None
+
+
+class MatchMomentumTimeline(BaseModel):
+    team1_name: str
+    team2_name: str
+    points: List[MatchMomentumPoint]
+    largest_lead_team1: int
+    largest_lead_team2: int
+    lead_changes: int
+    clutch_swing_minute: float
+
+
 class Lineup5v5SimulationRequest(BaseModel):
     team1: LineupTeamRequest
     team2: LineupTeamRequest
@@ -473,6 +493,9 @@ class Lineup5v5SimulationResponse(BaseModel):
     team2_boxscore: List[LineupPlayerBoxScore]
     tactical_summary_es: str
     tactical_summary_en: str
+    momentum_timeline: Optional[MatchMomentumTimeline] = None
+
+
 class ClassicPresetLineup(BaseModel):
     id: str
     name: str
@@ -570,4 +593,138 @@ class TrainingAnalysisResponse(BaseModel):
     radar_projected_values: List[float]
 
 
+# ============================================================================
+# Phase 4 Expansion: Pizza Chart, Real Shot Chart, Doppelgangers, Contracts & Momentum
+# ============================================================================
 
+class PizzaMetricItem(BaseModel):
+    key: str
+    label_es: str
+    label_en: str
+    quadrant: str  # scoring, playmaking, defense, physical
+    raw_value: float
+    formatted_value: str
+    percentile: float  # 0 to 100
+    color: str
+
+
+class PizzaQuadrant(BaseModel):
+    quadrant_key: str  # scoring, playmaking, defense, physical
+    title_es: str
+    title_en: str
+    color: str
+    metrics: List[PizzaMetricItem]
+
+
+class PizzaChartResponse(BaseModel):
+    player_id: int
+    player_name: str
+    season_id: int
+    season_label: str
+    position: str
+    position_group: str
+    total_peers: int
+    overall_percentile: float
+    quadrants: List[PizzaQuadrant]
+
+
+class ShotCoordinateItem(BaseModel):
+    id: int
+    loc_x: float  # -250 to 250 (tenth of feet, e.g. 0 is basket)
+    loc_y: float  # -50 to 450 (tenth of feet, e.g. 0 is baseline)
+    shot_distance: float
+    shot_zone_basic: str
+    shot_zone_area: str
+    shot_zone_range: str
+    shot_type: str  # "2PT Field Goal" or "3PT Field Goal"
+    action_type: str  # "Jump Shot", "Driving Layup Shot", etc.
+    shot_made_flag: bool
+    period: int = 1
+
+
+class ShotZoneEfficiency(BaseModel):
+    zone_key: str
+    zone_name_es: str
+    zone_name_en: str
+    fga: int
+    fgm: int
+    fg_pct: float
+    league_avg_pct: float
+    diff_pct: float
+    frequency_pct: float
+    status: str  # "hot", "average", "cold"
+
+
+class RealShotChartResponse(BaseModel):
+    player_id: int
+    player_name: str
+    season_id: int
+    season_label: str
+    total_fga: int
+    total_fgm: int
+    overall_fg_pct: float
+    shots: List[ShotCoordinateItem]
+    zone_efficiencies: List[ShotZoneEfficiency]
+
+
+class DoppelgangerMatchItem(BaseModel):
+    similar_player_id: int
+    player_name: str
+    headshot_url: str
+    season_label: str
+    age_in_season: Optional[int] = None
+    similarity_pct: float  # e.g. 93.4 (%)
+    archetype_name_es: str
+    archetype_name_en: str
+    archetype_color: str
+    shared_traits_es: List[str]
+    shared_traits_en: List[str]
+    key_comparison_stats: Dict[str, Dict[str, float]]  # e.g. {"ppg": {"target": 28.5, "comp": 27.2}}
+
+
+class DoppelgangerResponse(BaseModel):
+    target_player_id: int
+    target_player_name: str
+    target_season_label: str
+    target_position: str
+    matches: List[DoppelgangerMatchItem]
+    scouting_takeaway_es: str
+    scouting_takeaway_en: str
+
+
+class ContractDetailItem(BaseModel):
+    player_id: int
+    player_name: str
+    team_abbreviation: str
+    team_name: str
+    annual_salary: float
+    salary_formatted: str  # e.g. "$48.5M"
+    cap_hit_pct: float  # e.g. 34.5 (%)
+    contract_type: str  # Supermax, Max, Rookie Scale, Veteran Minimum, Mid-Level
+    years_remaining: int
+    free_agency_year: int
+    cost_per_pt: float  # $ / PPG
+    cost_per_ws: float  # $ / Win Share
+    surplus_value_rating: float  # 0 to 100 score
+    value_tier: str  # "elite_bargain", "high_value", "fair_value", "overpaid"
+
+
+class TeamPayrollSummary(BaseModel):
+    team_id: int
+    team_abbreviation: str
+    team_name: str
+    total_payroll: float
+    payroll_formatted: str
+    salary_cap: float
+    luxury_tax_threshold: float
+    cap_space: float
+    is_in_luxury_tax: bool
+    top_contracts: List[ContractDetailItem]
+
+
+class FinancialAnalyticsResponse(BaseModel):
+    salary_cap_current: float
+    luxury_tax_current: float
+    top_bargain_contracts: List[ContractDetailItem]
+    top_salary_contracts: List[ContractDetailItem]
+    team_payrolls: List[TeamPayrollSummary]

@@ -28,6 +28,11 @@ def get_db_session():
         yield session
 
 
+# Alias for convenience
+get_session = get_db_session
+
+
+
 @contextmanager
 def get_db_context():
     """Synchronous context manager for database sessions (ETL, scripts)."""
