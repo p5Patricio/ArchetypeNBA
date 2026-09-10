@@ -7,6 +7,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { DollarSign, Layers, ArrowLeft, TrendingUp, ShieldAlert, Award, Star } from "lucide-react";
 import Link from "next/link";
+import { API_BASE } from "@/lib/api";
 
 interface ContractDetail {
   player_id: number;
@@ -55,7 +56,7 @@ export default function ContractsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/financial/contracts")
+    fetch(`${API_BASE}/financial/contracts`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load financial analytics");
         return res.json();

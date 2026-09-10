@@ -728,3 +728,122 @@ class FinancialAnalyticsResponse(BaseModel):
     top_bargain_contracts: List[ContractDetailItem]
     top_salary_contracts: List[ContractDetailItem]
     team_payrolls: List[TeamPayrollSummary]
+
+
+# ============================================================================
+# Phase 3: Matchup Analytics Schemas
+# ============================================================================
+
+class MatchupBaseline(BaseModel):
+    pts_per_75: float
+    ast_per_75: float
+    tov_per_75: float
+    ts_pct: float
+    total_possessions: float
+    seasons: List[str]
+
+
+class DefenderMatchupItem(BaseModel):
+    defender_id: int
+    defender_name: str
+    defender_headshot_url: Optional[str] = None
+    seasons: List[str]
+    partial_poss: float
+    matchup_min: float
+    player_pts: float
+    matchup_ast: float
+    matchup_tov: float
+    matchup_fgm: float
+    matchup_fga: float
+    matchup_fg_pct: float
+    matchup_fg3m: float
+    matchup_fg3a: float
+    matchup_fg3_pct: float
+    matchup_ftm: float
+    matchup_fta: float
+    pts_per_75: float
+    ast_per_75: float
+    tov_per_75: float
+    ts_pct: float
+    delta_pts: float
+    delta_ast: float
+    delta_tov: float
+    delta_ts_pct: float
+    classification: str  # kryptonite, mismatch_exploited, playmaker_trigger, neutral
+    classification_label: str
+
+
+class PlayerMatchupAnalysisResponse(BaseModel):
+    player_id: int
+    player_name: str
+    player_headshot_url: Optional[str] = None
+    seasons: List[str]
+    min_possessions: float
+    baseline: MatchupBaseline
+    top_stoppers: List[DefenderMatchupItem]
+    top_targets: List[DefenderMatchupItem]
+    matchups: List[DefenderMatchupItem]
+
+
+# ============================================================================
+# Parallel Coordinates Shot Zones Schemas
+# ============================================================================
+
+class ZoneMetric(BaseModel):
+    fgm: float
+    fga: float
+    pct: float
+    score: float
+    rank_score: int
+    rank_pct: int
+    pctile_score: float
+    pctile_pct: float
+
+
+class PlayerZones(BaseModel):
+    paint: ZoneMetric
+    mid: ZoneMetric
+    ft: ZoneMetric
+    three: ZoneMetric
+
+
+class ParallelPlayerItem(BaseModel):
+    id: int
+    name: str
+    team: str
+    headshot_url: str
+    minutes: float
+    gp: int
+    pts: float
+    zones: PlayerZones
+
+
+class LeagueAverageZone(BaseModel):
+    avg_pct: float
+    median_pct: float
+    avg_fgm: float
+    avg_fga: float
+
+
+class LeagueAveragesMap(BaseModel):
+    paint: LeagueAverageZone
+    mid: LeagueAverageZone
+    ft: LeagueAverageZone
+    three: LeagueAverageZone
+
+
+class ShotZonePreset(BaseModel):
+    id: str
+    title: str
+    subtitle: str
+    player_ids: List[int]
+
+
+class ParallelShotZonesResponse(BaseModel):
+    season: str
+    total_players: int
+    league_averages: LeagueAveragesMap
+    players: List[ParallelPlayerItem]
+    presets: List[ShotZonePreset]
+
+

@@ -2,12 +2,17 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { translations, type Language, type UnitSystem } from "@/lib/translations";
+import { getSeasons, type SeasonItem } from "@/lib/api";
 
 interface PreferencesContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
   unitSystem: UnitSystem;
   setUnitSystem: (units: UnitSystem) => void;
+  seasonId: number | null;
+  seasonLabel: string;
+  setSeason: (seasonId: number, seasonLabel?: string) => void;
+  seasons: SeasonItem[];
   t: (key: keyof typeof translations.es, params?: Record<string, string | number>) => string;
   formatHeight: (heightStr?: string | null, heightCm?: number | null) => string;
   formatWeight: (weightStr?: string | number | null, weightKg?: number | null) => string;
@@ -18,6 +23,9 @@ const PreferencesContext = createContext<PreferencesContextType | undefined>(und
 export function PreferencesProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>("es");
   const [unitSystem, setUnitSystemState] = useState<UnitSystem>("metric");
+  const [seasons, setSeasons] = useState<SeasonItem[]>([]);
+  const [seasonId, setSeasonId] = useState<number | null>(3);
+  const [seasonLabel, setSeasonLabel] = useState<string>("2025-26");
 
   useEffect(() => {
     try {
@@ -33,6 +41,47 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
       // ignore storage errors
     }
   }, []);
+
+  useEffect(() => {
+    let attempts = 0;
+    let cancelled = false;
+
+    const fetchSeasons = () => {
+      getSeasons()
+        .then((data) => {
+          if (cancelled) return;
+          if (data && data.length > 0) {
+            setSeasons(data);
+            const active = data.find((s) => s.is_active) || data[0];
+            setSeasonId(active.id);
+            setSeasonLabel(active.season_label);
+          }
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          console.warn("Backend still warming up, retrying seasons load...", err);
+          if (attempts < 5) {
+            attempts++;
+            setTimeout(fetchSeasons, 1500);
+          }
+        });
+    };
+
+    fetchSeasons();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const setSeason = (sId: number, sLabel?: string) => {
+    setSeasonId(sId);
+    if (sLabel) {
+      setSeasonLabel(sLabel);
+    } else {
+      const match = seasons.find((s) => s.id === sId);
+      if (match) setSeasonLabel(match.season_label);
+    }
+  };
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
@@ -138,6 +187,10 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
         setLanguage,
         unitSystem,
         setUnitSystem,
+        seasonId,
+        seasonLabel,
+        setSeason,
+        seasons,
         t,
         formatHeight,
         formatWeight,

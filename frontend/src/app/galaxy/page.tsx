@@ -9,14 +9,13 @@ import { usePreferences } from "@/context/PreferencesContext";
 import { Sparkles, Compass, Zap, Target } from "lucide-react";
 
 export default function GalaxyPage() {
-  const { language } = usePreferences();
-  const [seasonId, setSeasonId] = useState<number>(1);
-  const [seasonLabel, setSeasonLabel] = useState<string>("2023-24");
+  const { language, seasonId, seasonLabel } = usePreferences();
   const [players, setPlayers] = useState<GalaxyPlayerPoint[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isCommandOpen, setIsCommandOpen] = useState<boolean>(false);
 
   useEffect(() => {
+    if (!seasonId) return;
     setLoading(true);
     getGalaxyMap(seasonId)
       .then((data) => setPlayers(data))
@@ -28,14 +27,7 @@ export default function GalaxyPage() {
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 selection:bg-purple-100 selection:text-purple-900">
       
       {/* Navigation */}
-      <Navbar
-        currentSeasonId={seasonId}
-        onSeasonChange={(id, label) => {
-          setSeasonId(id);
-          if (label) setSeasonLabel(label);
-        }}
-        onOpenSearch={() => setIsCommandOpen(true)}
-      />
+      <Navbar onOpenSearch={() => setIsCommandOpen(true)} />
 
       <CommandPalette
         isOpen={isCommandOpen}

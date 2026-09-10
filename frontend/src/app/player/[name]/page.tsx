@@ -43,6 +43,7 @@ import {
   type PlayerShot,
   type MoreyballMetricsResponse,
   type HistoricalMatchResponse,
+  API_BASE,
 } from "@/lib/api";
 import { usePreferences } from "@/context/PreferencesContext";
 
@@ -52,9 +53,7 @@ export default function PlayerPage() {
   const rawName = params.name as string;
   const decodedName = decodeURIComponent(rawName || "");
 
-  const { t, formatHeight, formatWeight, language } = usePreferences();
-  const [seasonId, setSeasonId] = useState<number>(1);
-  const [seasonLabel, setSeasonLabel] = useState<string>("2023-24");
+  const { t, formatHeight, formatWeight, language, seasonId, seasonLabel } = usePreferences();
   const [activeTab, setActiveTab] = useState<"overview" | "pizza" | "shotchart" | "doppelgangers">("overview");
 
   const [analysis, setAnalysis] = useState<PlayerAnalysisResponse | null>(null);
@@ -74,7 +73,7 @@ export default function PlayerPage() {
   const [isCommandOpen, setIsCommandOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!decodedName) return;
+    if (!decodedName || !seasonId) return;
     setLoading(true);
 
     Promise.allSettled([
@@ -85,9 +84,9 @@ export default function PlayerPage() {
       getPlayerShots(decodedName, seasonId),
       getPlayerMoreyball(decodedName, seasonId),
       getHistoricalMatches(decodedName, seasonId),
-      fetch(`http://localhost:8000/api/v1/player/${encodeURIComponent(decodedName)}/pizza-chart?season_id=${seasonId}`).then((r) => r.ok ? r.json() : null),
-      fetch(`http://localhost:8000/api/v1/players/${encodeURIComponent(decodedName)}/shot-chart?season_id=${seasonId}&max_shots=350`).then((r) => r.ok ? r.json() : null),
-      fetch(`http://localhost:8000/api/v1/doppelgangers?player_id_or_name=${encodeURIComponent(decodedName)}&season_id=${seasonId}&top_k=5`).then((r) => r.ok ? r.json() : null),
+      fetch(`${API_BASE}/player/${encodeURIComponent(decodedName)}/pizza-chart?season_id=${seasonId}`).then((r) => r.ok ? r.json() : null),
+      fetch(`${API_BASE}/players/${encodeURIComponent(decodedName)}/shot-chart?season_id=${seasonId}&max_shots=350`).then((r) => r.ok ? r.json() : null),
+      fetch(`${API_BASE}/doppelgangers?player_id_or_name=${encodeURIComponent(decodedName)}&season_id=${seasonId}&top_k=5`).then((r) => r.ok ? r.json() : null),
     ]).then(([analysisRes, profileRes, advancedRes, similarRes, shotsRes, moreyRes, histRes, pizzaRes, realShotRes, doppelRes]) => {
       if (analysisRes.status === "fulfilled") setAnalysis(analysisRes.value);
       else setAnalysis(null);

@@ -4,7 +4,8 @@ from app.config import settings
 from app.api.v1 import (
     health, teams, players, cluster, data, player_extras, historical,
     seasons, hall_of_fame, analytics, versus, lineup, training,
-    pizza_chart, shotchart, doppelgangers, financial
+    pizza_chart, shotchart, doppelgangers, financial, matchups, timeline,
+    shot_zones, props
 )
 
 app = FastAPI(
@@ -47,6 +48,11 @@ app.include_router(pizza_chart.router, prefix="/api/v1", tags=["pizza-chart"])
 app.include_router(shotchart.router, prefix="/api/v1", tags=["shot-chart"])
 app.include_router(doppelgangers.router, prefix="/api/v1", tags=["doppelgangers"])
 app.include_router(financial.router, prefix="/api/v1", tags=["financial"])
+app.include_router(matchups.router, prefix="/api/v1", tags=["matchups"])
+app.include_router(timeline.router, prefix="/api/v1", tags=["timeline"])
+app.include_router(shot_zones.router, prefix="/api/v1", tags=["shot-zones"])
+app.include_router(props.router, prefix="/api/v1", tags=["props"])
+
 
 
 

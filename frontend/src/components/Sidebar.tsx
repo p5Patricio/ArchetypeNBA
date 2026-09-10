@@ -16,6 +16,10 @@ import {
   Swords,
   Users,
   Dumbbell,
+  ShieldAlert,
+  History,
+  Target,
+  TrendingUp,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -51,6 +55,30 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       active: pathname.startsWith("/versus"),
       accent: "text-rose-600",
       activeBg: "bg-rose-50 text-rose-800 border-rose-200 font-extrabold",
+    },
+    {
+      href: "/shot-zones",
+      label: language === "es" ? "Zonas de Tiro (4 Ejes)" : "Shot Zones (4 Axes)",
+      icon: Target,
+      active: pathname.startsWith("/shot-zones"),
+      accent: "text-orange-600",
+      activeBg: "bg-orange-50 text-orange-800 border-orange-200 font-extrabold",
+    },
+    {
+      href: "/matchups",
+      label: language === "es" ? "Matchups 1v1 (¿Quién lo para?)" : "1v1 Matchups",
+      icon: ShieldAlert,
+      active: pathname.startsWith("/matchups"),
+      accent: "text-red-600",
+      activeBg: "bg-red-50 text-red-800 border-red-200 font-extrabold",
+    },
+    {
+      href: "/props",
+      label: language === "es" ? "Player Props & +EV" : "Player Props & +EV",
+      icon: TrendingUp,
+      active: pathname.startsWith("/props"),
+      accent: "text-orange-600",
+      activeBg: "bg-orange-50 text-orange-800 border-orange-200 font-extrabold",
     },
     {
       href: "/lineup",
@@ -99,6 +127,14 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       active: pathname.startsWith("/teams"),
       accent: "text-sky-600",
       activeBg: "bg-sky-50 text-sky-800 border-sky-200 font-extrabold",
+    },
+    {
+      href: "/timeline",
+      label: t("nav_timeline"),
+      icon: History,
+      active: pathname.startsWith("/timeline"),
+      accent: "text-blue-600",
+      activeBg: "bg-blue-50 text-blue-800 border-blue-200 font-extrabold",
     },
   ];
 

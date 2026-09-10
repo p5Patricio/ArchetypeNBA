@@ -8,25 +8,33 @@ import { Sidebar } from "./Sidebar";
 import { usePreferences } from "@/context/PreferencesContext";
 
 interface NavbarProps {
-  currentSeasonId?: number;
+  currentSeasonId?: number | null;
   onSeasonChange?: (seasonId: number, seasonLabel?: string) => void;
   onOpenSearch?: () => void;
 }
 
-export function Navbar({ currentSeasonId = 1, onSeasonChange, onOpenSearch }: NavbarProps) {
+export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: NavbarProps) {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { language, setLanguage, unitSystem, setUnitSystem, t } = usePreferences();
+  const { language, setLanguage, unitSystem, setUnitSystem, t, seasonId: globalSeasonId, setSeason: setGlobalSeason } = usePreferences();
+
+  const effectiveSeasonId = currentSeasonId !== undefined ? currentSeasonId : globalSeasonId;
+  const handleSeasonChange = (sId: number, sLabel?: string) => {
+    setGlobalSeason(sId, sLabel);
+    if (onSeasonChange) onSeasonChange(sId, sLabel);
+  };
 
   // Page title resolution for top header
   const getPageTitle = () => {
     if (pathname === "/") return language === "es" ? "Scouting Hub" : "Scouting Hub";
     if (pathname.startsWith("/versus")) return language === "es" ? "Coliseo 1 vs 1" : "1 vs 1 Colosseum";
+    if (pathname.startsWith("/shot-zones")) return language === "es" ? "Zonas de Tiro (Coordenadas Paralelas)" : "Shot Zones Parallel Coordinates";
     if (pathname.startsWith("/lineup")) return language === "es" ? "Armador 5 vs 5" : "5 vs 5 Lineup Builder";
     if (pathname.startsWith("/doppelgangers")) return language === "es" ? "Doppelgängers Históricos" : "Historical Doppelgängers";
     if (pathname.startsWith("/contracts")) return language === "es" ? "Finanzas & Contratos NBA" : "NBA Contracts & Payroll";
     if (pathname.startsWith("/galaxy")) return language === "es" ? "Galaxia Táctica" : "Tactical Galaxy";
     if (pathname.startsWith("/hall-of-fame")) return language === "es" ? "Salón de la Fama" : "Hall of Fame";
+    if (pathname.startsWith("/timeline")) return language === "es" ? "Línea del Tiempo NBA" : "NBA Historical Timeline";
     if (pathname.startsWith("/teams")) return language === "es" ? "Franquicias NBA" : "NBA Franchises";
     if (pathname.startsWith("/player")) return language === "es" ? "Scouting Lab de Jugador" : "Player Scouting Lab";
     return "ArchetypeNBA";
@@ -81,10 +89,10 @@ export function Navbar({ currentSeasonId = 1, onSeasonChange, onOpenSearch }: Na
             </button>
 
             {/* Season Selector */}
-            {onSeasonChange && (
+            {(onSeasonChange || effectiveSeasonId !== null) && (
               <SeasonSelect
-                value={currentSeasonId}
-                onChange={onSeasonChange}
+                value={effectiveSeasonId}
+                onChange={handleSeasonChange}
                 className="bg-slate-50 border-slate-200 text-slate-800 text-xs shadow-2xs"
               />
             )}

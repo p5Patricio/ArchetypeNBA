@@ -961,4 +961,277 @@ export async function getDrillsCatalog(): Promise<DrillRecommendation[]> {
 }
 
 
+// ============================================================================
+// Phase 3: 1v1 Matchup Tracking Types & API Functions
+// ============================================================================
+
+export type MatchupBaseline = {
+  pts_per_75: number;
+  ast_per_75: number;
+  tov_per_75: number;
+  ts_pct: number;
+  total_possessions: number;
+  seasons: string[];
+};
+
+export type DefenderMatchupItem = {
+  defender_id: number;
+  defender_name: string;
+  defender_headshot_url?: string | null;
+  seasons: string[];
+  partial_poss: number;
+  matchup_min: number;
+  player_pts: number;
+  matchup_ast: number;
+  matchup_tov: number;
+  matchup_fgm: number;
+  matchup_fga: number;
+  matchup_fg_pct: number;
+  matchup_fg3m: number;
+  matchup_fg3a: number;
+  matchup_fg3_pct: number;
+  matchup_ftm: number;
+  matchup_fta: number;
+  pts_per_75: number;
+  ast_per_75: number;
+  tov_per_75: number;
+  ts_pct: number;
+  delta_pts: number;
+  delta_ast: number;
+  delta_tov: number;
+  delta_ts_pct: number;
+  classification: "kryptonite" | "mismatch_exploited" | "playmaker_trigger" | "neutral" | string;
+  classification_label: string;
+};
+
+export type PlayerMatchupAnalysisResponse = {
+  player_id: number;
+  player_name: string;
+  player_headshot_url?: string | null;
+  seasons: string[];
+  min_possessions: number;
+  baseline: MatchupBaseline;
+  top_stoppers: DefenderMatchupItem[];
+  top_targets: DefenderMatchupItem[];
+  matchups: DefenderMatchupItem[];
+};
+
+export async function fetchPlayerMatchups(
+  playerId: number,
+  seasons?: string[],
+  minPossessions: number = 10
+): Promise<PlayerMatchupAnalysisResponse> {
+  const params = new URLSearchParams();
+  params.set("min_possessions", String(minPossessions));
+  if (seasons && seasons.length > 0) {
+    seasons.forEach((s) => params.append("seasons", s));
+  }
+  return await getJson<PlayerMatchupAnalysisResponse>(
+    `${API_BASE}/matchups/player/${playerId}?${params.toString()}`
+  );
+}
+
+export async function searchPlayerMatchups(
+  name: string,
+  seasons?: string[],
+  minPossessions: number = 10
+): Promise<PlayerMatchupAnalysisResponse> {
+  const params = new URLSearchParams();
+  params.set("name", name);
+  params.set("min_possessions", String(minPossessions));
+  if (seasons && seasons.length > 0) {
+    seasons.forEach((s) => params.append("seasons", s));
+  }
+  return await getJson<PlayerMatchupAnalysisResponse>(
+    `${API_BASE}/matchups/search?${params.toString()}`
+  );
+}
+
+export type TimelineEra = {
+  id: string;
+  name_es: string;
+  name_en: string;
+  year_range: string;
+  summary_es: string;
+  summary_en: string;
+  color: string;
+};
+
+export type TimelineEvent = {
+  id: string;
+  year: int_or_number;
+  exact_date?: string | null;
+  era_id: string;
+  category: "milestones" | "scandals_brawls" | "culture_rules" | "legendary_games" | "dynasties" | string;
+  title_es: string;
+  title_en: string;
+  headline_es: string;
+  headline_en: string;
+  description_es: string;
+  description_en: string;
+  key_actors: string[];
+  impact_summary_es: string;
+  impact_summary_en: string;
+  tags: string[];
+  icon_type: "trophy" | "flame" | "shirt" | "sword" | "crown" | "scale" | string;
+  severity?: "historic" | "controversy" | "fine" | "suspension" | "revolution" | string | null;
+  trivia_es?: string | null;
+  trivia_en?: string | null;
+  media_badge?: string | null;
+  image_url?: string | null;
+  image_caption?: string | null;
+  player_headshot?: string | null;
+};
+
+type int_or_number = number;
+
+export type TimelineResponse = {
+  eras: TimelineEra[];
+  categories: { id: string; label_es: string; label_en: string }[];
+  total_events: number;
+  events: TimelineEvent[];
+};
+
+export async function getTimeline(
+  category?: string,
+  eraId?: string,
+  query?: string
+): Promise<TimelineResponse> {
+  const params = new URLSearchParams();
+  if (category && category !== "all") params.set("category", category);
+  if (eraId && eraId !== "all") params.set("era_id", eraId);
+  if (query && query.trim()) params.set("q", query.trim());
+
+  const url = `${API_BASE}/timeline${params.toString() ? `?${params.toString()}` : ""}`;
+  return await getJson<TimelineResponse>(url);
+}
+
+// ----------------------------------------------------------------------------
+// Parallel Coordinates Shot Zones API
+// ----------------------------------------------------------------------------
+
+export interface ZoneMetric {
+  fgm: number;
+  fga: number;
+  pct: number;
+  score: number;
+  rank_score: number;
+  rank_pct: number;
+  pctile_score: number;
+  pctile_pct: number;
+}
+
+export interface PlayerZones {
+  paint: ZoneMetric;
+  mid: ZoneMetric;
+  ft: ZoneMetric;
+  three: ZoneMetric;
+}
+
+export interface ParallelPlayerItem {
+  id: number;
+  name: string;
+  team: string;
+  headshot_url: string;
+  minutes: number;
+  gp: number;
+  pts: number;
+  zones: PlayerZones;
+}
+
+export interface LeagueAverageZone {
+  avg_pct: number;
+  median_pct: number;
+  avg_fgm: number;
+  avg_fga: number;
+}
+
+export interface LeagueAveragesMap {
+  paint: LeagueAverageZone;
+  mid: LeagueAverageZone;
+  ft: LeagueAverageZone;
+  three: LeagueAverageZone;
+}
+
+export interface ShotZonePreset {
+  id: string;
+  title: string;
+  subtitle: string;
+  player_ids: number[];
+}
+
+export interface ParallelShotZonesResponse {
+  season: string;
+  total_players: number;
+  league_averages: LeagueAveragesMap;
+  players: ParallelPlayerItem[];
+  presets: ShotZonePreset[];
+}
+
+export async function getParallelShotZones(
+  season: string = "2023-24",
+  playerIds?: number[],
+  search?: string
+): Promise<ParallelShotZonesResponse> {
+  const params = new URLSearchParams();
+  if (season) params.set("season", season);
+  if (playerIds && playerIds.length > 0) params.set("player_ids", playerIds.join(","));
+  if (search && search.trim()) params.set("search", search.trim());
+
+  const url = `${API_BASE}/shot-zones/parallel?${params.toString()}`;
+  return await getJson<ParallelShotZonesResponse>(url);
+}
+
+export async function getShotZonesPresets(): Promise<ShotZonePreset[]> {
+  const url = `${API_BASE}/shot-zones/presets`;
+  return await getJson<ShotZonePreset[]>(url);
+}
+
+// ---------------------------------------------------------------------------
+// NBA Player Props & +EV Predictions API
+// ---------------------------------------------------------------------------
+
+export interface PropItem {
+  player_name: string;
+  team: string;
+  stat_type: string;
+  line: number;
+  over_odds: number;
+  projected_mean: number;
+  projected_median: number;
+  projected_p10: number;
+  projected_p90: number;
+  prob_over: number;
+  book_implied_prob: number;
+  edge_pct: number;
+  expected_value_pct: number;
+  kelly_stake_pct: number;
+  recommendation: string;
+  risk_level: string;
+  reasoning: string;
+}
+
+export interface TodayPropsResponse {
+  date: string;
+  ai_engine: string;
+  odds_source: string;
+  slate_summary: string;
+  total_props: number;
+  value_picks_count: number;
+  items: PropItem[];
+}
+
+export async function getTodayProps(params?: {
+  stat_type?: string;
+  only_value?: boolean;
+  refresh?: boolean;
+}): Promise<TodayPropsResponse> {
+  const query = new URLSearchParams();
+  if (params?.stat_type) query.set("stat_type", params.stat_type);
+  if (params?.only_value) query.set("only_value", "true");
+  if (params?.refresh) query.set("refresh", "true");
+
+  const qs = query.toString() ? `?${query.toString()}` : "";
+  return getJson<TodayPropsResponse>(`${API_BASE}/props/today${qs}`);
+}
 

@@ -10,13 +10,12 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
-        hostname: "ak-static.raw.nba.com",
+        hostname: "images.unsplash.com",
         pathname: "/**",
       },
       {
         protocol: "https",
-        hostname: "raw.githubusercontent.com",
-        pathname: "/**",
+        hostname: "**",
       },
     ],
   },

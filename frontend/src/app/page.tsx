@@ -14,13 +14,11 @@ import {
 import { Navbar } from "@/components/Navbar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { getPlayers, checkHealth, type PlayerListItem } from "@/lib/api";
+import { getPlayers, getSeasons, checkHealth, type PlayerListItem } from "@/lib/api";
 import { usePreferences } from "@/context/PreferencesContext";
 
 export default function Home() {
-  const { t, language } = usePreferences();
-  const [seasonId, setSeasonId] = useState<number>(1);
-  const [seasonLabel, setSeasonLabel] = useState<string>("2023-24");
+  const { t, language, seasonId, seasonLabel, setSeason } = usePreferences();
   const [players, setPlayers] = useState<PlayerListItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>("");
@@ -36,6 +34,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (seasonId === null) return;
     setLoading(true);
     getPlayers(undefined, seasonId)
       .then((data) => {
@@ -134,14 +133,7 @@ export default function Home() {
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 selection:bg-orange-100 selection:text-orange-900">
       
       {/* Navigation */}
-      <Navbar
-        currentSeasonId={seasonId}
-        onSeasonChange={(id, label) => {
-          setSeasonId(id);
-          if (label) setSeasonLabel(label);
-        }}
-        onOpenSearch={() => setIsCommandOpen(true)}
-      />
+      <Navbar onOpenSearch={() => setIsCommandOpen(true)} />
 
       <CommandPalette
         isOpen={isCommandOpen}

@@ -7,6 +7,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Users, Search, Sparkles, Trophy, ArrowRight, Activity, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { API_BASE } from "@/lib/api";
 
 interface DoppelgangerMatch {
   similar_player_id: number;
@@ -57,7 +58,7 @@ export default function DoppelgangersPage() {
 
   // Fetch all players for autocomplete
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/players")
+    fetch(`${API_BASE}/players`)
       .then((res) => res.json())
       .then((names: string[]) => setPlayerList(names))
       .catch(() => {});
@@ -79,7 +80,7 @@ export default function DoppelgangersPage() {
     setLoading(true);
     setError(null);
 
-    fetch(`http://localhost:8000/api/v1/doppelgangers?player_id_or_name=${encodeURIComponent(selectedPlayer)}&top_k=6`)
+    fetch(`${API_BASE}/doppelgangers?player_id_or_name=${encodeURIComponent(selectedPlayer)}&top_k=6`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to calculate historical doppelgängers");
         return res.json();

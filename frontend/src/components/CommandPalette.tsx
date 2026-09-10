@@ -10,10 +10,10 @@ import { usePreferences } from "@/context/PreferencesContext";
 interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
-  seasonId?: number;
+  seasonId?: number | null;
 }
 
-export function CommandPalette({ isOpen, onClose, seasonId = 1 }: CommandPaletteProps) {
+export function CommandPalette({ isOpen, onClose, seasonId }: CommandPaletteProps) {
   const router = useRouter();
   const { t } = usePreferences();
   const [query, setQuery] = useState("");
@@ -39,7 +39,7 @@ export function CommandPalette({ isOpen, onClose, seasonId = 1 }: CommandPalette
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
-      getPlayers(undefined, seasonId)
+      getPlayers(undefined, seasonId || undefined)
         .then((data) => {
           setPlayers(data);
           setFiltered(data.slice(0, 10));

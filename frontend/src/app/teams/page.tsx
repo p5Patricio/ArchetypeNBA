@@ -20,9 +20,7 @@ import {
 } from "lucide-react";
 
 export default function TeamsPage() {
-  const { t, language } = usePreferences();
-  const [seasonId, setSeasonId] = useState<number>(1);
-  const [seasonLabel, setSeasonLabel] = useState<string>("2023-24");
+  const { t, language, seasonId, seasonLabel } = usePreferences();
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [roster, setRoster] = useState<PlayerListItem[]>([]);
@@ -47,7 +45,7 @@ export default function TeamsPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedTeam) {
+    if (selectedTeam && seasonId) {
       getPlayers(selectedTeam.abbreviation, seasonId)
         .then((data) => setRoster(data))
         .catch(console.error);
@@ -71,11 +69,6 @@ export default function TeamsPage() {
       
       {/* Navigation */}
       <Navbar
-        currentSeasonId={seasonId}
-        onSeasonChange={(id, label) => {
-          setSeasonId(id);
-          if (label) setSeasonLabel(label);
-        }}
         onOpenSearch={() => setIsCommandOpen(true)}
       />
 

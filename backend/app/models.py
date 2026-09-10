@@ -20,6 +20,7 @@ class Season(SQLModel, table=True):
     advanced_stats: List["PlayerAdvancedStats"] = Relationship(back_populates="season")
     elo_ratings: List["TeamEloRating"] = Relationship(back_populates="season")
     similarities: List["PlayerSimilarity"] = Relationship(back_populates="season")
+    matchup_stats: List["PlayerMatchupStats"] = Relationship(back_populates="season")
 
 
 class Team(SQLModel, table=True):
@@ -53,6 +54,8 @@ class Player(SQLModel, table=True):
     shots: List["PlayerShot"] = Relationship(back_populates="player")
     advanced_stats: List["PlayerAdvancedStats"] = Relationship(back_populates="player")
     similarities: List["PlayerSimilarity"] = Relationship(back_populates="player", sa_relationship_kwargs={"foreign_keys": "PlayerSimilarity.player_id"})
+    offensive_matchups: List["PlayerMatchupStats"] = Relationship(sa_relationship_kwargs={"foreign_keys": "PlayerMatchupStats.off_player_id"})
+    defensive_matchups: List["PlayerMatchupStats"] = Relationship(sa_relationship_kwargs={"foreign_keys": "PlayerMatchupStats.def_player_id"})
 
 
 class PlayerSeasonStats(SQLModel, table=True):
@@ -298,4 +301,67 @@ class PlayerContract(SQLModel, table=True):
     years_remaining: int = 1
     free_agency_year: int = 2026
     is_guaranteed: bool = True
+
+
+# ============================================================================
+# Phase 3: 1v1 Matchup Tracking Data
+# ============================================================================
+
+class PlayerMatchupStats(SQLModel, table=True):
+    __tablename__ = "player_matchup_stats"
+
+    __table_args__ = (
+        UniqueConstraint("season_id", "off_player_id", "def_player_id", name="uq_matchup_season_off_def"),
+        Index("ix_matchup_off_poss", "off_player_id", "partial_poss"),
+        Index("ix_matchup_def_poss", "def_player_id", "partial_poss"),
+        Index("ix_matchup_season_off", "season_id", "off_player_id"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    season_id: int = Field(foreign_key="season.id")
+    off_player_id: int = Field(foreign_key="player.id")
+    def_player_id: int = Field(foreign_key="player.id")
+
+    gp: int = 0
+    matchup_min: float = 0.0
+    partial_poss: float = 0.0
+    player_pts: float = 0.0
+    team_pts: float = 0.0
+    matchup_ast: float = 0.0
+    matchup_tov: float = 0.0
+    matchup_blk: float = 0.0
+    matchup_fgm: float = 0.0
+    matchup_fga: float = 0.0
+    matchup_fg_pct: float = 0.0
+    matchup_fg3m: float = 0.0
+    matchup_fg3a: float = 0.0
+    matchup_fg3_pct: float = 0.0
+    help_blk: float = 0.0
+    help_fgm: float = 0.0
+    help_fga: float = 0.0
+    help_fg_perc: float = 0.0
+    matchup_ftm: float = 0.0
+    matchup_fta: float = 0.0
+    sfl: float = 0.0
+    matchup_time_sec: float = 0.0
+
+    # Normalized metrics (per 75 possessions and True Shooting %)
+    ts_pct: float = 0.0
+    pts_per_75: float = 0.0
+    ast_per_75: float = 0.0
+    tov_per_75: float = 0.0
+
+    season: "Season" = Relationship(back_populates="matchup_stats")
+    off_player: "Player" = Relationship(
+        sa_relationship_kwargs={
+            "foreign_keys": "PlayerMatchupStats.off_player_id",
+            "overlaps": "offensive_matchups",
+        }
+    )
+    def_player: "Player" = Relationship(
+        sa_relationship_kwargs={
+            "foreign_keys": "PlayerMatchupStats.def_player_id",
+            "overlaps": "defensive_matchups",
+        }
+    )
 
