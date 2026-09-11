@@ -83,7 +83,7 @@ Powered by unsupervised clustering (K-Means), multi-dimensional dimensionality r
 ## 🛠️ Architecture & Tech Stack
 
 ```
-Clasificador_Entrenador-NBA/
+ArchetypeNBA/
 ├── backend/                  # FastAPI REST API & Machine Learning Engine
 │   ├── app/
 │   │   ├── api/v1/          # Modular routers (shot_zones, props, matchups, versus, lineup, galaxy, hof)
