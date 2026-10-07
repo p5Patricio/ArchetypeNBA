@@ -1,4 +1,6 @@
 import logging
+import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 import numpy as np
@@ -6,6 +8,24 @@ from scipy.stats import nbinom
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_player_key(name: str) -> str:
+    """
+    Matching key for player names across systems: no diacritics, lower case, no punctuation,
+    single spaces ("Luka Dončić" -> "luka doncic", "P.J. Washington Jr." -> "pj washington jr").
+    """
+    stripped = "".join(c for c in unicodedata.normalize("NFKD", name or "") if not unicodedata.combining(c))
+    cleaned = re.sub(r"[^a-z0-9\s]", "", stripped.lower().replace("-", " "))
+    return " ".join(cleaned.split())
+
+
+def index_props_by_player(props_map: Dict[str, Dict[str, "PropBetLine"]]) -> Dict[str, Dict[str, "PropBetLine"]]:
+    """Re-keys a {player name: {stat: line}} map by normalize_player_key so lookups ignore accents."""
+    indexed: Dict[str, Dict[str, "PropBetLine"]] = {}
+    for name, stats in props_map.items():
+        indexed.setdefault(normalize_player_key(name), {}).update(stats)
+    return indexed
 
 
 def american_to_decimal(american_odds: int) -> float:

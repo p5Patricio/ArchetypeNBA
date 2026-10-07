@@ -1,7 +1,7 @@
 import logging
 from collections import Counter
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 import httpx
 
 from app.config import settings
@@ -14,6 +14,37 @@ MARKET_TO_STAT = {
     "player_rebounds": "REB",
     "player_assists": "AST",
 }
+
+
+GAME_LINE_MARKETS = ("h2h", "spreads", "totals")
+# Pinnacle (sharp reference) is only listed in the `eu` region; `bookmakers=` reaches it directly.
+DEFAULT_BOOKMAKERS = (
+    "pinnacle",
+    "draftkings",
+    "fanduel",
+    "betmgm",
+    "williamhill_us",
+    "betrivers",
+    "bovada",
+)
+MAX_BOOKMAKERS_PER_CALL = 10  # The Odds API bills one "region" per group of 10 bookmakers
+
+
+@dataclass(frozen=True)
+class GameQuote:
+    """A single price offered by one bookmaker for one side of one game market (moneyline, spread, total)."""
+
+    event_id: str
+    commence_time: str  # ISO 8601 as returned by the API
+    home_team: str
+    away_team: str
+    bookmaker_key: str
+    bookmaker_title: str
+    market_key: str  # 'h2h', 'spreads' or 'totals'
+    side: str  # 'home', 'away', 'over' or 'under'
+    line: Optional[float]  # None for h2h
+    price_american: int
+    book_last_update: Optional[str] = None  # market `last_update` (falls back to the bookmaker's)
 
 
 @dataclass(frozen=True)
@@ -88,6 +119,83 @@ def select_best_lines(quotes: List[OddsQuote]) -> Dict[str, Dict[str, PropBetLin
     return result
 
 
+def _team_side(name: str, home_team: str, away_team: str) -> Optional[str]:
+    cleaned = (name or "").strip().lower()
+    if cleaned == home_team.strip().lower():
+        return "home"
+    if cleaned == away_team.strip().lower():
+        return "away"
+    return None
+
+
+def parse_game_quotes(events: object) -> List[GameQuote]:
+    """Flattens a /odds payload into GameQuotes, skipping any event, market or outcome that is incomplete."""
+    quotes: List[GameQuote] = []
+    if not isinstance(events, list):
+        return quotes
+
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_id = event.get("id")
+        commence = event.get("commence_time")
+        home = event.get("home_team")
+        away = event.get("away_team")
+        if not (event_id and commence and home and away):
+            continue
+
+        for book in event.get("bookmakers") or []:
+            book_key = book.get("key")
+            if not book_key:
+                continue
+            book_title = book.get("title") or book_key
+
+            for market in book.get("markets") or []:
+                m_key = market.get("key")
+                if m_key not in GAME_LINE_MARKETS:
+                    continue
+                updated = market.get("last_update") or book.get("last_update")
+
+                for o in market.get("outcomes") or []:
+                    name = o.get("name")
+                    price = o.get("price")
+                    point = o.get("point")
+                    if price is None:
+                        continue
+
+                    if m_key == "totals":
+                        side = (name or "").strip().lower()
+                        if side not in ("over", "under") or point is None:
+                            continue
+                    else:
+                        side = _team_side(name, home, away)
+                        if side is None or (m_key == "spreads" and point is None):
+                            continue
+
+                    try:
+                        line = float(point) if m_key != "h2h" else None
+                        price_american = int(price)
+                    except (TypeError, ValueError):
+                        continue
+
+                    quotes.append(
+                        GameQuote(
+                            event_id=event_id,
+                            commence_time=commence,
+                            home_team=home,
+                            away_team=away,
+                            bookmaker_key=book_key,
+                            bookmaker_title=book_title,
+                            market_key=m_key,
+                            side=side,
+                            line=line,
+                            price_american=price_american,
+                            book_last_update=updated,
+                        )
+                    )
+    return quotes
+
+
 class OddsApiService:
     """Client for The Odds API (https://the-odds-api.com) to retrieve live NBA betting lines and player props."""
 
@@ -125,19 +233,62 @@ class OddsApiService:
 
         return []
 
-    def fetch_event_prop_quotes(self, event_id: str) -> List[OddsQuote]:
+    def fetch_game_lines(self, bookmakers: Optional[Sequence[str]] = None) -> List[GameQuote]:
         """
-        Fetches every player-prop quote (points, rebounds, assists) offered for an NBA event.
-        One OddsQuote per bookmaker / market / player / side; nothing is merged or overwritten.
+        Fetches moneyline, spread and total quotes for every upcoming NBA game in ONE call
+        (cost: 3 markets x 1 = 3 credits for up to 10 bookmakers). One GameQuote per
+        bookmaker / market / side; malformed outcomes are skipped, never repaired.
         """
         if not self.is_configured:
+            return []
+
+        books = list(bookmakers) if bookmakers else list(DEFAULT_BOOKMAKERS)
+        if len(books) > MAX_BOOKMAKERS_PER_CALL:
+            logger.warning(
+                f"OddsApiService: {len(books)} bookmakers requested; using the first {MAX_BOOKMAKERS_PER_CALL}."
+            )
+            books = books[:MAX_BOOKMAKERS_PER_CALL]
+
+        url = f"{self.BASE_URL}/odds"
+        params = {
+            "apiKey": self.api_key,
+            "bookmakers": ",".join(books),
+            "markets": ",".join(GAME_LINE_MARKETS),
+            "oddsFormat": "american",
+        }
+
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                res = client.get(url, params=params)
+                self._update_quota(res.headers)
+                if res.status_code != 200:
+                    logger.error(f"OddsApiService: Error fetching game lines: {res.status_code} - {res.text}")
+                    return []
+                return parse_game_quotes(res.json())
+        except Exception as e:
+            logger.error(f"OddsApiService: Exception during fetch_game_lines: {e}")
+            return []
+
+    def fetch_event_prop_quotes(
+        self, event_id: str, markets: Optional[Sequence[str]] = None
+    ) -> List[OddsQuote]:
+        """
+        Fetches player-prop quotes for an NBA event (all of points/rebounds/assists by default; each
+        market costs 1 credit). One OddsQuote per bookmaker / market / player / side; nothing is
+        merged or overwritten.
+        """
+        if not self.is_configured:
+            return []
+
+        wanted = [m for m in (markets or MARKET_TO_STAT) if m in MARKET_TO_STAT]
+        if not wanted:
             return []
 
         url = f"{self.BASE_URL}/events/{event_id}/odds"
         params = {
             "apiKey": self.api_key,
             "regions": "us",
-            "markets": ",".join(MARKET_TO_STAT),
+            "markets": ",".join(wanted),
             "oddsFormat": "american",
         }
 
