@@ -1243,3 +1243,14 @@ export async function runPropsAnalysis(params?: {
   const qs = query.toString() ? `?${query.toString()}` : "";
   return postJson<TodayPropsResponse>(`${API_BASE}/props/run-analysis${qs}`, {});
 }
+
+export interface ShutdownResponse {
+  status: string;
+  message: string;
+}
+
+export async function shutdownServices(): Promise<ShutdownResponse> {
+  return postJson<ShutdownResponse>(`${API_BASE}/system/shutdown`, {});
+}
+
+
