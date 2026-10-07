@@ -20,7 +20,7 @@ Paper-trading metrics (ROI, CLV) are meaningless if quotes are fabricated or una
 - No paid services. Free tiers only (The Odds API Starter: 500 credits/month).
 - Target DB: PostgreSQL 15 (backend/docker-compose.yml). Tests run on in-memory SQLite via SQLModel.metadata.create_all.
 - Do not touch legacy didactic modules.
-- `backend/app/api/v1/props.py` has uncommitted user work: do not edit or stage it in this feature.
+- User WIP (props cache, on-demand analysis, shutdown) committed on `feat/props-on-demand-and-shutdown` (342be52, 64e49da, 9a80e2f); this branch is rebased on top of it. props.py is now editable.
 - Artifacts in English.
 
 ## TDD
@@ -28,13 +28,21 @@ Paper-trading metrics (ROI, CLV) are meaningless if quotes are fabricated or una
 
 ## Delivery
 - Strategy: ask-on-risk (default). Forecast: ~700 authored changed lines (T2 ~450, T3 ~250) → exceeds ~400; chain strategy: stacked-to-main (user choice). Slice 1 = T2 (migration), slice 2 = T3 (OddsApiService).
-- Branch: feat/quant-paper-trading (base 78fd58b).
+- Branch: feat/quant-paper-trading, rebased onto feat/props-on-demand-and-shutdown. Rebased hashes: schema a05e4b6, odds fix 6fc4acc, docs 0a610e0.
+- PR chain (stacked-to-main): A props-on-demand-and-shutdown -> main; B schema; C odds integrity; D props/ingestion follow-ups.
 - RDD: on (default). Assess each work-unit commit.
 
 ## Tasks
 - [x] T1 Research free odds sources and scraping viability — route: delegated (broad external research). Result: The Odds API Starter as primary (historical is paid-only; Pinnacle only in `eu`, reachable via `bookmakers=` param); SportsGameOdds Amateur (free, 2,500 events/mo, props, 9 US books, no Pinnacle) as second feed; closing lines must be self-captured; no free historical props. Do not scrape ESPN (Disney ToU bans automated extraction) or OddsPortal (ToS + Cloudflare). Engram: research/free-nba-odds-sources.
 - [x] T2 SQLModel models + Alembic migration `9c3e5a7d1f42_add_quant_paper_trading` for quant tables and views — route: delegated writer (2+ non-trivial files). Checks: `pytest -q` 71 passed (writer), `tests/test_quant_models.py` 10 passed (parent spot check); `alembic upgrade 4125a71b06bf:head --sql` renders 4 CREATE TYPE, 2 NULLS NOT DISTINCT, 3 GENERATED, BRIN, 2 views; downgrade --sql drops views, tables, types. Live Postgres upgrade: pending (Docker not running). Added CHECK closing_price > 0 to avoid division by zero.
 - [x] T3 Fix OddsApiService: remove fabricated fallback, keep per-bookmaker attribution, no -110 default; de-vig + both sides in props_engine — route: delegated writer (2+ non-trivial files). Done: `OddsQuote` + `fetch_event_prop_quotes` keep every book's quote; `select_best_lines` picks a same-book two-sided pair at the modal line (best over price, tie by book key); `get_slate_props_map` returns {} when not live (`last_fetch_live`); `under_odds` Optional; `devig_two_way` + per-side EV; daily_runner skips players without a live line. Checks: `pytest -q` 85 passed (writer and parent spot check); rg for fabricated defaults in app/ and daily_runner.py: no matches.
+
+- [x] T4 Commit user WIP as work units on its own branch — route: inline (git). Commits 342be52 (ignore cache), 64e49da (props on demand), 9a80e2f (shutdown). Checks: backend `pytest -q` 61 passed, frontend `npx tsc --noEmit` exit 0.
+- [ ] T5 props.py: drop fabricated 22.5 fallback, odds label from `last_fetch_live`, expose side/under_odds/prob_under/bookmaker/devigged in API, Telegram text and props page; remove `PropBetLine.over_odds` -110 default — route: delegated writer
+- [ ] T6 Integer-line push handling in props_engine + missing tests (skipped quotes, exception path, daily_runner skip) — route: delegated writer (same writer as T5, separate commit)
+- [ ] T7 Odds ingestion into odds_history: game lines (/odds h2h,spreads,totals incl. Pinnacle via bookmakers=) and props quotes, idempotent, opening/closing snapshot script within 500 credits/month — route: delegated writer
+- [ ] T8 Live Postgres: docker compose up, `alembic upgrade head`, verify tables/views — route: inline (bounded action)
+- [ ] T9 Push branches and open stacked PRs with gh — route: inline (git/gh)
 
 ## Acceptance criteria
 - T2: `alembic upgrade head --sql` renders valid PostgreSQL DDL; downgrade drops everything it created; `pytest` passes; models create on SQLite.
@@ -60,4 +68,4 @@ Paper-trading metrics (ROI, CLV) are meaningless if quotes are fabricated or una
 - `props_engine.load_baselines_from_db` reads a SQLite file `nba_platform.db` while the app DB is PostgreSQL.
 
 ## Next step
-Feature tasks complete. Next: props.py follow-up after user commits their WIP; then odds_history ingestion. Push/PR are the user's decision (stacked-to-main: PR1 = 25024cd, PR2 = d6cbbd4).
+Run T5/T6 writer and T8 in parallel, then T7, then T9. User authorized commits, push and PRs (gh) on 2026-10-06.
