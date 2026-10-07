@@ -2,7 +2,7 @@
 Captures an opening or closing odds snapshot into odds_history (The Odds API free tier).
 
     python scripts/capture_odds_snapshot.py --phase opening [--dry-run]
-    python scripts/capture_odds_snapshot.py --phase closing [--props-events 3] [--window-minutes 45]
+    python scripts/capture_odds_snapshot.py --phase closing [--props-events 1] [--window-minutes 45]
 
 Credit budget (500/month) and the cost model are documented in app/services/odds_snapshot.py:
 opening = 3 credits/day, closing = 3 credits per tip-off cluster + 1 per prop market per event.

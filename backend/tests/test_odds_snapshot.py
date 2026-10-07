@@ -268,7 +268,7 @@ def no_network(monkeypatch):
     monkeypatch.setattr(httpx, "Client", forbidden)
 
 
-@pytest.mark.parametrize("phase,expected_cost", [("opening", 3), ("closing", 6)])
+@pytest.mark.parametrize("phase,expected_cost", [("opening", 3), ("closing", 4)])
 def test_cli_dry_run_prints_the_plan_and_never_touches_the_network(no_network, capsys, phase, expected_cost):
     cli = _load_cli()
 

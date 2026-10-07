@@ -13,9 +13,8 @@ assuming ~3 tip-off clusters per game day and ~28 game days per month:
     props    3 clusters x 1 event x 1 market        =  3   (--props-events 1 per closing run)
     --------------------------------------------------------
     ~15 credits/day x 28 game days                  ~ 420  (< 500, ~80 credits of margin)
-Fetching props for 3 events in EVERY closing run (the CLI default) costs 3 + 3 x (3 + 3) = 21/day
-(~590/month) and would exhaust the quota, so scheduled closing runs should pass `--props-events 1`
-(the scheduled-task registration script does) or the guard will stop captures late in the month.
+The closing default is 1 props event per run; raising it to 3 costs 3 + 3 x (3 + 3) = 21/day
+(~590/month) and would exhaust the quota before month end.
 The number of clusters is set by how often `--phase closing` is scheduled and by --window-minutes:
 a run only spends credits when an event tips off inside the window and has no snapshot captured
 within that window yet, so extra scheduled runs are free. `--min-remaining` is a hard stop.
@@ -39,7 +38,7 @@ from app.services.odds_ingestion import IngestResult, OddsIngestionService, pars
 logger = logging.getLogger(__name__)
 
 PHASES = ("opening", "closing")
-DEFAULT_PROPS_EVENTS = {"opening": 0, "closing": 3}
+DEFAULT_PROPS_EVENTS = {"opening": 0, "closing": 1}
 DEFAULT_PROPS_MARKETS = ("player_points",)
 DEFAULT_MIN_REMAINING = 25
 DEFAULT_WINDOW_MINUTES = 45
