@@ -38,10 +38,10 @@ Paper-trading metrics (ROI, CLV) are meaningless if quotes are fabricated or una
 - [x] T3 Fix OddsApiService: remove fabricated fallback, keep per-bookmaker attribution, no -110 default; de-vig + both sides in props_engine — route: delegated writer (2+ non-trivial files). Done: `OddsQuote` + `fetch_event_prop_quotes` keep every book's quote; `select_best_lines` picks a same-book two-sided pair at the modal line (best over price, tie by book key); `get_slate_props_map` returns {} when not live (`last_fetch_live`); `under_odds` Optional; `devig_two_way` + per-side EV; daily_runner skips players without a live line. Checks: `pytest -q` 85 passed (writer and parent spot check); rg for fabricated defaults in app/ and daily_runner.py: no matches.
 
 - [x] T4 Commit user WIP as work units on its own branch — route: inline (git). Commits 342be52 (ignore cache), 64e49da (props on demand), 9a80e2f (shutdown). Checks: backend `pytest -q` 61 passed, frontend `npx tsc --noEmit` exit 0.
-- [ ] T5 props.py: drop fabricated 22.5 fallback, odds label from `last_fetch_live`, expose side/under_odds/prob_under/bookmaker/devigged in API, Telegram text and props page; remove `PropBetLine.over_odds` -110 default — route: delegated writer
-- [ ] T6 Integer-line push handling in props_engine + missing tests (skipped quotes, exception path, daily_runner skip) — route: delegated writer (same writer as T5, separate commit)
-- [ ] T7 Odds ingestion into odds_history: game lines (/odds h2h,spreads,totals incl. Pinnacle via bookmakers=) and props quotes, idempotent, opening/closing snapshot script within 500 credits/month — route: delegated writer
-- [ ] T8 Live Postgres: docker compose up, `alembic upgrade head`, verify tables/views — route: inline (bounded action)
+- [x] T5 props.py: drop fabricated 22.5 fallback, odds label from `last_fetch_live`, expose side/under_odds/prob_under/bookmaker/devigged in API, Telegram text and props page; remove `PropBetLine.over_odds` -110 default — route: delegated writer. Commit f7b002e. Also fixed nonexistent `TelegramService.send_message` call and frontend recommendation/percent bugs. Checks: pytest 91 passed; tsc exit 0; eslint on touched files 0 errors.
+- [x] T6 Integer-line push handling in props_engine + missing tests (skipped quotes, exception path, daily_runner skip) — route: delegated writer (same writer as T5, separate commit). Commit 99694cd. EV = p_win*d - 1 + p_push; half-point lines unchanged (regression test). Checks: pytest 104 passed.
+- [x] T7 Odds ingestion into odds_history: game lines (/odds h2h,spreads,totals incl. Pinnacle via bookmakers=) and props quotes, idempotent, opening/closing snapshot script within 500 credits/month — route: delegated writer. Commits a4b2018 (ingestion + accent-insensitive name matching), fd839bf (CLI + Windows task registration script, not registered), bfd1457 (closing default 1 props event: ~420 credits/month), 8cd8834 (silence httpx URL logs that leaked apiKey into local logs; local logs redacted; untracked .codex-run-logs). Live run: opening snapshot 2026-10-06 → 46 games, 774 quotes (258 per market, 72 Pinnacle), quota 500→497. Checks: pytest 157 passed.
+- [x] T8 Live Postgres: docker compose up, `alembic upgrade head`, verify tables/views — route: inline (bounded action). Real DB is native PostgreSQL 18.4 (config.py loads .env with override=True, so a shell DATABASE_URL does not redirect; Docker compose db unused and stopped). Upgrade/downgrade/upgrade ran on the real DB (additive, data intact: 6602 players, 670272 game logs). Rolled-back transaction confirmed generated price_decimal, v_closing_odds picks latest pre-tip quote, CHECK rejects price 50, NULLS NOT DISTINCT dedupe.
 - [ ] T9 Push branches and open stacked PRs with gh — route: inline (git/gh)
 
 ## Acceptance criteria
@@ -58,14 +58,12 @@ Paper-trading metrics (ROI, CLV) are meaningless if quotes are fabricated or una
 - T3 commit d6cbbd4. RDD: high (process_boundary in daily_runner.py); user declined review; off-path independent verifier: no confirmed defects, 20 targeted tests passed.
 
 ## Follow-ups (out of scope)
-- Integer prop lines: P(under)=cdf(floor(line)) counts the push (X == line) as an under win, overstating under EV; half-point lines unaffected.
-- Tests missing for: skipped quotes with missing point/price, exception path keeping `last_fetch_live` False, daily_runner skip path.
-- props.py (user WIP): drop `PropBetLine(PTS, 22.5)` fallback (now the only fabricated path, it fires whenever the service has no live lines), use `last_fetch_live` for the odds label, and expose `side`, `under_odds`, `prob_under`, `bookmaker`, `devigged`; under rows will look inconsistent in the UI until then.
-- `PropBetLine.over_odds` still defaults to -110; remove once props.py passes prices.
-- Ingest `fetch_event_prop_quotes` into `odds_history`; schedule opening/closing snapshots within 500 credits/month; probe SportsGameOdds free tier as second feed.
-- Run `alembic upgrade head` against a live Postgres 15 once Docker is up.
+- Harden POST /api/v1/system/shutdown against cross-site requests (spawned as a separate task).
+- Register Windows scheduled tasks via scripts/register_odds_snapshot_tasks.ps1 (not run; needs user OK).
+- Second feed (SportsGameOdds free tier) not integrated.
+- Excel legacy cleanup proposed in the initial report, not executed.
 - `props.py` and `daily_runner.py` default to `PropBetLine(stat_type="PTS", line=22.5)` when no line exists — another fabricated line; fix after user commits props.py WIP.
 - `props_engine.load_baselines_from_db` reads a SQLite file `nba_platform.db` while the app DB is PostgreSQL.
 
 ## Next step
-Run T5/T6 writer and T8 in parallel, then T7, then T9. User authorized commits, push and PRs (gh) on 2026-10-06.
+T9: push and open stacked PRs. Then decide whether to register the scheduled snapshot tasks (persistent machine config, needs explicit user OK). User authorized commits, push and PRs (gh) on 2026-10-06.
