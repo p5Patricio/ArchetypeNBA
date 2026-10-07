@@ -80,6 +80,7 @@ class PropSimulationResult(BaseModel):
     fair_prob: Optional[float] = None  # no-vig probability of `side`; None when only one side was quoted
     devigged: bool = False  # True when both sides were quoted and the margin was removed
     bookmaker: Optional[str] = None
+    prob_push: float = 0.0  # P(stat == line) on integer lines (stake refunded); 0 on half-point lines
 
 
 class PropsEngine:
@@ -156,11 +157,15 @@ class PropsEngine:
         r_param = 1.0 / alpha
         p_param = 1.0 / (1.0 + alpha * projected_mean)
 
-        # Exact CDF calculation: P(X > line) = 1 - CDF(floor(line))
+        # Exact CDF calculation: P(X > line) = 1 - CDF(floor(line)).
+        # On an integer line, X == line is a push (stake refunded): it is neither an over nor an under win.
+        # Half-point lines cannot push, so p_push is 0 and the numbers are unchanged.
         k = int(np.floor(prop.line))
-        prob_under_exact = float(nbinom.cdf(k, r_param, p_param))
-        prob_over_exact = round(1.0 - prob_under_exact, 4)
-        prob_under_exact = round(prob_under_exact, 4)
+        cdf_k = float(nbinom.cdf(k, r_param, p_param))
+        p_push = float(nbinom.pmf(k, r_param, p_param)) if prop.line == k else 0.0
+        prob_over_exact = round(1.0 - cdf_k, 4)
+        prob_under_exact = round(cdf_k - p_push, 4)
+        prob_push = round(p_push, 4)
 
         # 4. Monte Carlo Simulation for robust empirical percentiles
         simulated_samples = nbinom.rvs(r_param, p_param, size=self.simulation_runs)
@@ -185,17 +190,27 @@ class PropsEngine:
             evaluated = {"over": (prob_over_exact, dec_over, decimal_to_implied_prob(dec_over))}
 
         def side_metrics(side: str) -> tuple[float, float]:
-            p_model, dec, book_prob = evaluated[side]
-            return round(p_model - book_prob, 4), round((p_model * dec) - 1.0, 4)
+            p_win, dec, book_prob = evaluated[side]
+            # Book prices (and their no-vig probabilities) describe a win conditional on no push, so the
+            # model's win probability is conditioned the same way before comparing. No-op when p_push == 0.
+            p_win_given_no_push = p_win / (1.0 - p_push) if p_push < 1.0 else p_win
+            # EV = p_win*(d-1) - p_lose, with p_lose = 1 - p_win - p_push (a push refunds the stake).
+            # Equivalent to p_win*d - 1 + p_push, which is the pre-push formula when p_push == 0.
+            ev_side = (p_win * dec) - 1.0 + p_push
+            return round(p_win_given_no_push - book_prob, 4), round(ev_side, 4)
 
         # Choose the side with the higher EV; ties go to the over (deterministic).
         side = max(evaluated, key=lambda sd: (side_metrics(sd)[1], sd == "over"))
         p_model, dec_side, book_prob = evaluated[side]
         edge, ev = side_metrics(side)
 
-        # Fractional Kelly Criterion (Quarter-Kelly for bankroll preservation), sized for the chosen side
+        # Fractional Kelly Criterion (Quarter-Kelly for bankroll preservation), sized for the chosen side.
+        # f* = (b*p_win - p_lose) / b with p_lose = 1 - p_win - p_push. Pushes are not renormalized away:
+        # the exact log-growth maximizer divides this by (1 - p_push), so skipping that is slightly more
+        # conservative, which suits quarter-Kelly. It equals the usual formula when p_push == 0.
         b = dec_side - 1.0
-        full_kelly = max(0.0, (p_model * b - (1.0 - p_model)) / b) if b > 0 else 0.0
+        p_lose = 1.0 - p_model - p_push
+        full_kelly = max(0.0, (b * p_model - p_lose) / b) if b > 0 else 0.0
         quarter_kelly = round(full_kelly * 0.25, 4)
 
         # Recommendation categorization (symmetric for both sides)
@@ -230,6 +245,7 @@ class PropsEngine:
             fair_prob=round(book_prob, 4) if devigged else None,
             devigged=devigged,
             bookmaker=prop.bookmaker,
+            prob_push=prob_push,
         )
 
     def get_standard_star_baselines(self) -> List[PlayerBaseline]:

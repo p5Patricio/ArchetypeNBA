@@ -1,4 +1,6 @@
 import pytest
+from scipy.stats import nbinom
+
 from app.analytics.props_engine import (
     PropsEngine,
     PlayerBaseline,
@@ -156,3 +158,108 @@ def test_one_sided_prop_is_not_devigged_and_never_recommends_under():
     assert "UNDER" not in result.recommendation
     # vigged implied probability of the over is used
     assert result.book_implied_prob == pytest.approx(decimal_to_implied_prob(american_to_decimal(-110)))
+
+
+def _star_distribution():
+    """(r, p) of the Negative Binomial the engine builds for _star() on PTS: mean 28.0, alpha 0.10."""
+    alpha = 0.10
+    return 1.0 / alpha, 1.0 / (1.0 + alpha * 28.0)
+
+
+def test_half_point_line_is_unchanged_by_push_handling():
+    engine = PropsEngine(simulation_runs=500)
+    r, p = _star_distribution()
+    dec = american_to_decimal(-110)
+    prop = PropBetLine(stat_type="PTS", line=24.5, over_odds=-110, under_odds=-110)
+
+    result = engine.evaluate_prop(player=_star(), prop=prop)
+
+    # The formulas as they were before push handling existed.
+    old_under = float(nbinom.cdf(24, r, p))
+    old_over = round(1.0 - old_under, 4)
+    old_under = round(old_under, 4)
+    fair = 0.5
+    old_ev = round(old_over * dec - 1.0, 4)
+    b = dec - 1.0
+    old_kelly = round(max(0.0, (old_over * b - (1.0 - old_over)) / b) * 0.25, 4)
+
+    assert result.prob_push == 0.0
+    assert result.prob_over == old_over
+    assert result.prob_under == old_under
+    assert result.side == "over"
+    assert result.expected_value_pct == round(old_ev * 100.0, 1)
+    assert result.edge_pct == round(round(old_over - fair, 4) * 100.0, 1)
+    assert result.kelly_stake_pct == round(old_kelly * 100.0, 1)
+
+
+def test_integer_line_probabilities_separate_the_push():
+    engine = PropsEngine(simulation_runs=500)
+    r, p = _star_distribution()
+    prop = PropBetLine(stat_type="PTS", line=28.0, over_odds=-110, under_odds=-110)
+
+    result = engine.evaluate_prop(player=_star(), prop=prop)
+
+    assert result.prob_push == round(float(nbinom.pmf(28, r, p)), 4)
+    assert result.prob_push > 0.0
+    # X == 28 is a refund: it is not an under win, and not an over win either.
+    assert result.prob_under == round(float(nbinom.cdf(27, r, p)), 4)
+    assert result.prob_over == round(1.0 - float(nbinom.cdf(28, r, p)), 4)
+    assert result.prob_over + result.prob_under + result.prob_push == pytest.approx(1.0, abs=2e-4)
+    assert result.prob_under < round(float(nbinom.cdf(28, r, p)), 4)
+
+
+def test_integer_line_under_ev_counts_the_push_as_a_refund():
+    engine = PropsEngine(simulation_runs=500)
+    r, p = _star_distribution()
+    dec = american_to_decimal(-110)
+    # mean 28 vs line 34: the model favors the under, so that is the evaluated side
+    prop = PropBetLine(stat_type="PTS", line=34.0, over_odds=-110, under_odds=-110)
+
+    result = engine.evaluate_prop(player=_star(), prop=prop)
+
+    p_win = float(nbinom.cdf(33, r, p))
+    p_push = float(nbinom.pmf(34, r, p))
+    p_lose = 1.0 - p_win - p_push
+    assert result.side == "under"
+    assert result.expected_value_pct == pytest.approx((p_win * (dec - 1.0) - p_lose) * 100.0, abs=0.1)
+    # Treating the push as an under win would have reported a higher EV.
+    naive_ev = (p_win + p_push) * dec - 1.0
+    assert result.expected_value_pct < naive_ev * 100.0 - 1.0
+    # Edge compares the win probability conditioned on no push with the no-vig price.
+    assert result.edge_pct == pytest.approx((p_win / (1.0 - p_push) - 0.5) * 100.0, abs=0.1)
+    # Kelly: f* = (b*p_win - p_lose) / b, quartered.
+    b = dec - 1.0
+    expected_kelly = max(0.0, (b * p_win - p_lose) / b) * 0.25
+    assert result.kelly_stake_pct == pytest.approx(expected_kelly * 100.0, abs=0.1)
+
+
+def test_integer_line_over_ev_counts_the_push_as_a_refund():
+    engine = PropsEngine(simulation_runs=500)
+    r, p = _star_distribution()
+    dec = american_to_decimal(-110)
+    prop = PropBetLine(stat_type="PTS", line=24.0, over_odds=-110, under_odds=-110)
+
+    result = engine.evaluate_prop(player=_star(), prop=prop)
+
+    p_win = float(nbinom.sf(24, r, p))
+    p_push = float(nbinom.pmf(24, r, p))
+    p_lose = 1.0 - p_win - p_push
+    assert result.side == "over"
+    assert result.expected_value_pct == pytest.approx((p_win * (dec - 1.0) - p_lose) * 100.0, abs=0.1)
+
+
+def test_one_sided_integer_line_still_uses_the_refund_ev():
+    engine = PropsEngine(simulation_runs=500)
+    r, p = _star_distribution()
+    dec = american_to_decimal(-110)
+    prop = PropBetLine(stat_type="PTS", line=26.0, over_odds=-110)
+
+    result = engine.evaluate_prop(player=_star(), prop=prop)
+
+    p_win = float(nbinom.sf(26, r, p))
+    p_push = float(nbinom.pmf(26, r, p))
+    assert result.devigged is False
+    assert result.side == "over"
+    assert result.expected_value_pct == pytest.approx(
+        (p_win * (dec - 1.0) - (1.0 - p_win - p_push)) * 100.0, abs=0.1
+    )
