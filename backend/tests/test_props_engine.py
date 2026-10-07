@@ -59,7 +59,7 @@ def test_props_engine_player_out():
         reb_per_min=0.20,
         ast_per_min=0.20,
     )
-    prop_line = PropBetLine(stat_type="PTS", line=30.5)
+    prop_line = PropBetLine(stat_type="PTS", line=30.5, over_odds=-110)
 
     # Teammate or player confirmed OUT -> minute_multiplier = 0.0
     result = engine.evaluate_prop(

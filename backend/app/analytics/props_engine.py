@@ -50,7 +50,7 @@ class PlayerBaseline:
 class PropBetLine(BaseModel):
     stat_type: str  # 'PTS', 'REB', 'AST', 'PRA'
     line: float
-    over_odds: int = -110
+    over_odds: int  # always an actual quoted price; no default is ever assumed
     under_odds: Optional[int] = None  # None = no under price was quoted; never assume one
     bookmaker: Optional[str] = None  # key of the book that offered this quote, when known
 

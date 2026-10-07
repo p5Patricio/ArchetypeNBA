@@ -56,7 +56,7 @@ def build_telegram_message(
     slate_summary: str,
     results: list[PropSimulationResult],
     gemini_active: bool,
-    odds_source: str = "The Odds API (Consenso Vegas)",
+    odds_source: str = "The Odds API",
 ) -> str:
     """Formats an executive summary report optimized for Telegram Markdown."""
     model_label = settings.GEMINI_MODEL.replace("models/", "").replace("-", " ").title()
