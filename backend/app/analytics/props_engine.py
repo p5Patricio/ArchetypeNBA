@@ -24,6 +24,17 @@ def decimal_to_implied_prob(decimal_odds: float) -> float:
     return round(1.0 / decimal_odds, 4)
 
 
+def devig_two_way(over_decimal: float, under_decimal: float) -> tuple[float, float]:
+    """
+    Removes the bookmaker margin from a two-way market (proportional / multiplicative method).
+    p_i = (1 / d_i) / sum(1 / d). Returns (fair_over_prob, fair_under_prob), which sum to 1.
+    """
+    inv_over = 1.0 / over_decimal
+    inv_under = 1.0 / under_decimal
+    total = inv_over + inv_under
+    return inv_over / total, inv_under / total
+
+
 @dataclass
 class PlayerBaseline:
     player_id: int
@@ -40,7 +51,8 @@ class PropBetLine(BaseModel):
     stat_type: str  # 'PTS', 'REB', 'AST', 'PRA'
     line: float
     over_odds: int = -110
-    under_odds: int = -110
+    under_odds: Optional[int] = None  # None = no under price was quoted; never assume one
+    bookmaker: Optional[str] = None  # key of the book that offered this quote, when known
 
 
 class PropSimulationResult(BaseModel):
@@ -55,13 +67,19 @@ class PropSimulationResult(BaseModel):
     projected_p90: float
     prob_over: float
     prob_under: float
-    book_implied_prob: float
-    edge_pct: float
-    expected_value_pct: float
-    kelly_stake_pct: float
+    book_implied_prob: float  # for the evaluated `side`: no-vig fair prob when devigged, else vigged implied
+    edge_pct: float  # model prob minus book_implied_prob for `side`
+    expected_value_pct: float  # EV of `side` at that side's actual price
+    kelly_stake_pct: float  # quarter Kelly for `side`
     recommendation: str  # 'STRONG OVER', 'LEAN OVER', 'PASS', 'LEAN UNDER', 'STRONG UNDER'
     risk_level: str
     reasoning: str
+    # Added fields (defaults keep existing consumers working)
+    side: str = "over"  # side the edge/EV/Kelly fields refer to: 'over' or 'under'
+    under_odds: Optional[int] = None
+    fair_prob: Optional[float] = None  # no-vig probability of `side`; None when only one side was quoted
+    devigged: bool = False  # True when both sides were quoted and the margin was removed
+    bookmaker: Optional[str] = None
 
 
 class PropsEngine:
@@ -126,6 +144,8 @@ class PropsEngine:
                 recommendation="PASS (INACTIVE / 0 MIN)",
                 risk_level="EXTREME",
                 reasoning=tactical_summary or "Player confirmed OUT or zero minutes projected.",
+                under_odds=prop.under_odds,
+                bookmaker=prop.bookmaker,
             )
 
         # 3. Parameterize Negative Binomial distribution
@@ -149,23 +169,40 @@ class PropsEngine:
         sim_p90 = float(np.percentile(simulated_samples, 90))
 
         # 5. Financial & Edge Analysis
-        dec_odds_over = american_to_decimal(prop.over_odds)
-        implied_over = decimal_to_implied_prob(dec_odds_over)
-        edge_over = round(prob_over_exact - implied_over, 4)
-        ev_over = round((prob_over_exact * dec_odds_over) - 1.0, 4)
+        dec_over = american_to_decimal(prop.over_odds)
+        devigged = prop.under_odds is not None
 
-        # Fractional Kelly Criterion (Quarter-Kelly for bankroll preservation)
-        b = dec_odds_over - 1.0
-        full_kelly = max(0.0, (prob_over_exact * b - (1.0 - prob_over_exact)) / b) if b > 0 else 0.0
+        if devigged:
+            dec_under = american_to_decimal(prop.under_odds)
+            fair_over, fair_under = devig_two_way(dec_over, dec_under)
+            # Edge is measured against the no-vig probability; EV uses each side's actual price.
+            evaluated = {
+                "over": (prob_over_exact, dec_over, fair_over),
+                "under": (prob_under_exact, dec_under, fair_under),
+            }
+        else:
+            # Only the over was quoted: compare against the vigged implied probability (conservative).
+            evaluated = {"over": (prob_over_exact, dec_over, decimal_to_implied_prob(dec_over))}
+
+        def side_metrics(side: str) -> tuple[float, float]:
+            p_model, dec, book_prob = evaluated[side]
+            return round(p_model - book_prob, 4), round((p_model * dec) - 1.0, 4)
+
+        # Choose the side with the higher EV; ties go to the over (deterministic).
+        side = max(evaluated, key=lambda sd: (side_metrics(sd)[1], sd == "over"))
+        p_model, dec_side, book_prob = evaluated[side]
+        edge, ev = side_metrics(side)
+
+        # Fractional Kelly Criterion (Quarter-Kelly for bankroll preservation), sized for the chosen side
+        b = dec_side - 1.0
+        full_kelly = max(0.0, (p_model * b - (1.0 - p_model)) / b) if b > 0 else 0.0
         quarter_kelly = round(full_kelly * 0.25, 4)
 
-        # Recommendation categorization
-        if edge_over >= 0.07 and ev_over > 0.08:
-            recommendation = "STRONG OVER"
-        elif edge_over >= 0.03 and ev_over > 0.03:
-            recommendation = "LEAN OVER"
-        elif edge_over <= -0.07:
-            recommendation = "LEAN UNDER"
+        # Recommendation categorization (symmetric for both sides)
+        if edge >= 0.07 and ev > 0.08:
+            recommendation = f"STRONG {side.upper()}"
+        elif edge >= 0.03 and ev > 0.03:
+            recommendation = f"LEAN {side.upper()}"
         else:
             recommendation = "PASS"
 
@@ -181,13 +218,18 @@ class PropsEngine:
             projected_p90=round(sim_p90, 1),
             prob_over=prob_over_exact,
             prob_under=prob_under_exact,
-            book_implied_prob=implied_over,
-            edge_pct=round(edge_over * 100.0, 1),
-            expected_value_pct=round(ev_over * 100.0, 1),
+            book_implied_prob=round(book_prob, 4),
+            edge_pct=round(edge * 100.0, 1),
+            expected_value_pct=round(ev * 100.0, 1),
             kelly_stake_pct=round(quarter_kelly * 100.0, 1),
             recommendation=recommendation,
             risk_level=risk_level,
             reasoning=tactical_summary,
+            side=side,
+            under_odds=prop.under_odds,
+            fair_prob=round(book_prob, 4) if devigged else None,
+            devigged=devigged,
+            bookmaker=prop.bookmaker,
         )
 
     def get_standard_star_baselines(self) -> List[PlayerBaseline]:

@@ -34,7 +34,7 @@ Paper-trading metrics (ROI, CLV) are meaningless if quotes are fabricated or una
 ## Tasks
 - [x] T1 Research free odds sources and scraping viability — route: delegated (broad external research). Result: The Odds API Starter as primary (historical is paid-only; Pinnacle only in `eu`, reachable via `bookmakers=` param); SportsGameOdds Amateur (free, 2,500 events/mo, props, 9 US books, no Pinnacle) as second feed; closing lines must be self-captured; no free historical props. Do not scrape ESPN (Disney ToU bans automated extraction) or OddsPortal (ToS + Cloudflare). Engram: research/free-nba-odds-sources.
 - [x] T2 SQLModel models + Alembic migration `9c3e5a7d1f42_add_quant_paper_trading` for quant tables and views — route: delegated writer (2+ non-trivial files). Checks: `pytest -q` 71 passed (writer), `tests/test_quant_models.py` 10 passed (parent spot check); `alembic upgrade 4125a71b06bf:head --sql` renders 4 CREATE TYPE, 2 NULLS NOT DISTINCT, 3 GENERATED, BRIN, 2 views; downgrade --sql drops views, tables, types. Live Postgres upgrade: pending (Docker not running). Added CHECK closing_price > 0 to avoid division by zero.
-- [ ] T3 Fix OddsApiService: remove fabricated fallback, keep per-bookmaker attribution, no -110 default; de-vig + both sides in props_engine — route: delegated writer (2+ non-trivial files)
+- [x] T3 Fix OddsApiService: remove fabricated fallback, keep per-bookmaker attribution, no -110 default; de-vig + both sides in props_engine — route: delegated writer (2+ non-trivial files). Done: `OddsQuote` + `fetch_event_prop_quotes` keep every book's quote; `select_best_lines` picks a same-book two-sided pair at the modal line (best over price, tie by book key); `get_slate_props_map` returns {} when not live (`last_fetch_live`); `under_odds` Optional; `devig_two_way` + per-side EV; daily_runner skips players without a live line. Checks: `pytest -q` 85 passed (writer and parent spot check); rg for fabricated defaults in app/ and daily_runner.py: no matches.
 
 ## Acceptance criteria
 - T2: `alembic upgrade head --sql` renders valid PostgreSQL DDL; downgrade drops everything it created; `pytest` passes; models create on SQLite.
@@ -45,11 +45,16 @@ Paper-trading metrics (ROI, CLV) are meaningless if quotes are fabricated or una
 - `cd backend && alembic upgrade head --sql` (offline; Docker/Postgres not running locally)
 
 ## Progress
-- Branch created. T1 and T2 done.
+- Branch created. T1, T2, T3 done.
+- T2 commit 25024cd. RDD: medium, slice_budget_reached; user declined review for this candidate.
 
 ## Follow-ups (out of scope)
+- props.py (user WIP): drop `PropBetLine(PTS, 22.5)` fallback (now the only fabricated path, it fires whenever the service has no live lines), use `last_fetch_live` for the odds label, and expose `side`, `under_odds`, `prob_under`, `bookmaker`, `devigged`; under rows will look inconsistent in the UI until then.
+- `PropBetLine.over_odds` still defaults to -110; remove once props.py passes prices.
+- Ingest `fetch_event_prop_quotes` into `odds_history`; schedule opening/closing snapshots within 500 credits/month; probe SportsGameOdds free tier as second feed.
+- Run `alembic upgrade head` against a live Postgres 15 once Docker is up.
 - `props.py` and `daily_runner.py` default to `PropBetLine(stat_type="PTS", line=22.5)` when no line exists — another fabricated line; fix after user commits props.py WIP.
 - `props_engine.load_baselines_from_db` reads a SQLite file `nba_platform.db` while the app DB is PostgreSQL.
 
 ## Next step
-Commit T2, assess RDD, then run T3.
+Commit T3 and assess RDD. Then props.py follow-up after user commits their WIP.

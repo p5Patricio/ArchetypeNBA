@@ -34,7 +34,6 @@ from app.services.telegram_service import TelegramService
 from app.services.odds_api_service import OddsApiService
 from app.analytics.props_engine import (
     PropsEngine,
-    PropBetLine,
     PropSimulationResult,
     PlayerBaseline,
 )
@@ -78,15 +77,17 @@ def build_telegram_message(
         value_picks = sorted(results, key=lambda x: x.edge_pct, reverse=True)[:3]
 
     for p in value_picks[:4]:
+        side_odds = p.under_odds if p.side == "under" and p.under_odds is not None else p.over_odds
+        side_prob = p.prob_under if p.side == "under" else p.prob_over
         recommendation_emoji = "🟢" if "STRONG" in p.recommendation else "🟡"
         edge_fmt = f"+{p.edge_pct:.1f}%" if p.edge_pct > 0 else f"{p.edge_pct:.1f}%"
         ev_fmt = f"+{p.expected_value_pct:.1f}%" if p.expected_value_pct > 0 else f"{p.expected_value_pct:.1f}%"
         picks_sec += (
             f"{recommendation_emoji} *{p.player_name}* ({p.team})\n"
-            f"   • *Prop:* {p.stat_type} Línea: *{p.sportsbook_line}* (Cuota: {p.over_odds:+d})\n"
+            f"   • *Prop:* {p.stat_type} Línea: *{p.sportsbook_line}* (Cuota {p.side.capitalize()}: {side_odds:+d})\n"
             f"   • *Dictamen:* {p.recommendation} | *Edge:* `{edge_fmt}` | *EV:* `{ev_fmt}`\n"
             f"   • *Proyección:* Media: *{p.projected_mean}* | Rango P10-P90: [{p.projected_p10} - {p.projected_p90}]\n"
-            f"   • *Prob. Over:* `{p.prob_over * 100:.1f}%` (Libro: `{p.book_implied_prob * 100:.1f}%`)\n"
+            f"   • *Prob. {p.side.capitalize()}:* `{side_prob * 100:.1f}%` (Libro: `{p.book_implied_prob * 100:.1f}%`)\n"
         )
         if p.reasoning:
             picks_sec += f"   • *Contexto IA:* _{p.reasoning}_\n"
@@ -155,8 +156,10 @@ def run_pipeline(dry_run: bool = False) -> bool:
             player_props.get("PTS")
             or player_props.get("PRA")
             or player_props.get("REB")
-            or PropBetLine(stat_type="PTS", line=22.5)
         )
+        if prop_line is None:
+            logger.info(f"No live line for {player.name}; skipping.")
+            continue
         mod = modifier_map.get(player.name.lower())
 
         min_mult = mod.minute_multiplier if mod else 1.0
@@ -175,7 +178,7 @@ def run_pipeline(dry_run: bool = False) -> bool:
         results.append(res)
 
     # 5. Generate formatted report
-    odds_label = "The Odds API (En Vivo)" if odds_service.is_configured else "The Odds API (Consenso)"
+    odds_label = "The Odds API (En Vivo)" if odds_service.last_fetch_live else "The Odds API (Sin líneas en vivo)"
     report_text = build_telegram_message(
         date_str=today_str,
         slate_summary=analysis.slate_summary,
