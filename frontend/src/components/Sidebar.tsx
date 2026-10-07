@@ -20,14 +20,16 @@ import {
   History,
   Target,
   TrendingUp,
+  Power,
 } from "lucide-react";
 
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
+  onOpenShutdown?: () => void;
 }
 
-export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
+export function Sidebar({ isOpen = false, onClose, onOpenShutdown }: SidebarProps) {
   const pathname = usePathname();
   const { t, language } = usePreferences();
 
@@ -236,8 +238,8 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
         </div>
 
-        {/* Sidebar Footer: System Status */}
-        <div className="border-t border-slate-100 p-4 space-y-2 bg-slate-50/40">
+        {/* Sidebar Footer: System Status & Shutdown Action */}
+        <div className="border-t border-slate-100 p-4 space-y-3 bg-slate-50/40">
           <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -248,6 +250,21 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           <p className="text-[10px] text-slate-400 leading-none">
             {language === "es" ? "2003-04 a 2025-26 • 11.7k Registros" : "2003-04 to 2025-26 • 11.7k Records"}
           </p>
+
+          {/* Stop Platform Services Trigger */}
+          {onOpenShutdown && (
+            <button
+              type="button"
+              onClick={() => {
+                if (onClose) onClose();
+                onOpenShutdown();
+              }}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50/70 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition-all cursor-pointer shadow-2xs group"
+            >
+              <Power className="h-3.5 w-3.5 text-rose-600 transition-transform group-hover:scale-110" />
+              <span>{language === "es" ? "Detener Servicios" : "Stop Services"}</span>
+            </button>
+          )}
         </div>
 
       </aside>

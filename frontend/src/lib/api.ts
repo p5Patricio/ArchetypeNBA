@@ -1235,3 +1235,22 @@ export async function getTodayProps(params?: {
   return getJson<TodayPropsResponse>(`${API_BASE}/props/today${qs}`);
 }
 
+export async function runPropsAnalysis(params?: {
+  send_telegram?: boolean;
+}): Promise<TodayPropsResponse> {
+  const query = new URLSearchParams();
+  if (params?.send_telegram) query.set("send_telegram", "true");
+  const qs = query.toString() ? `?${query.toString()}` : "";
+  return postJson<TodayPropsResponse>(`${API_BASE}/props/run-analysis${qs}`, {});
+}
+
+export interface ShutdownResponse {
+  status: string;
+  message: string;
+}
+
+export async function shutdownServices(): Promise<ShutdownResponse> {
+  return postJson<ShutdownResponse>(`${API_BASE}/system/shutdown`, {});
+}
+
+

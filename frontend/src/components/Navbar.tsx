@@ -2,9 +2,10 @@
 
 import React, { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Search, Menu, Globe, Ruler } from "lucide-react";
+import { Search, Menu, Globe, Ruler, Power } from "lucide-react";
 import { SeasonSelect } from "./SeasonSelect";
 import { Sidebar } from "./Sidebar";
+import { ShutdownModal } from "./ShutdownModal";
 import { usePreferences } from "@/context/PreferencesContext";
 
 interface NavbarProps {
@@ -16,6 +17,7 @@ interface NavbarProps {
 export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: NavbarProps) {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isShutdownOpen, setIsShutdownOpen] = useState(false);
   const { language, setLanguage, unitSystem, setUnitSystem, t, seasonId: globalSeasonId, setSeason: setGlobalSeason } = usePreferences();
 
   const effectiveSeasonId = currentSeasonId !== undefined ? currentSeasonId : globalSeasonId;
@@ -46,6 +48,13 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
       <Sidebar
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
+        onOpenShutdown={() => setIsShutdownOpen(true)}
+      />
+
+      {/* Shutdown Modal Confirmation */}
+      <ShutdownModal
+        isOpen={isShutdownOpen}
+        onClose={() => setIsShutdownOpen(false)}
       />
 
       {/* Top Header Navigation (Offset on desktop for sidebar) */}
@@ -148,6 +157,23 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
                 ft/lbs
               </button>
             </div>
+
+            {/* Platform Shutdown Button */}
+            <button
+              type="button"
+              onClick={() => setIsShutdownOpen(true)}
+              title={
+                language === "es"
+                  ? "Detener servicios de la plataforma (liberar puertos 38920/38921)"
+                  : "Stop platform services (release ports 38920/38921)"
+              }
+              className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50/70 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:border-rose-300 hover:bg-rose-100 shadow-2xs transition-all cursor-pointer group"
+            >
+              <Power className="h-3.5 w-3.5 text-rose-600 transition-transform group-hover:scale-110" />
+              <span className="hidden xl:inline text-[11px]">
+                {language === "es" ? "Detener Servicios" : "Stop"}
+              </span>
+            </button>
 
           </div>
 
