@@ -89,7 +89,11 @@ export default function PropsPage() {
       const res = await runPropsAnalysis({ send_telegram: sendTelegram });
       setData(res);
       setToastMessage(
-        language === "es"
+        res.total_props === 0
+          ? language === "es"
+            ? "Análisis completado, pero no hay líneas en vivo publicadas: no se generaron props."
+            : "Analysis complete, but no live lines are posted: no props were generated."
+          : language === "es"
           ? `¡Análisis completado! Se generaron ${res.total_props} props (${res.value_picks_count} picks con +EV).${sendTelegram ? " Reporte despachado a Telegram." : ""}`
           : `Analysis complete! Generated ${res.total_props} props (${res.value_picks_count} value picks).${sendTelegram ? " Dispatched to Telegram." : ""}`
       );
@@ -120,17 +124,11 @@ export default function PropsPage() {
       .filter((item) => {
         // Category filter
         if (selectedCategory !== "ALL") {
-          const st = item.stat_type.toLowerCase();
-          if (selectedCategory === "POINTS" && !st.includes("point")) return false;
-          if (selectedCategory === "REBOUNDS" && !st.includes("rebound")) return false;
-          if (selectedCategory === "ASSISTS" && !st.includes("assist")) return false;
-          if (
-            selectedCategory === "PRA" &&
-            !st.includes("points_rebounds_assists") &&
-            !st.includes("pra")
-          ) {
-            return false;
-          }
+          const st = item.stat_type.toUpperCase();
+          if (selectedCategory === "POINTS" && st !== "PTS") return false;
+          if (selectedCategory === "REBOUNDS" && st !== "REB") return false;
+          if (selectedCategory === "ASSISTS" && st !== "AST") return false;
+          if (selectedCategory === "PRA" && st !== "PRA") return false;
         }
 
         // Value picks only
@@ -174,32 +172,34 @@ export default function PropsPage() {
   };
 
   const getStatTypeBadge = (statType: string) => {
-    const st = statType.toLowerCase();
-    if (st.includes("point") && !st.includes("rebound")) {
+    const st = statType.toUpperCase();
+    if (st === "PTS") {
       return { label: "Puntos", color: "bg-orange-50 border-orange-200 text-orange-700" };
     }
-    if (st.includes("rebound") && !st.includes("point")) {
+    if (st === "REB") {
       return { label: "Rebotes", color: "bg-blue-50 border-blue-200 text-blue-700" };
     }
-    if (st.includes("assist") && !st.includes("point")) {
+    if (st === "AST") {
       return { label: "Asistencias", color: "bg-emerald-50 border-emerald-200 text-emerald-700" };
     }
     return { label: "PTS+REB+AST", color: "bg-purple-50 border-purple-200 text-purple-700" };
   };
 
+  // Recommendations arrive as "STRONG OVER", "LEAN UNDER" or "PASS ...".
   const getRecommendationStyle = (rec: string) => {
     const r = rec.toUpperCase();
-    if (r === "OVER") {
+    const strength = r.startsWith("STRONG") ? "FUERTE" : "LEVE";
+    if (r.includes("OVER")) {
       return {
         bg: "bg-emerald-50 border border-emerald-200 text-emerald-800",
-        text: "OVER (ALTA)",
+        text: `OVER (${strength})`,
         icon: ArrowUpRight,
       };
     }
-    if (r === "UNDER") {
+    if (r.includes("UNDER")) {
       return {
         bg: "bg-rose-50 border border-rose-200 text-rose-800",
-        text: "UNDER (BAJA)",
+        text: `UNDER (${strength})`,
         icon: ArrowDownRight,
       };
     }
@@ -214,6 +214,25 @@ export default function PropsPage() {
     if (odds > 0) return `+${odds}`;
     return `${odds}`;
   };
+
+  // Everything the card shows about price and probability refers to the side the model chose.
+  const getSideView = (prop: PropItem) => {
+    const isUnder = prop.side === "under";
+    const price = isUnder && prop.under_odds != null ? prop.under_odds : prop.over_odds;
+    // Slates cached before prob_under existed only carry prob_over.
+    const modelProb = isUnder ? prop.prob_under ?? 1 - prop.prob_over : prop.prob_over;
+    return {
+      label: isUnder ? "Under" : "Over",
+      price,
+      modelPct: modelProb * 100,
+      bookPct: prop.book_implied_prob * 100,
+      devigged: prop.devigged === true,
+    };
+  };
+
+  // The backend marks a slate without real quotes with this source label; items are empty in that case.
+  const hasNoLiveLines =
+    !!data && data.total_props === 0 && data.odds_source.toLowerCase().includes("sin líneas en vivo");
 
   const isEs = language === "es";
 
@@ -539,6 +558,7 @@ export default function PropsPage() {
                 const rec = getRecommendationStyle(prop.recommendation);
                 const RecIcon = rec.icon;
                 const hasPositiveEV = prop.expected_value_pct > 0;
+                const sideView = getSideView(prop);
 
                 return (
                   <div
@@ -599,20 +619,45 @@ export default function PropsPage() {
                               {isEs ? "Línea Casa de Apuestas" : "Sportsbook Line"}
                             </span>
                             <div className="text-sm font-black text-slate-900 flex items-baseline gap-1.5">
-                              <span>Over {prop.line}</span>
+                              <span>
+                                {sideView.label} {prop.line}
+                              </span>
                               <span className="text-xs font-mono font-bold text-orange-600">
-                                ({formatOdds(prop.over_odds)})
+                                ({formatOdds(sideView.price)})
                               </span>
                             </div>
+                            {prop.bookmaker && (
+                              <div className="text-[10px] font-semibold text-slate-500 mt-0.5">
+                                {isEs ? "Casa:" : "Book:"} {prop.bookmaker}
+                              </div>
+                            )}
                           </div>
 
                           <div className="text-right">
                             <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                              {isEs ? "Prob. Implícita Casa" : "Book Implied"}
+                              {sideView.devigged
+                                ? isEs
+                                  ? "Prob. Justa (sin vig)"
+                                  : "Fair Prob (no vig)"
+                                : isEs
+                                ? "Prob. Implícita Casa"
+                                : "Book Implied"}
                             </span>
                             <div className="text-sm font-mono font-black text-slate-700">
-                              {prop.book_implied_prob.toFixed(1)}%
+                              {sideView.bookPct.toFixed(1)}%
                             </div>
+                            {!sideView.devigged && (
+                              <span
+                                title={
+                                  isEs
+                                    ? "Solo hay precio del Over: la referencia incluye el margen (vig) de la casa."
+                                    : "Only the over was quoted: the reference includes the bookmaker margin (vig)."
+                                }
+                                className="inline-block mt-0.5 px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[9px] font-bold text-amber-700 cursor-help"
+                              >
+                                {isEs ? "con vig" : "vigged"}
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -636,10 +681,10 @@ export default function PropsPage() {
                           </div>
                           <div>
                             <span className="text-[10px] font-bold text-slate-400 uppercase">
-                              {isEs ? "Prob. Modelo" : "Model Prob"}
+                              {isEs ? `Prob. Modelo (${sideView.label})` : `Model Prob (${sideView.label})`}
                             </span>
                             <div className="text-xs font-mono font-black text-emerald-700">
-                              {prop.prob_over.toFixed(1)}%
+                              {sideView.modelPct.toFixed(1)}%
                             </div>
                           </div>
                         </div>
@@ -647,26 +692,28 @@ export default function PropsPage() {
                         {/* Probability Bar */}
                         <div className="space-y-1 pt-1">
                           <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                            <span>Vegas: {prop.book_implied_prob.toFixed(1)}%</span>
+                            <span>
+                              {prop.bookmaker ? prop.bookmaker : "Vegas"}: {sideView.bookPct.toFixed(1)}%
+                            </span>
                             <span className="text-emerald-700 font-extrabold">
-                              Modelo: {prop.prob_over.toFixed(1)}%
+                              Modelo: {sideView.modelPct.toFixed(1)}%
                             </span>
                           </div>
                           <div className="relative w-full h-2 rounded-full bg-slate-200 overflow-hidden">
                             <div
                               className="absolute top-0 bottom-0 left-0 bg-slate-400"
                               style={{
-                                width: `${Math.min(100, Math.max(0, prop.book_implied_prob))}%`,
+                                width: `${Math.min(100, Math.max(0, sideView.bookPct))}%`,
                               }}
                             />
                             <div
                               className={`absolute top-0 bottom-0 left-0 transition-all ${
-                                prop.prob_over >= prop.book_implied_prob
+                                sideView.modelPct >= sideView.bookPct
                                   ? "bg-emerald-500"
                                   : "bg-rose-500"
                               }`}
                               style={{
-                                width: `${Math.min(100, Math.max(0, prop.prob_over))}%`,
+                                width: `${Math.min(100, Math.max(0, sideView.modelPct))}%`,
                                 opacity: 0.85,
                               }}
                             />
@@ -719,7 +766,7 @@ export default function PropsPage() {
                         </span>
                         <span className="font-mono font-black text-slate-900">
                           {prop.kelly_stake_pct > 0
-                            ? `${(prop.kelly_stake_pct * 100).toFixed(1)}% bankroll`
+                            ? `${prop.kelly_stake_pct.toFixed(1)}% bankroll`
                             : "0.0% (No bet)"}
                         </span>
                       </div>
@@ -764,8 +811,35 @@ export default function PropsPage() {
             </div>
           )}
 
+          {/* No Live Lines Empty State (no sportsbook has posted player props) */}
+          {!loading && !error && hasNoLiveLines && !analyzing && (
+            <div className="rounded-3xl border border-slate-200 bg-white p-8 sm:p-12 text-center max-w-2xl mx-auto space-y-4 shadow-xs">
+              <div className="h-14 w-14 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mx-auto">
+                <AlertCircle className="h-7 w-7" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-black text-slate-900">
+                  {isEs ? "Sin líneas en vivo" : "No live lines"}
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-lg mx-auto">
+                  {isEs
+                    ? "Ninguna casa de apuestas publicó props de jugadores para este slate (o la API no está configurada). No se muestran picks porque no hay precios reales contra los cuales evaluar."
+                    : "No sportsbook has posted player props for this slate (or the API key is not configured). No picks are shown because there are no real prices to evaluate against."}
+                </p>
+              </div>
+              <button
+                onClick={handleRunAnalysis}
+                disabled={analyzing}
+                className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 shadow-2xs hover:border-orange-300 hover:bg-orange-50/40 transition-all inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className="h-3.5 w-3.5 text-slate-500" />
+                <span>{isEs ? "Reintentar análisis" : "Retry analysis"}</span>
+              </button>
+            </div>
+          )}
+
           {/* Quota-Saving On-Demand Empty State */}
-          {!loading && !error && data && data.total_props === 0 && !analyzing && (
+          {!loading && !error && data && data.total_props === 0 && !hasNoLiveLines && !analyzing && (
             <div className="rounded-3xl border-2 border-dashed border-orange-200 bg-gradient-to-b from-orange-50/40 via-white to-white p-8 sm:p-12 text-center max-w-2xl mx-auto space-y-6 shadow-xs">
               <div className="h-16 w-16 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center mx-auto shadow-inner">
                 <Zap className="h-8 w-8 text-orange-600" />
