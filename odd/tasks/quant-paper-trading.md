@@ -47,8 +47,11 @@ Paper-trading metrics (ROI, CLV) are meaningless if quotes are fabricated or una
 ## Progress
 - Branch created. T1, T2, T3 done.
 - T2 commit 25024cd. RDD: medium, slice_budget_reached; user declined review for this candidate.
+- T3 commit d6cbbd4. RDD: high (process_boundary in daily_runner.py); user declined review; off-path independent verifier: no confirmed defects, 20 targeted tests passed.
 
 ## Follow-ups (out of scope)
+- Integer prop lines: P(under)=cdf(floor(line)) counts the push (X == line) as an under win, overstating under EV; half-point lines unaffected.
+- Tests missing for: skipped quotes with missing point/price, exception path keeping `last_fetch_live` False, daily_runner skip path.
 - props.py (user WIP): drop `PropBetLine(PTS, 22.5)` fallback (now the only fabricated path, it fires whenever the service has no live lines), use `last_fetch_live` for the odds label, and expose `side`, `under_odds`, `prob_under`, `bookmaker`, `devigged`; under rows will look inconsistent in the UI until then.
 - `PropBetLine.over_odds` still defaults to -110; remove once props.py passes prices.
 - Ingest `fetch_event_prop_quotes` into `odds_history`; schedule opening/closing snapshots within 500 credits/month; probe SportsGameOdds free tier as second feed.
@@ -57,4 +60,4 @@ Paper-trading metrics (ROI, CLV) are meaningless if quotes are fabricated or una
 - `props_engine.load_baselines_from_db` reads a SQLite file `nba_platform.db` while the app DB is PostgreSQL.
 
 ## Next step
-Commit T3 and assess RDD. Then props.py follow-up after user commits their WIP.
+Feature tasks complete. Next: props.py follow-up after user commits their WIP; then odds_history ingestion. Push/PR are the user's decision (stacked-to-main: PR1 = 25024cd, PR2 = d6cbbd4).
