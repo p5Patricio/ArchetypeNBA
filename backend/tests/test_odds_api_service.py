@@ -251,3 +251,155 @@ def test_failed_refetch_resets_last_fetch_live(monkeypatch):
     state["fail"] = True
     assert service.get_slate_props_map() == {}
     assert service.last_fetch_live is False
+
+# --- game lines (/odds: h2h, spreads, totals) ---------------------------------
+
+GAME_EVENT = {
+    "id": "game1",
+    "commence_time": "2026-10-21T00:00:00Z",
+    "home_team": "Boston Celtics",
+    "away_team": "LA Clippers",
+    "bookmakers": [
+        {
+            "key": "pinnacle",
+            "title": "Pinnacle",
+            "last_update": "2026-10-20T20:00:00Z",
+            "markets": [
+                {"key": "h2h", "last_update": "2026-10-20T20:01:00Z", "outcomes": [
+                    {"name": "Boston Celtics", "price": -150},
+                    {"name": "LA Clippers", "price": 130},
+                ]},
+                {"key": "spreads", "outcomes": [
+                    {"name": "Boston Celtics", "price": -105, "point": -3.5},
+                    {"name": "LA Clippers", "price": -115, "point": 3.5},
+                ]},
+                {"key": "totals", "outcomes": [
+                    {"name": "Over", "price": -110, "point": 221.5},
+                    {"name": "Under", "price": -110, "point": 221.5},
+                ]},
+            ],
+        },
+        {
+            "key": "draftkings",
+            "title": "DraftKings",
+            "last_update": "2026-10-20T20:02:00Z",
+            "markets": [
+                {"key": "h2h", "outcomes": [
+                    {"name": "Boston Celtics", "price": -145},
+                    {"name": "Mystery Team", "price": 120},  # unknown team name -> skipped
+                    {"name": "LA Clippers"},  # no price -> skipped
+                ]},
+                {"key": "spreads", "outcomes": [
+                    {"name": "Boston Celtics", "price": -110},  # no point -> skipped
+                ]},
+                {"key": "totals", "outcomes": [
+                    {"name": "Push", "price": -110, "point": 221.5},  # not over/under -> skipped
+                    {"name": "Over", "price": "n/a", "point": 221.5},  # unparsable price -> skipped
+                    {"name": "Under", "price": -108, "point": 221.5},
+                ]},
+                {"key": "player_points", "outcomes": [{"name": "Over", "price": -110, "point": 20.5}]},
+            ],
+        },
+        {"title": "No key", "markets": []},
+    ],
+}
+
+
+@pytest.fixture
+def game_lines_http(monkeypatch):
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(
+            200,
+            json=[GAME_EVENT, {"id": "broken", "home_team": "Boston Celtics"}],
+            headers={"x-requests-remaining": "497", "x-requests-used": "3"},
+        )
+
+    monkeypatch.setattr(
+        odds_api_service.httpx,
+        "Client",
+        lambda *a, **k: REAL_CLIENT(transport=httpx.MockTransport(handler), timeout=k.get("timeout")),
+    )
+    return calls
+
+
+def test_game_lines_are_parsed_per_bookmaker_with_sides_and_lines(game_lines_http):
+    quotes = OddsApiService(api_key="real-key").fetch_game_lines(["pinnacle", "draftkings"])
+
+    pinnacle = [q for q in quotes if q.bookmaker_key == "pinnacle"]
+    assert len(pinnacle) == 6
+    ml_away = next(q for q in pinnacle if q.market_key == "h2h" and q.side == "away")
+    assert (ml_away.price_american, ml_away.line) == (130, None)
+    assert ml_away.home_team == "Boston Celtics" and ml_away.away_team == "LA Clippers"
+    assert ml_away.book_last_update == "2026-10-20T20:01:00Z"  # market-level update wins
+
+    spread_home = next(q for q in pinnacle if q.market_key == "spreads" and q.side == "home")
+    assert (spread_home.line, spread_home.price_american) == (-3.5, -105)
+    assert spread_home.book_last_update == "2026-10-20T20:00:00Z"  # falls back to the bookmaker's
+
+    total_over = next(q for q in pinnacle if q.market_key == "totals" and q.side == "over")
+    assert total_over.line == 221.5
+    assert pinnacle[0].bookmaker_title == "Pinnacle"
+
+
+def test_game_lines_skip_malformed_outcomes_and_events(game_lines_http):
+    quotes = OddsApiService(api_key="real-key").fetch_game_lines(["pinnacle", "draftkings"])
+
+    dk = [q for q in quotes if q.bookmaker_key == "draftkings"]
+    # kept: Boston h2h, Under -108. Dropped: unknown team, missing price/point, Push, bad price,
+    # prop market and the book without a key. The incomplete event ("broken") yields nothing.
+    assert {(q.market_key, q.side, q.price_american) for q in dk} == {
+        ("h2h", "home", -145),
+        ("totals", "under", -108),
+    }
+    assert {q.event_id for q in quotes} == {"game1"}
+
+
+def test_game_lines_request_uses_bookmakers_param_and_tracks_quota(game_lines_http):
+    service = OddsApiService(api_key="real-key")
+    service.fetch_game_lines(["pinnacle", "fanduel"])
+
+    params = game_lines_http[0].url.params
+    assert game_lines_http[0].url.path.endswith("/basketball_nba/odds")
+    assert params["bookmakers"] == "pinnacle,fanduel"
+    assert params["markets"] == "h2h,spreads,totals"
+    assert "regions" not in params
+    assert service.requests_remaining == 497
+
+
+def test_game_lines_default_bookmakers_include_pinnacle_and_cap_at_ten(game_lines_http):
+    service = OddsApiService(api_key="real-key")
+    service.fetch_game_lines()
+    assert game_lines_http[0].url.params["bookmakers"].split(",")[0] == "pinnacle"
+
+    service.fetch_game_lines([f"book{i}" for i in range(14)])
+    assert len(game_lines_http[1].url.params["bookmakers"].split(",")) == 10
+
+
+def test_game_lines_unconfigured_non_200_and_exception_return_empty(monkeypatch):
+    assert OddsApiService(api_key="").fetch_game_lines() == []
+
+    monkeypatch.setattr(
+        odds_api_service.httpx,
+        "Client",
+        lambda *a, **k: REAL_CLIENT(
+            transport=httpx.MockTransport(lambda request: httpx.Response(401, text="bad key"))
+        ),
+    )
+    assert OddsApiService(api_key="real-key").fetch_game_lines() == []
+
+    def boom(request):
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(
+        odds_api_service.httpx, "Client", lambda *a, **k: REAL_CLIENT(transport=httpx.MockTransport(boom))
+    )
+    assert OddsApiService(api_key="real-key").fetch_game_lines() == []
+
+
+def test_prop_quotes_request_only_the_requested_markets(mock_http):
+    OddsApiService(api_key="real-key").fetch_event_prop_quotes("evt1", markets=["player_points"])
+
+    assert mock_http[0].url.params["markets"] == "player_points"
