@@ -42,7 +42,7 @@ Paper-trading metrics (ROI, CLV) are meaningless if quotes are fabricated or una
 - [x] T6 Integer-line push handling in props_engine + missing tests (skipped quotes, exception path, daily_runner skip) — route: delegated writer (same writer as T5, separate commit). Commit 99694cd. EV = p_win*d - 1 + p_push; half-point lines unchanged (regression test). Checks: pytest 104 passed.
 - [x] T7 Odds ingestion into odds_history: game lines (/odds h2h,spreads,totals incl. Pinnacle via bookmakers=) and props quotes, idempotent, opening/closing snapshot script within 500 credits/month — route: delegated writer. Commits a4b2018 (ingestion + accent-insensitive name matching), fd839bf (CLI + Windows task registration script, not registered), bfd1457 (closing default 1 props event: ~420 credits/month), 8cd8834 (silence httpx URL logs that leaked apiKey into local logs; local logs redacted; untracked .codex-run-logs). Live run: opening snapshot 2026-10-06 → 46 games, 774 quotes (258 per market, 72 Pinnacle), quota 500→497. Checks: pytest 157 passed.
 - [x] T8 Live Postgres: docker compose up, `alembic upgrade head`, verify tables/views — route: inline (bounded action). Real DB is native PostgreSQL 18.4 (config.py loads .env with override=True, so a shell DATABASE_URL does not redirect; Docker compose db unused and stopped). Upgrade/downgrade/upgrade ran on the real DB (additive, data intact: 6602 players, 670272 game logs). Rolled-back transaction confirmed generated price_decimal, v_closing_odds picks latest pre-tip quote, CHECK rejects price 50, NULLS NOT DISTINCT dedupe.
-- [ ] T9 Push branches and open stacked PRs with gh — route: inline (git/gh)
+- [x] T9 Push branches and open stacked PRs with gh — route: inline (git/gh). PRs p5Patricio/ArchetypeNBA#1 (main) → #2 → #3 → #4 → #5 → #6, each diff verified to contain only its slice; all over 400 lines marked size:exception (cohesive units, 0–470 test lines each). RDD: user declined review for every slice and for the whole branch. No CI configured in the repo.
 
 ## Acceptance criteria
 - T2: `alembic upgrade head --sql` renders valid PostgreSQL DDL; downgrade drops everything it created; `pytest` passes; models create on SQLite.
@@ -58,6 +58,8 @@ Paper-trading metrics (ROI, CLV) are meaningless if quotes are fabricated or una
 - T3 commit d6cbbd4. RDD: high (process_boundary in daily_runner.py); user declined review; off-path independent verifier: no confirmed defects, 20 targeted tests passed.
 
 ## Follow-ups (out of scope)
+- Closing snapshot marker is captured_at-based: a closing run with no book updates inserts 0 rows and the next run may re-spend 3 credits; a manual opening run within 45 min of tip-off suppresses that game's closing snapshot. Fix with a snapshot-run log table.
+- props.py serves the on-disk slate cache without a date check.
 - Harden POST /api/v1/system/shutdown against cross-site requests (spawned as a separate task).
 - Register Windows scheduled tasks via scripts/register_odds_snapshot_tasks.ps1 (not run; needs user OK).
 - Second feed (SportsGameOdds free tier) not integrated.
@@ -66,4 +68,4 @@ Paper-trading metrics (ROI, CLV) are meaningless if quotes are fabricated or una
 - `props_engine.load_baselines_from_db` reads a SQLite file `nba_platform.db` while the app DB is PostgreSQL.
 
 ## Next step
-T9: push and open stacked PRs. Then decide whether to register the scheduled snapshot tasks (persistent machine config, needs explicit user OK). User authorized commits, push and PRs (gh) on 2026-10-06.
+Merge PRs #1→#6 in order (user decision), retargeting each child to main after its parent merges. Decide whether to register the scheduled snapshot tasks (persistent machine config, needs explicit user OK). User authorized commits, push and PRs (gh) on 2026-10-06.
