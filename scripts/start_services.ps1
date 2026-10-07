@@ -2,11 +2,12 @@
 # Script de Despliegue y Orquestacion Automatica: NBA Analytics Platform
 # Puertos Aislados: Frontend (38920) | Backend API (38921)
 # 100% Silencioso: Sin ventanas de terminal (ShowWindow = 0)
+# Ahorro de Cuota: El analisis de jugadores se ejecuta a demanda desde el Frontend
 # ==============================================================================
 
 param (
     [switch]$NoBrowser,
-    [switch]$NoRunner
+    [switch]$RunPipeline
 )
 
 $ErrorActionPreference = "Continue"
@@ -40,40 +41,38 @@ Write-Host "Logs:          $LogsDir" -ForegroundColor White
 # 1. Iniciar Backend en segundo plano sin ventana
 $backendConn = Get-NetTCPConnection -LocalPort $BackendPort -State Listen -ErrorAction SilentlyContinue
 if (-not $backendConn) {
-    Write-Host "[1/5] Iniciando Backend en puerto $BackendPort (silencioso)..." -ForegroundColor Yellow
+    Write-Host "[1/4] Iniciando Backend en puerto $BackendPort (silencioso)..." -ForegroundColor Yellow
     $backendBat = Join-Path $ScriptsDir "run_backend.bat"
     $bCmd = 'cmd.exe /c "{0}"' -f $backendBat
     $proc.Create($bCmd, $BackendDir, $cfg) | Out-Null
 } else {
-    Write-Host "[1/5] Backend ya esta activo en puerto $BackendPort." -ForegroundColor Green
+    Write-Host "[1/4] Backend ya esta activo en puerto $BackendPort." -ForegroundColor Green
 }
 
 # 2. Iniciar Frontend en segundo plano sin ventana
 $frontendConn = Get-NetTCPConnection -LocalPort $FrontendPort -State Listen -ErrorAction SilentlyContinue
 if (-not $frontendConn) {
-    Write-Host "[2/5] Iniciando Frontend en puerto $FrontendPort (silencioso)..." -ForegroundColor Yellow
+    Write-Host "[2/4] Iniciando Frontend en puerto $FrontendPort (silencioso)..." -ForegroundColor Yellow
     $frontendBat = Join-Path $ScriptsDir "run_frontend.bat"
     $fCmd = 'cmd.exe /c "{0}"' -f $frontendBat
     $proc.Create($fCmd, $FrontendDir, $cfg) | Out-Null
 } else {
-    Write-Host "[2/5] Frontend ya esta activo en puerto $FrontendPort." -ForegroundColor Green
+    Write-Host "[2/4] Frontend ya esta activo en puerto $FrontendPort." -ForegroundColor Green
 }
 
-# 3. Lanzar pipeline diario de props e IA en segundo plano (silencioso)
-if (-not $NoRunner) {
+# Opcional: Solo si se solicita explicitamente por flag -RunPipeline
+if ($RunPipeline) {
     $pipelineBat = Join-Path $ScriptsDir "run_pipeline.bat"
     if (Test-Path $pipelineBat) {
-        Write-Host "[3/5] Ejecutando pipeline diario en segundo plano..." -ForegroundColor Yellow
+        Write-Host "[OPCIONAL] Ejecutando pipeline diario en segundo plano..." -ForegroundColor Yellow
         $pCmd = 'cmd.exe /c "{0}"' -f $pipelineBat
         $proc.Create($pCmd, $BackendDir, $cfg) | Out-Null
     }
-} else {
-    Write-Host "[3/5] Pipeline diario omitido por flag -NoRunner." -ForegroundColor Gray
 }
 
-# 4. Sincronizacion: Esperar a que el Backend y la Base de Datos esten 100% listos
+# 3. Sincronizacion: Esperar a que el Backend y la Base de Datos esten 100% listos
 $BackendHealthUrl = "http://127.0.0.1:$BackendPort/api/v1/health"
-Write-Host "[4/5] Esperando a que el Backend y la BD respondan ($BackendHealthUrl)..." -ForegroundColor Yellow
+Write-Host "[3/4] Esperando a que el Backend y la BD respondan ($BackendHealthUrl)..." -ForegroundColor Yellow
 
 $backendReady = $false
 $attempts = 0
@@ -98,12 +97,12 @@ if ($backendReady) {
     Write-Host "[WARN] El Backend tardo en responder el health check." -ForegroundColor Yellow
 }
 
-# 5. Sincronizacion: Esperar a que el Frontend este listo y abrir el navegador
+# 4. Sincronizacion: Esperar a que el Frontend este listo y abrir el navegador
 $TargetUrl = "http://127.0.0.1:$FrontendPort/props"
 $BrowserUrl = "http://localhost:$FrontendPort/props"
 
 if (-not $NoBrowser) {
-    Write-Host "[5/5] Esperando a que el Frontend responda ($TargetUrl)..." -ForegroundColor Yellow
+    Write-Host "[4/4] Esperando a que el Frontend responda ($TargetUrl)..." -ForegroundColor Yellow
     $frontendReady = $false
     $attempts = 0
 
@@ -128,7 +127,7 @@ if (-not $NoBrowser) {
         Start-Process $BrowserUrl
     }
 } else {
-    Write-Host "[5/5] Apertura de navegador omitida por flag -NoBrowser." -ForegroundColor Gray
+    Write-Host "[4/4] Apertura de navegador omitida por flag -NoBrowser." -ForegroundColor Gray
 }
 
 Write-Host "==========================================================" -ForegroundColor Green
