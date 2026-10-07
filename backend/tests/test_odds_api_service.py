@@ -403,3 +403,9 @@ def test_prop_quotes_request_only_the_requested_markets(mock_http):
     OddsApiService(api_key="real-key").fetch_event_prop_quotes("evt1", markets=["player_points"])
 
     assert mock_http[0].url.params["markets"] == "player_points"
+
+
+def test_httpx_request_logs_are_silenced_to_keep_api_key_out_of_logs():
+    import logging
+
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING

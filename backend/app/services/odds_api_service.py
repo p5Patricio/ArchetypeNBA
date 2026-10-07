@@ -9,6 +9,10 @@ from app.analytics.props_engine import PropBetLine, american_to_decimal
 
 logger = logging.getLogger(__name__)
 
+# The Odds API authenticates via the apiKey query param; httpx INFO logs print full URLs,
+# so keep them quiet to avoid writing the key into log files.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 MARKET_TO_STAT = {
     "player_points": "PTS",
     "player_rebounds": "REB",
