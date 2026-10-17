@@ -15,7 +15,10 @@ import math
 from typing import Tuple
 
 K = 20.0
-HOME_ADVANTAGE = 100.0
+# FiveThirtyEight used 100. Walk-forward residuals on the last five completed seasons show the modern
+# home edge is smaller (bias of 1.2-1.9 points at 100, ~0 at 60), so 60 is used. Tuned in-sample on
+# 2021-22..2025-26: treat the reported Brier as slightly optimistic.
+HOME_ADVANTAGE = 60.0
 INITIAL_RATING = 1500.0
 MEAN_RATING = 1505.0
 CARRYOVER = 0.75

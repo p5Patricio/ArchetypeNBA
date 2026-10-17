@@ -6,12 +6,14 @@ from app.analytics import elo
 
 
 def test_equal_ratings_give_home_court_edge():
-    assert elo.expected_home_win_prob(1500, 1500) == pytest.approx(1 / (1 + 10 ** (-100 / 400)))
-    assert elo.expected_home_win_prob(1500, 1500) == pytest.approx(0.640, abs=1e-3)
+    assert elo.expected_home_win_prob(1500, 1500) == pytest.approx(1 / (1 + 10 ** (-elo.HOME_ADVANTAGE / 400)))
+    assert elo.expected_home_win_prob(1500, 1500) == pytest.approx(0.585, abs=1e-3)
+    # the original FiveThirtyEight constant is still reachable explicitly
+    assert elo.expected_home_win_prob(1500, 1500, home_advantage=100) == pytest.approx(0.640, abs=1e-3)
 
 
 def test_home_win_prob_is_even_when_rating_gap_cancels_home_advantage():
-    assert elo.expected_home_win_prob(1400, 1500) == pytest.approx(0.5)
+    assert elo.expected_home_win_prob(1500 - elo.HOME_ADVANTAGE, 1500) == pytest.approx(0.5)
 
 
 def test_update_is_zero_sum_and_returns_pre_game_probability():
@@ -58,8 +60,8 @@ def test_season_carryover_pulls_toward_league_mean():
 
 
 def test_expected_margin_converts_elo_gap_to_points():
-    assert elo.expected_margin(1500, 1500) == pytest.approx(100 / 28)
-    assert elo.expected_margin(1400, 1500) == pytest.approx(0.0)
+    assert elo.expected_margin(1500, 1500) == pytest.approx(elo.HOME_ADVANTAGE / 28)
+    assert elo.expected_margin(1500 - elo.HOME_ADVANTAGE, 1500) == pytest.approx(0.0)
 
 
 @pytest.mark.parametrize("mu", [-7.5, 0.0, 3.2, 11.0])

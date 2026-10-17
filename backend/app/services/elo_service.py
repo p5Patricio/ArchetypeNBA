@@ -32,7 +32,7 @@ from app.analytics import elo
 from app.models import ModelVersion, PlayerGameLog, Season, Team, TeamEloRating
 
 MODEL_NAME = "elo_538"
-MODEL_VERSION = "1.0"
+MODEL_VERSION = "1.1"  # 1.1: home advantage 60 (538 original: 100)
 DEFAULT_SIGMA = 12.0
 OOS_SEASONS = 5
 
@@ -222,7 +222,7 @@ def out_of_sample_summary(metrics: Sequence[SeasonMetrics], last_n: int = OOS_SE
     return math.sqrt(sum_sq / total), sum(m.brier for m in window) / len(window)
 
 
-class EloService:
+class EloRatingService:
     def __init__(self, session: Session, sigma: Optional[float] = None):
         self.session = session
         self.sigma = sigma
@@ -492,7 +492,7 @@ class EloService:
         trained_through: Optional[date] = None,
         seasons_evaluated: Optional[Sequence[str]] = None,
     ) -> ModelVersion:
-        """Upsert the elo_538 / 1.0 model_version row. Idempotent."""
+        """Upsert the elo_538 / 1.1 model_version row. Idempotent."""
         params = {
             "K": elo.K,
             "home_advantage": elo.HOME_ADVANTAGE,

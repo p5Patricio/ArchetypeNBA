@@ -8,7 +8,7 @@ from app.analytics import elo
 from app.models import ModelVersion, Player, PlayerGameLog, Season, Team, TeamEloRating
 from app.services.elo_service import (
     DEFAULT_SIGMA,
-    EloService,
+    EloRatingService,
     out_of_sample_summary,
     replay_games,
 )
@@ -109,7 +109,7 @@ def populate_three_seasons(world):
 
 def test_load_games_reconstructs_scores_and_home_away(world):
     add_game(world, "0020300001", date(2003, 11, 1), "2003-04", "ATL", "BOS", 101, 98)
-    games = EloService(world["session"]).load_games()
+    games = EloRatingService(world["session"]).load_games()
     assert len(games) == 1
     game = games[0]
     assert game.home_team_id == world["teams"]["ATL"]
@@ -122,7 +122,7 @@ def test_load_games_reconstructs_scores_and_home_away(world):
 def test_load_games_is_chronological_and_filters_by_since(world):
     add_game(world, "0020300009", date(2003, 12, 5), "2003-04", "BOS", "ATL", 100, 90)
     add_game(world, "0020300001", date(2003, 11, 1), "2003-04", "ATL", "BOS", 101, 98)
-    service = EloService(world["session"])
+    service = EloRatingService(world["session"])
     assert [g.game_id for g in service.load_games()] == ["0020300001", "0020300009"]
     assert [g.game_id for g in service.load_games(since=date(2003, 12, 1))] == ["0020300009"]
 
@@ -130,13 +130,13 @@ def test_load_games_is_chronological_and_filters_by_since(world):
 def test_preseason_and_all_star_are_excluded_but_other_types_counted(world):
     for i, game_type in enumerate("123456"):
         add_game(world, f"00{game_type}0300{i:03d}"[:10], date(2003, 11, 1 + i), "2003-04", "ATL", "BOS", 100, 90)
-    ids = [g.game_id for g in EloService(world["session"]).load_games()]
+    ids = [g.game_id for g in EloRatingService(world["session"]).load_games()]
     assert sorted(i[2] for i in ids) == ["2", "4", "5", "6"]
 
 
 def test_games_with_non_nba_team_are_skipped_and_reported(world):
     add_game(world, "0020300001", date(2003, 11, 1), "2003-04", "ATL", "EST", 100, 90)
-    service = EloService(world["session"])
+    service = EloRatingService(world["session"])
     assert service.load_games() == []
     assert service.last_load_report.unmapped_abbreviations["EST"] == 1
 
@@ -157,7 +157,7 @@ def test_game_with_one_team_or_ambiguous_home_away_is_skipped(world):
     session.commit()
     # neutral-site style game: both rows say '@'
     add_game(world, "0020300002", date(2003, 11, 2), "2003-04", "ATL", "BOS", 100, 90, home_marker="@")
-    service = EloService(session)
+    service = EloRatingService(session)
     assert service.load_games() == []
     assert service.last_load_report.skipped_not_two_teams == 1
     assert service.last_load_report.skipped_home_away == 1
@@ -169,7 +169,7 @@ def test_franchise_mapping_keeps_a_single_rating_line(world):
     add_game(world, "0020500001", date(2005, 11, 1), "2005-06", "BKN", "ATL", 100, 90)
     add_game(world, "0020300002", date(2003, 11, 2), "2003-04", "NOH", "ATL", 100, 90)
     add_game(world, "0020500002", date(2005, 11, 2), "2005-06", "NOP", "ATL", 100, 90)
-    service = EloService(world["session"])
+    service = EloRatingService(world["session"])
     games = service.load_games()
     assert {g.home_team_id for g in games} == {teams["BKN"], teams["NOP"]}
 
@@ -183,7 +183,7 @@ def test_franchise_mapping_keeps_a_single_rating_line(world):
 
 def test_rebuild_persists_two_rows_per_game_with_consistent_fields(world):
     add_game(world, "0020300001", date(2003, 11, 1), "2003-04", "ATL", "BOS", 110, 100)
-    summary = EloService(world["session"]).rebuild_all()
+    summary = EloRatingService(world["session"]).rebuild_all()
     rows = all_rows(world["session"])
     assert summary.games_used == 1
     assert summary.rows_written == len(rows) == 2
@@ -202,7 +202,7 @@ def test_rebuild_persists_two_rows_per_game_with_consistent_fields(world):
 def test_season_carryover_is_applied_on_first_game_of_new_season(world):
     add_game(world, "0020300001", date(2004, 4, 1), "2003-04", "ATL", "BOS", 110, 100)
     add_game(world, "0020400001", date(2004, 11, 1), "2004-05", "ATL", "BOS", 100, 99)
-    EloService(world["session"]).rebuild_all()
+    EloRatingService(world["session"]).rebuild_all()
     atl = [r for r in all_rows(world["session"]) if r.team_id == world["teams"]["ATL"]]
     assert atl[1].rating_before == pytest.approx(elo.season_carryover(atl[0].rating_after))
     assert atl[1].rating_before != pytest.approx(atl[0].rating_after)
@@ -210,7 +210,7 @@ def test_season_carryover_is_applied_on_first_game_of_new_season(world):
 
 def test_rebuild_is_idempotent(world):
     populate_three_seasons(world)
-    service = EloService(world["session"])
+    service = EloRatingService(world["session"])
     service.rebuild_all()
     first = snapshot(world["session"])
     service.rebuild_all()
@@ -221,7 +221,7 @@ def test_rebuild_is_idempotent(world):
 
 def test_dry_run_writes_nothing(world):
     populate_three_seasons(world)
-    summary = EloService(world["session"]).rebuild_all(dry_run=True)
+    summary = EloRatingService(world["session"]).rebuild_all(dry_run=True)
     assert summary.rows_written == 24 and summary.dry_run
     assert all_rows(world["session"]) == []
 
@@ -232,7 +232,7 @@ def test_rebuild_removes_rows_a_replay_no_longer_produces(world):
         TeamEloRating(team_id=world["teams"]["NJN"], season_id=world["seasons"]["2003-04"], game_id="0020300001")
     )
     world["session"].commit()
-    summary = EloService(world["session"]).rebuild_all()
+    summary = EloRatingService(world["session"]).rebuild_all()
     assert summary.rows_deleted == 1
     assert world["teams"]["NJN"] not in {r.team_id for r in all_rows(world["session"])}
 
@@ -255,7 +255,7 @@ def test_update_new_games_equals_full_rebuild(world):
         session.delete(row)
     session.commit()
 
-    service = EloService(session)
+    service = EloRatingService(session)
     service.rebuild_all()
     assert len(all_rows(session)) == 14
 
@@ -275,7 +275,7 @@ def test_update_new_games_equals_full_rebuild(world):
 
 def test_update_with_nothing_new_changes_nothing(world):
     populate_three_seasons(world)
-    service = EloService(world["session"])
+    service = EloRatingService(world["session"])
     service.rebuild_all()
     before = snapshot(world["session"])
     summary = service.update_new_games()
@@ -286,7 +286,7 @@ def test_update_with_nothing_new_changes_nothing(world):
 def test_update_falls_back_to_rebuild_when_a_game_arrives_out_of_order(world):
     add_game(world, "0020300001", date(2003, 11, 1), "2003-04", "ATL", "BOS", 100, 90)
     add_game(world, "0020300003", date(2003, 11, 5), "2003-04", "BOS", "ATL", 105, 100)
-    service = EloService(world["session"])
+    service = EloRatingService(world["session"])
     service.rebuild_all()
     add_game(world, "0020300002", date(2003, 11, 3), "2003-04", "ATL", "BOS", 99, 98)
 
@@ -302,7 +302,7 @@ def test_update_falls_back_to_rebuild_when_a_game_arrives_out_of_order(world):
 
 def test_current_ratings_apply_carryover_only_for_a_new_season(world):
     add_game(world, "0020300001", date(2004, 4, 1), "2003-04", "ATL", "BOS", 110, 100)
-    service = EloService(world["session"])
+    service = EloRatingService(world["session"])
     service.rebuild_all()
     atl_id = world["teams"]["ATL"]
     raw = service.current_ratings()[atl_id]
@@ -316,20 +316,20 @@ def test_current_ratings_apply_carryover_only_for_a_new_season(world):
 
 def test_predict_uses_ratings_and_registered_sigma(world):
     teams = world["teams"]
-    service = EloService(world["session"])
+    service = EloRatingService(world["session"])
     prediction = service.predict(teams["ATL"], teams["BOS"], ratings={teams["ATL"]: 1600.0, teams["BOS"]: 1500.0})
     assert prediction.p_home == pytest.approx(elo.expected_home_win_prob(1600, 1500))
     assert prediction.expected_margin == pytest.approx(elo.expected_margin(1600, 1500))
     assert prediction.sigma == DEFAULT_SIGMA
 
     service.register_model_version(sigma=13.5, brier_oos=0.21)
-    assert EloService(world["session"]).predict(teams["ATL"], teams["BOS"], ratings={}).sigma == 13.5
-    assert EloService(world["session"], sigma=9.0).predict(teams["ATL"], teams["BOS"], ratings={}).sigma == 9.0
+    assert EloRatingService(world["session"]).predict(teams["ATL"], teams["BOS"], ratings={}).sigma == 13.5
+    assert EloRatingService(world["session"], sigma=9.0).predict(teams["ATL"], teams["BOS"], ratings={}).sigma == 9.0
 
 
 def test_evaluate_walk_forward_returns_one_metrics_row_per_season(world):
     populate_three_seasons(world)
-    metrics = EloService(world["session"]).evaluate_walk_forward()
+    metrics = EloRatingService(world["session"]).evaluate_walk_forward()
     assert [m.season_label for m in metrics] == ["2003-04", "2004-05", "2005-06"]
     assert [m.n_games for m in metrics] == [4, 4, 4]
     for m in metrics:
@@ -338,13 +338,13 @@ def test_evaluate_walk_forward_returns_one_metrics_row_per_season(world):
         assert 0.0 <= m.accuracy <= 1.0
         assert m.mae_margin >= 0.0 and m.residual_std >= 0.0
 
-    only = EloService(world["session"]).evaluate_walk_forward(seasons=["2004-05"])
+    only = EloRatingService(world["session"]).evaluate_walk_forward(seasons=["2004-05"])
     assert [m.season_label for m in only] == ["2004-05"]
 
 
 def test_walk_forward_first_game_uses_initial_ratings(world):
     add_game(world, "0020300001", date(2003, 11, 1), "2003-04", "ATL", "BOS", 110, 100)
-    (metrics,) = EloService(world["session"]).evaluate_walk_forward()
+    (metrics,) = EloRatingService(world["session"]).evaluate_walk_forward()
     p = elo.expected_home_win_prob(1500, 1500)
     assert metrics.brier == pytest.approx((p - 1.0) ** 2)
     assert metrics.accuracy == 1.0
@@ -353,7 +353,7 @@ def test_walk_forward_first_game_uses_initial_ratings(world):
 
 def test_out_of_sample_summary_uses_last_completed_seasons(world):
     populate_three_seasons(world)
-    metrics = EloService(world["session"]).evaluate_walk_forward()
+    metrics = EloRatingService(world["session"]).evaluate_walk_forward()
     sigma, brier = out_of_sample_summary(metrics, last_n=2)
     assert brier == pytest.approx((metrics[1].brier + metrics[2].brier) / 2)
     assert sigma > 0
@@ -363,7 +363,7 @@ def test_out_of_sample_summary_uses_last_completed_seasons(world):
 
 def test_register_model_version_is_idempotent(world):
     session = world["session"]
-    service = EloService(session)
+    service = EloRatingService(session)
     service.register_model_version(
         sigma=12.34567, brier_oos=0.2105678, trained_through=date(2026, 4, 12), seasons_evaluated=["2024-25", "2025-26"]
     )
@@ -372,18 +372,18 @@ def test_register_model_version_is_idempotent(world):
     rows = session.exec(select(ModelVersion)).all()
     assert len(rows) == 1
     row = rows[0]
-    assert (row.name, row.version) == ("elo_538", "1.0")
+    assert (row.name, row.version) == ("elo_538", "1.1")
     assert float(row.brier_oos) == pytest.approx(0.2201)
     assert row.params["sigma"] == 13.0
     assert row.params["trained_through"] == "2026-04-13"
-    for key, value in (("K", 20.0), ("home_advantage", 100.0), ("carryover", 0.75), ("mean_rating", 1505.0),
+    for key, value in (("K", 20.0), ("home_advantage", 60.0), ("carryover", 0.75), ("mean_rating", 1505.0),
                        ("elo_per_point", 28.0)):
         assert row.params[key] == value
 
 
 def test_replay_games_is_pure_and_continues_from_state(world):
     populate_three_seasons(world)
-    games = EloService(world["session"]).load_games()
+    games = EloRatingService(world["session"]).load_games()
     full, full_state = replay_games(games)
     head, head_state = replay_games(games[:5])
     tail, tail_state = replay_games(games[5:], head_state)

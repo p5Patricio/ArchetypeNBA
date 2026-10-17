@@ -20,7 +20,7 @@ sys.path.insert(0, str(backend_dir))
 
 from app.services.elo_service import (  # noqa: E402
     BackfillSummary,
-    EloService,
+    EloRatingService,
     OOS_SEASONS,
     SeasonMetrics,
     out_of_sample_summary,
@@ -52,7 +52,7 @@ def format_metrics(metrics: List[SeasonMetrics]) -> str:
     return "\n".join(lines)
 
 
-def format_summary(summary: BackfillSummary, service: EloService, mode: str) -> str:
+def format_summary(summary: BackfillSummary, service: EloRatingService, mode: str) -> str:
     verb = "would write" if summary.dry_run else "wrote"
     lines = [
         f"[{mode}] games used: {summary.games_used}; rating rows {verb}: {summary.rows_written}; "
@@ -85,7 +85,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     from app.deps import get_db_context  # imported late so --help never builds a DB engine
 
     with get_db_context() as session:
-        service = EloService(session)
+        service = EloRatingService(session)
         # --evaluate/--register alone should not rewrite ratings, but a plain run is the default rebuild.
         if args.update:
             summary = service.update_new_games(dry_run=args.dry_run)

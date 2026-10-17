@@ -45,7 +45,7 @@ Game lines are the cheapest data under the free quota (3 credits per slate call)
 - RDD: on (default); assess each work-unit commit.
 
 ## Tasks
-- [ ] E1 Elo engine, backfill, evaluation, model_version — route: delegated writer (PR A, branch feat/elo-baseline-model)
+- [x] E1 Elo engine, backfill, evaluation, model_version — route: delegated writer (PR A, branch feat/elo-baseline-model). Commits 090cf39 (engine), 0a017cd (service + CLI) plus parent follow-up: HOME_ADVANTAGE 100→60 (walk-forward bias of 1.2-1.9 points on 2021-22..2025-26 at 100, ~0 at 60; tuned in-sample), model_version elo_538 v1.1, class renamed `EloRatingService` (legacy `app.services.elo.EloService` untouched). Real backfill run: 29,641 games, 59,282 rating rows, 30 teams, 0 upcoming games without ratings. Walk-forward last 5 completed seasons: Brier 0.2167, sigma 14.14 (use the registered sigma, not 12). 12 neutral-site games (NBA Cup/international, both rows '@') skipped. Checks: pytest 229 passed.
 - [ ] E2 Prediction recorder + betting policy + unique (prediction_id, strategy) — route: delegated writer (PR B)
 - [ ] E3 Auto tick + logon task replacing NBA-Odds-Opening/Closing — route: delegated writer (PR C)
 - [ ] E4 Results sync, incremental Elo, settlement, CLV — route: delegated writer (PR D)
@@ -71,5 +71,10 @@ Game lines are the cheapest data under the free quota (3 credits per slate call)
 - SportsGameOdds second feed.
 - Excel legacy cleanup.
 
+## Notes for E2/E4
+- `EloRatingService.current_ratings(for_season_id=...)` applies the 25% regression once when a team's latest game is in an earlier season; `game.season_id` is wrong for 2026-27 (no season row), so the recorder must create/resolve the 2026-27 season and pass it explicitly. Opening-night ratings must include the carryover.
+- Sigma comes from the registered model_version (14.14).
+- Season ids are not chronological (2023-24 is id 1): order by season_label.
+
 ## Next step
-Run E1.
+Push and merge PR A, then E2 from updated main.
