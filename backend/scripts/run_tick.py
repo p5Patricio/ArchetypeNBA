@@ -1,8 +1,9 @@
 """
-Runs one tick: odds capture (opening once per local day, closing near tip-off) plus prediction recording.
+Runs one tick: odds capture (opening once per local day, closing near tip-off), results sync with bet
+settlement and CLV, and prediction recording.
 
     python scripts/run_tick.py [--dry-run] [--window-minutes 30] [--props-events 1] [--min-remaining 25]
-                               [--skip opening closing record]
+                               [--skip opening closing results record]
 
 Scheduled by `NBA-Odds-Tick` (scripts/register_tick_task.ps1): it starts at user log on and repeats every
 15 minutes. Each run is stateless and decides from DB markers (see app/services/tick.py), so repeated or
@@ -29,6 +30,7 @@ from sqlmodel import Session
 
 from app.services.odds_api_service import OddsApiService
 from app.services.odds_snapshot import DEFAULT_MIN_REMAINING
+from app.services.results_sync import NbaApiResultsProvider
 from app.services.tick import (
     DEFAULT_STEPS,
     DEFAULT_TICK_PROPS_EVENTS,
@@ -45,7 +47,7 @@ _installed_handlers: List[logging.Handler] = []
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run one capture + prediction-recording tick.")
+    parser = argparse.ArgumentParser(description="Run one capture + results/settlement + prediction-recording tick.")
     parser.add_argument("--dry-run", action="store_true", help="print what each step would do; no network, no DB writes")
     parser.add_argument(
         "--window-minutes",
@@ -134,6 +136,7 @@ def main(
                 props_events=args.props_events,
                 min_remaining=args.min_remaining,
                 steps=default_steps(skip=args.skip),
+                results_provider=None if args.dry_run else NbaApiResultsProvider(),
             )
     except Exception:
         log.exception("tick aborted before any step could run (database unavailable?)")

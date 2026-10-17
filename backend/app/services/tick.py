@@ -1,5 +1,5 @@
 """
-One stateless "tick": odds capture plus prediction recording, meant to run every 15 minutes.
+One stateless "tick": odds capture, results and settlement, prediction recording, meant to run every 15 minutes.
 
 The PC is switched on at variable hours, so fixed-time tasks miss captures. A single Windows task starts at
 log on and repeats every 15 minutes while the user is logged on (``scripts/register_tick_task.ps1``); every
@@ -10,16 +10,22 @@ Steps run in order, each isolated (one failing step never prevents the others):
                 an ``opening`` marker already exists for the day or no event is upcoming (the /events call is free).
 2. ``closing``  the existing closing logic with a window of ``window_minutes`` (30 = twice the tick interval, so
                 a tip-off cannot slip between two ticks) and ``props_events`` player-prop events.
-3. ``record``   ``PredictionRecorder``: DB only, so it also runs when the capture steps failed or were skipped.
-Steps live in an ordered registry of ``(name, callable)`` pairs, so a later step (results sync, settlement) is
-added by appending to ``DEFAULT_STEPS`` without touching the runner.
+3. ``results``  final scores from nba_api for games that tipped off more than 3 h ago (network only when such a
+                game exists), the incremental Elo update, settlement of the paper bets of final games and the
+                closing-line value of the bets whose game has tipped off. Its three stages are isolated from each
+                other: a nba_api outage does not stop settlement of games that are already final.
+4. ``record``   ``PredictionRecorder``: DB only, so it also runs when the capture or results steps failed or were
+                skipped. It comes after ``results`` so predictions use ratings that include the latest games.
+Steps live in an ordered registry of ``(name, callable)`` pairs, so a new step is added by appending to
+``DEFAULT_STEPS`` without touching the runner.
 
 Safety
 - ``logs/tick.lock`` (pid + start time) stops overlapping ticks; a lock older than 20 minutes is stale and is
   replaced (the task itself is limited to 10 minutes); the lock is always released in ``finally``.
 - The Odds API credit guard (``min_remaining``) applies to both capture steps.
 - ``missed_closing`` counts games that tipped off in the last 12 hours without a ``closing`` marker, i.e. the
-  closing lines lost while the PC was off. Those lines cannot be backfilled on a free plan.
+  closing lines lost while the PC was off (final games included: a game that already finished still lost its
+  line). Those lines cannot be backfilled on a free plan.
 
 Exit code: 0 when no step failed, 1 otherwise. A step that is deliberately held back (credit guard, nothing to
 do, already captured today) is ``skipped``, not an error; a raised exception or a failed paid API call is an error.
@@ -46,6 +52,8 @@ from app.services.odds_snapshot import (
     run_snapshot,
 )
 from app.services.prediction_recorder import PredictionRecorder
+from app.services.results_sync import NbaApiResultsProvider, sync_results
+from app.services.settlement import fill_clv, settle_bets
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +211,7 @@ def opening_captured_today(session: Session, now: datetime, local_tz: Optional[t
 def count_missed_closing(
     session: Session, now: datetime, lookback_hours: float = MISSED_CLOSING_LOOKBACK_HOURS
 ) -> int:
-    """Games that tipped off in the last ``lookback_hours`` hours, are not final and have no closing marker."""
+    """Games that tipped off in the last ``lookback_hours`` hours and have no closing marker (postponed excluded)."""
     now = _aware_utc(now)
     start = now - timedelta(hours=lookback_hours)
     has_closing = exists().where(
@@ -212,7 +220,7 @@ def count_missed_closing(
     rows = session.exec(
         select(Game.commence_time)
         .where(Game.commence_time >= start, Game.commence_time < now)
-        .where(~Game.status.in_(("final", "postponed")))  # a postponed game never tipped off: no line was lost
+        .where(Game.status != "postponed")  # a postponed game never tipped off: no line was lost
         .where(~has_closing)
     ).all()
     # SQLite returns naive datetimes: re-check in Python so the window never depends on the driver.
@@ -231,6 +239,7 @@ class TickContext:
     props_events: int
     min_remaining: int
     local_tz: Optional[tzinfo]
+    results_provider: Optional[object] = None  # GameResultsProvider; None builds the nba_api one when it is needed
 
 
 Step = Callable[[TickContext], StepResult]
@@ -297,6 +306,78 @@ def closing_step(ctx: TickContext) -> StepResult:
     return _snapshot_result(summary)
 
 
+def _guarded(ctx: TickContext, label: str, errors: List[str], action):
+    """Runs one stage of the results step; a failure is recorded and leaves a usable session for the next stage."""
+    try:
+        return action()
+    except Exception as exc:
+        logger.exception(f"tick: results stage {label} failed")
+        try:
+            ctx.session.rollback()
+        except Exception:
+            logger.exception("tick: rollback after a failed results stage also failed")
+        errors.append(f"{label}: {type(exc).__name__}: {exc}")
+        return None
+
+
+def results_step(ctx: TickContext) -> StepResult:
+    nothing = "nothing to do: no unresolved game, unsettled bet or missing CLV"
+    if ctx.dry_run:
+        pending = sync_results(ctx.session, None, ctx.now, dry_run=True)
+        settle = settle_bets(ctx.session, ctx.now, dry_run=True)
+        clv = fill_clv(ctx.session, ctx.now, dry_run=True)
+        clv_bets = clv.filled + clv.line_moved
+        if not (pending.games_pending or pending.elo_catch_up_games or settle.total_settled or clv_bets):
+            return StepResult("", STEP_SKIPPED, nothing)
+        lookup = f"would look up results of {pending.games_pending} game(s)" + (
+            " (1 nba_api call)" if pending.games_pending else ""
+        )
+        message = (
+            f"{lookup}, rate {pending.elo_catch_up_games} final game(s) waiting for Elo, "
+            f"settle {settle.total_settled} bet(s), fill CLV for {clv_bets} bet(s)"
+        )
+        return StepResult("", STEP_OK, message)
+
+    errors: List[str] = []
+    provider = ctx.results_provider if ctx.results_provider is not None else NbaApiResultsProvider()
+    sync = _guarded(ctx, "sync", errors, lambda: sync_results(ctx.session, provider, ctx.now))
+    settled = _guarded(ctx, "settle", errors, lambda: settle_bets(ctx.session, ctx.now))
+    clv = _guarded(ctx, "clv", errors, lambda: fill_clv(ctx.session, ctx.now))
+
+    finalized = sync.games_finalized if sync else 0
+    n_settled = settled.total_settled if settled else 0
+    n_clv = clv.filled if clv else 0
+    detail: List[str] = []
+    if sync is not None:
+        elo_note = " (full rebuild)" if sync.elo_rebuilt else ""
+        detail.append(
+            f"nba_api calls: {sync.api_calls}, player logs added: {sync.logs_inserted}, "
+            f"Elo rating rows added: {sync.rating_rows_added}{elo_note}"
+        )
+        if sync.unmatched:
+            detail.append(f"no result yet for {len(sync.unmatched)} game(s): " + "; ".join(sync.unmatched))
+        if sync.games_stale:
+            detail.append(f"{sync.games_stale} older unresolved game(s) are no longer chased")
+    if settled is not None and settled.total_settled:
+        counts = ", ".join(f"{name}={count}" for name, count in sorted(settled.settled.items()))
+        detail.append(f"settled: {counts}, P/L {settled.profit_units:+} u")
+    if clv is not None and (clv.line_moved or clv.no_closing_marker):
+        detail.append(
+            f"CLV: {clv.line_moved} bet(s) closed at another line, {clv.no_closing_marker} without a closing capture"
+        )
+    for error in errors:
+        detail.append(f"ERROR {error}")
+    detail_text = "\n".join(detail)
+
+    message = f"{finalized} game(s) finalized, {n_settled} bet(s) settled, CLV filled for {n_clv} bet(s)"
+    if errors:
+        return StepResult("", STEP_ERROR, f"{message}; {len(errors)} stage(s) failed", detail_text)
+    did_work = finalized or n_settled or n_clv or (sync is not None and (sync.did_work or sync.api_calls))
+    if not did_work:
+        return StepResult("", STEP_SKIPPED, nothing, detail_text)
+    return StepResult("", STEP_OK, message, detail_text)
+
+
 def record_step(ctx: TickContext) -> StepResult:
     summary = PredictionRecorder(ctx.session, now=ctx.now).run(dry_run=ctx.dry_run)
     verb = "would write" if ctx.dry_run else "wrote"
@@ -309,10 +390,11 @@ def record_step(ctx: TickContext) -> StepResult:
     return StepResult("", STEP_OK, message, f"skipped: {skipped}")
 
 
-# Ordered registry: append a (name, callable) pair to add a step (for example results sync).
+# Ordered registry: append a (name, callable) pair to add a step.
 DEFAULT_STEPS: List[Tuple[str, Step]] = [
     ("opening", opening_step),
     ("closing", closing_step),
+    ("results", results_step),
     ("record", record_step),
 ]
 
@@ -350,10 +432,12 @@ def run_tick(
     min_remaining: int = DEFAULT_MIN_REMAINING,
     local_tz: Optional[tzinfo] = None,
     lock_path: Optional[Path] = None,
+    results_provider: Optional[object] = None,
 ) -> TickSummary:
     """
-    Runs every step once and returns the summary. A dry run takes no lock, never touches ``odds_service`` and
-    issues no INSERT. ``local_tz`` (default: the system zone) decides what "today" means for the opening step.
+    Runs every step once and returns the summary. A dry run takes no lock, never touches ``odds_service`` or the
+    results provider and issues no INSERT. ``local_tz`` (default: the system zone) decides what "today" means for
+    the opening step. ``results_provider`` (default: nba_api) is only used when a game awaits its result.
     """
     now = _aware_utc(now)
     summary = TickSummary(now=now, dry_run=dry_run)
@@ -379,7 +463,9 @@ def run_tick(
                 "without a closing capture (PC off or tick missed); those lines cannot be backfilled."
             )
 
-        ctx = TickContext(session, odds_service, now, dry_run, window_minutes, props_events, min_remaining, local_tz)
+        ctx = TickContext(
+            session, odds_service, now, dry_run, window_minutes, props_events, min_remaining, local_tz, results_provider
+        )
         for name, step in default_steps() if steps is None else steps:
             result = _run_step(name, step, ctx)
             logger.info(f"tick: step {result.name} -> {result.status}: {result.message}")
