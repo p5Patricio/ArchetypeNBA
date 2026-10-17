@@ -46,7 +46,7 @@ Game lines are the cheapest data under the free quota (3 credits per slate call)
 
 ## Tasks
 - [x] E1 Elo engine, backfill, evaluation, model_version — route: delegated writer (PR A, branch feat/elo-baseline-model). Commits 090cf39 (engine), 0a017cd (service + CLI) plus parent follow-up: HOME_ADVANTAGE 100→60 (walk-forward bias of 1.2-1.9 points on 2021-22..2025-26 at 100, ~0 at 60; tuned in-sample), model_version elo_538 v1.1, class renamed `EloRatingService` (legacy `app.services.elo.EloService` untouched). Real backfill run: 29,641 games, 59,282 rating rows, 30 teams, 0 upcoming games without ratings. Walk-forward last 5 completed seasons: Brier 0.2167, sigma 14.14 (use the registered sigma, not 12). 12 neutral-site games (NBA Cup/international, both rows '@') skipped. Checks: pytest 229 passed.
-- [ ] E2 Prediction recorder + betting policy + unique (prediction_id, strategy) — route: delegated writer (PR B)
+- [x] E2 Prediction recorder + betting policy + unique (prediction_id, strategy) — route: delegated writer (PR B). Commits c4a850e (season resolution/creation + hide empty seasons in /api/v1/seasons), e087f4b (betting_policy.py + migration c4e8a1d63f27), 5389b92 (PredictionRecorder + record_predictions.py CLI). Applied to the real DB: migration c4e8a1d63f27, 46 games re-pointed to the new 2026-27 season (inactive; frontend default unchanged). Checks: pytest 284 passed; offline alembic up/down render. Real-data dry run on cached Oct-17 quotes: 14 of 40 priced sides eligible (35%), median raw edge 13.8% = Elo (blind to offseason roster changes) disagreeing with Pinnacle; daily 10u cap limits flat bets. Decision: keep the policy as the v1 hypothesis (more samples = faster verdict on whether the baseline has any edge vs the close); judge it by CLV, not ROI. A policy change must be registered as a new model_version so bets stay attributable.
 - [ ] E3 Auto tick + logon task replacing NBA-Odds-Opening/Closing — route: delegated writer (PR C)
 - [ ] E4 Results sync, incremental Elo, settlement, CLV — route: delegated writer (PR D)
 - [ ] E5 Operate: run backfill on the real DB, apply migrations, register the logon task, verify — route: inline
@@ -71,10 +71,10 @@ Game lines are the cheapest data under the free quota (3 credits per slate call)
 - SportsGameOdds second feed.
 - Excel legacy cleanup.
 
-## Notes for E2/E4
+## Notes for E2/E4 (resolved in E2: recorder derives the season from the tip-off date and applies carryover)
 - `EloRatingService.current_ratings(for_season_id=...)` applies the 25% regression once when a team's latest game is in an earlier season; `game.season_id` is wrong for 2026-27 (no season row), so the recorder must create/resolve the 2026-27 season and pass it explicitly. Opening-night ratings must include the carryover.
 - Sigma comes from the registered model_version (14.14).
 - Season ids are not chronological (2023-24 is id 1): order by season_label.
 
 ## Next step
-Push and merge PR A, then E2 from updated main.
+Push and merge PR B, then E3 (logon tick) from updated main.

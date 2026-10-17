@@ -107,14 +107,68 @@ def test_season_falls_back_to_date_range_when_active_season_does_not_cover_the_g
     assert db_session.get(Season, sid).season_label == "2024-25"
 
 
-def test_season_falls_back_to_latest_when_nothing_matches(db_session):
-    db_session.add(Season(season_label="2023-24", start_date=date(2023, 10, 24), end_date=date(2024, 6, 30)))
-    db_session.add(Season(season_label="2024-25", start_date=date(2024, 10, 22), end_date=date(2025, 6, 30)))
+def test_season_label_follows_the_nba_calendar():
+    assert OddsIngestionService.season_label_for(date(2026, 10, 20)) == "2026-27"
+    assert OddsIngestionService.season_label_for(date(2027, 6, 15)) == "2026-27"
+    assert OddsIngestionService.season_label_for(date(2027, 8, 1)) == "2027-28"
+    assert OddsIngestionService.season_label_for(date(2099, 12, 25)) == "2099-00"
+
+
+def test_season_matches_by_label_when_rows_have_no_dates(db_session):
+    # The live season rows carry no start/end dates: the label must still resolve them.
+    db_session.add(Season(season_label="2025-26", is_active=True))
+    db_session.add(Season(season_label="2024-25"))
     db_session.commit()
     service = OddsIngestionService(db_session)
 
-    sid = service.resolve_season_id(datetime(2030, 1, 1, tzinfo=timezone.utc))
+    sid = service.resolve_season_id(datetime(2025, 1, 15, tzinfo=timezone.utc))
     assert db_session.get(Season, sid).season_label == "2024-25"
+    assert len(db_session.exec(select(Season)).all()) == 2
+
+
+def test_missing_season_is_created_inactive_with_standard_dates(db_session):
+    db_session.add(Season(season_label="2025-26", is_active=True))
+    db_session.commit()
+    service = OddsIngestionService(db_session)
+
+    sid = service.resolve_season_id(datetime(2026, 10, 21, 0, 0, tzinfo=timezone.utc))
+
+    created = db_session.get(Season, sid)
+    assert (created.season_label, created.start_date, created.end_date) == (
+        "2026-27", date(2026, 10, 1), date(2027, 6, 30),
+    )
+    assert created.is_active is False
+    assert db_session.exec(select(Season).where(Season.is_active)).one().season_label == "2025-26"
+    assert service.resolve_season_id(datetime(2026, 12, 1, tzinfo=timezone.utc)) == sid  # reused, not duplicated
+
+
+def test_upsert_game_creates_the_season_for_an_upcoming_game(db_session):
+    db_session.add(Season(season_label="2025-26", is_active=True))
+    db_session.add(Team(abbreviation="BOS", full_name="Boston Celtics", city="", conference="", division=""))
+    db_session.add(Team(abbreviation="LAC", full_name="LA Clippers", city="", conference="", division=""))
+    db_session.commit()
+    service = OddsIngestionService(db_session)
+
+    game = service.upsert_game("e1", datetime(2026, 10, 21, 0, 0, tzinfo=timezone.utc), "Boston Celtics", "LA Clippers")
+
+    assert db_session.get(Season, game.season_id).season_label == "2026-27"
+
+
+def test_upsert_game_repairs_a_wrong_season_on_an_existing_game(db_session):
+    old = Season(season_label="2025-26", is_active=True)
+    db_session.add(old)
+    db_session.add(Team(abbreviation="BOS", full_name="Boston Celtics", city="", conference="", division=""))
+    db_session.add(Team(abbreviation="LAC", full_name="LA Clippers", city="", conference="", division=""))
+    db_session.commit()
+    when = datetime(2026, 10, 21, 0, 0, tzinfo=timezone.utc)
+    db_session.add(Game(provider_event_id="e1", season_id=old.id, home_team_id=1, away_team_id=2, commence_time=when))
+    db_session.commit()
+
+    game = OddsIngestionService(db_session).upsert_game("e1", when, "Boston Celtics", "LA Clippers")
+
+    assert db_session.get(Season, game.season_id).season_label == "2026-27"
+    assert len(db_session.exec(select(Game)).all()) == 1
+    assert db_session.get(Season, old.id).is_active is True
 
 
 def test_unresolvable_team_skips_the_game_without_crashing_the_batch(world, db_session):

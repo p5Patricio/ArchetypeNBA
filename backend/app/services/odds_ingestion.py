@@ -182,36 +182,46 @@ class OddsIngestionService:
                 return team
         return index.get(_team_key(canon))
 
-    def resolve_season_id(self, commence_time: datetime) -> Optional[int]:
+    @staticmethod
+    def season_label_for(day: date) -> str:
+        """NBA season label for a calendar date: August onwards belongs to the season starting that year."""
+        start_year = day.year if day.month >= 8 else day.year - 1
+        return f"{start_year}-{(start_year + 1) % 100:02d}"
+
+    def resolve_season_id(self, commence_time: datetime) -> int:
         """
-        Season for a game: the active season (when its date range, if any, covers the game),
-        else the season whose range covers the game date, else the active season, else the latest.
+        Season for a game: a season whose explicit date range covers the game date, else the season with
+        the label for that date, else a new inactive season with that label (Oct 1 - Jun 30). Season rows
+        in the live database have no dates, so the label is what normally matches. ``is_active`` is never
+        changed: it drives the default season of the frontend.
         """
         day = _aware_utc(commence_time).date()
         seasons = list(self.session.exec(select(Season)).all())
-        if not seasons:
-            return None
-
-        def covers(season: Season) -> bool:
-            return bool(
-                season.start_date and season.end_date and season.start_date <= day <= season.end_date
-            )
-
-        active = [s for s in seasons if s.is_active]
-        for season in active:
-            if (season.start_date is None and season.end_date is None) or covers(season):
-                return season.id
         for season in seasons:
-            if covers(season):
+            if season.start_date and season.end_date and season.start_date <= day <= season.end_date:
                 return season.id
-        if active:
-            return active[0].id
-        return max(seasons, key=lambda s: (s.start_date or date.min, s.id or 0)).id
+
+        label = self.season_label_for(day)
+        for season in seasons:
+            if season.season_label == label:
+                return season.id
+
+        start_year = int(label[:4])
+        season = Season(
+            season_label=label,
+            start_date=date(start_year, 10, 1),
+            end_date=date(start_year + 1, 6, 30),
+            is_active=False,
+        )
+        self.session.add(season)
+        self.session.flush()
+        logger.info(f"OddsIngestion: created season {label} for a game on {day}.")
+        return season.id
 
     def upsert_game(
         self, event_id: str, commence_time: datetime, home_team: str, away_team: str
     ) -> Optional[Game]:
-        """Creates/updates the game for a provider event. Returns None (and logs) if a team or season is unresolved."""
+        """Creates/updates the game for a provider event. Returns None (and logs) if a team is unresolved."""
         cached = self._games.get(event_id)
         commence = _aware_utc(commence_time)
 
@@ -219,8 +229,15 @@ class OddsIngestionService:
             select(Game).where(Game.provider_event_id == event_id)
         ).first()
         if game is not None:
+            changed = False
             if _aware_utc(game.commence_time) != commence:
                 game.commence_time = commence
+                changed = True
+            season_id = self.resolve_season_id(commence)
+            if game.season_id != season_id:  # rows created before the season existed point at the wrong one
+                game.season_id = season_id
+                changed = True
+            if changed:
                 self.session.add(game)
                 self.session.flush()
             self._games[event_id] = game
@@ -234,14 +251,9 @@ class OddsIngestionService:
             )
             return None
 
-        season_id = self.resolve_season_id(commence)
-        if season_id is None:
-            logger.warning(f"OddsIngestion: no season available for event {event_id}; skipping.")
-            return None
-
         game = Game(
             provider_event_id=event_id,
-            season_id=season_id,
+            season_id=self.resolve_season_id(commence),
             home_team_id=home.id,
             away_team_id=away.id,
             commence_time=commence,
