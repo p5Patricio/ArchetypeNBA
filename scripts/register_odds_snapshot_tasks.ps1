@@ -1,9 +1,11 @@
 # ==============================================================================
 # Registro de Tareas Programadas de Windows: snapshots de cuotas (odds_history)
 #   - NBA-Odds-Opening: 1 vez al dia (11:00 local), 1 llamada /odds (3 creditos)
-#   - NBA-Odds-Closing: cada 30 min entre 17:00 y 23:30 local; solo gasta creditos
-#     si hay un partido que empieza dentro de la ventana y sin snapshot de cierre
-# Presupuesto The Odds API (500 creditos/mes): ~15 creditos/dia con -PropsEvents 1
+#   - NBA-Odds-Closing: cada 30 min entre 10:30 y 23:30 local (cubre partidos de tarde
+#     de fin de semana). Cada ejecucion llama a /events (gratis); solo gasta creditos si
+#     hay un partido que empieza dentro de la ventana y aun no tiene marca de captura
+#     (tabla odds_snapshot_capture), asi que ampliar la ventana horaria no cuesta nada.
+# Presupuesto The Odds API (500 creditos/mes): ~15-18 creditos/dia con -PropsEvents 1
 # (ver backend/app/services/odds_snapshot.py).
 #
 # Uso:
@@ -17,8 +19,8 @@ param (
     [switch]$Unregister,
     [string]$PythonExe = "",
     [string]$OpeningTime = "11:00",
-    [string]$ClosingStart = "17:00",
-    [int]$ClosingDurationMinutes = 390,
+    [string]$ClosingStart = "10:30",
+    [int]$ClosingDurationMinutes = 780,
     [int]$ClosingIntervalMinutes = 30,
     [int]$PropsEvents = 1
 )
@@ -63,7 +65,7 @@ if (($PythonExe -ne "python") -and -not (Test-Path $PythonExe)) {
 }
 
 function New-SnapshotAction([string]$Phase, [string]$ExtraArgs) {
-    $inner = "& '$PythonExe' -u '$CaptureScript' --phase $Phase $ExtraArgs *>> '$LogFile'"
+    $inner = "& '$PythonExe' -u '$CaptureScript' --phase $Phase $ExtraArgs 2>&1 | Out-File -FilePath '$LogFile' -Append -Encoding utf8; exit `$LASTEXITCODE"
     $arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$inner`""
     return New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arguments -WorkingDirectory $BackendDir
 }
@@ -89,8 +91,9 @@ Write-Host "Python:    $PythonExe" -ForegroundColor White
 Write-Host "Script:    $CaptureScript" -ForegroundColor White
 Write-Host "Log:       $LogFile" -ForegroundColor White
 Write-Host "Apertura:  $OpeningTask diaria a las $OpeningTime" -ForegroundColor White
-Write-Host "Cierre:    $ClosingTask desde las $ClosingStart cada $ClosingIntervalMinutes min durante $ClosingDurationMinutes min (props: $PropsEvents evento/s)" -ForegroundColor White
-Write-Host "Presupuesto estimado: ~15 creditos/dia con -PropsEvents 1 (limite 500/mes)." -ForegroundColor Gray
+$closingEnd = ([datetime]::ParseExact($ClosingStart, "HH:mm", $null)).AddMinutes($ClosingDurationMinutes).ToString("HH:mm")
+Write-Host "Cierre:    $ClosingTask de $ClosingStart a $closingEnd cada $ClosingIntervalMinutes min (props: $PropsEvents evento/s); las consultas a /events son gratis" -ForegroundColor White
+Write-Host "Presupuesto estimado: ~15-18 creditos/dia con -PropsEvents 1 (limite 500/mes)." -ForegroundColor Gray
 
 if (-not (Test-Path $CaptureScript)) {
     Write-Host "[ERROR] No existe $CaptureScript" -ForegroundColor Red
