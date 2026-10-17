@@ -421,3 +421,24 @@ def test_provider_rejects_an_unexpected_payload():
 
     with pytest.raises(ResultsProviderError, match="lacks column"):
         provider.fetch_player_game_logs("2026-27", date(2026, 10, 20), date(2026, 10, 22))
+
+
+def test_elo_catch_up_ignores_game_types_elo_never_rates(db_session):
+    from app.services.results_sync import count_final_games_without_ratings
+
+    season = Season(season_label="2026-27", is_active=False)
+    home = Team(abbreviation="HHH", full_name="Home Team", city="H", conference="East", division="Atlantic")
+    away = Team(abbreviation="AAA", full_name="Away Team", city="A", conference="West", division="Pacific")
+    db_session.add_all([season, home, away])
+    db_session.commit()
+    tip = datetime(2026, 10, 20, 23, 0, tzinfo=timezone.utc)
+    for index, nba_id in enumerate(("0012600001", "0032600001", "0022600001")):  # preseason, all-star, regular
+        db_session.add(Game(
+            nba_game_id=nba_id, provider_event_id=f"ev{index}", season_id=season.id,
+            home_team_id=home.id, away_team_id=away.id, commence_time=tip + timedelta(days=index),
+            status="final", home_score=100, away_score=90,
+        ))
+    db_session.commit()
+
+    # only the regular-season game is waiting for ratings
+    assert count_final_games_without_ratings(db_session) == 1

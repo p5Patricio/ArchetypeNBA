@@ -34,7 +34,7 @@ from sqlalchemy import func, select
 from sqlmodel import Session
 
 from app.models import Game, Player, PlayerGameLog, Team, TeamEloRating
-from app.services.elo_service import EloRatingService
+from app.services.elo_service import INCLUDED_GAME_TYPES, EloRatingService
 from app.services.odds_ingestion import OddsIngestionService
 
 logger = logging.getLogger(__name__)
@@ -221,12 +221,19 @@ def find_pending_games(session: Session, now: datetime) -> Tuple[List[Game], int
 
 
 def count_final_games_without_ratings(session: Session) -> int:
-    """Final games (with an nba_game_id) that have no row in ``team_elo_rating`` yet."""
+    """
+    Final games (with an nba_game_id) that have no row in ``team_elo_rating`` yet. Only game types Elo rates
+    (regular season, playoffs, play-in, Cup final) count: a preseason or all-star game never gets ratings and
+    would otherwise keep the catch-up pending forever.
+    """
     rated = select(TeamEloRating.game_id).where(TeamEloRating.game_id.is_not(None))
     return int(
         session.execute(
             select(func.count(Game.id)).where(
-                Game.status == "final", Game.nba_game_id.is_not(None), Game.nba_game_id.not_in(rated)
+                Game.status == "final",
+                Game.nba_game_id.is_not(None),
+                func.substr(Game.nba_game_id, 3, 1).in_(INCLUDED_GAME_TYPES),
+                Game.nba_game_id.not_in(rated),
             )
         ).scalar_one()
     )

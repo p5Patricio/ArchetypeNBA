@@ -65,6 +65,7 @@ Game lines are the cheapest data under the free quota (3 credits per slate call)
 - Branch feat/elo-baseline-model created from main after PRs #1-#7 merged (main ec12e49).
 
 ## Follow-ups (out of scope)
+- From the independent verification of PR D (no confirmed defects): (1) a closing price can come from an older quote if a book dropped the market at the closing capture (the feed stores rows only when `book_last_update` changes) — consider a per-capture presence record; (2) postponed games stay `scheduled` and cost one free nba_api call per tick for up to 14 days; (3) player log rows already stored are never corrected if the NBA revises stats later.
 - Totals model; props model recorded through the same tables.
 - Shutdown endpoint CSRF hardening (separate spawned task).
 - Champion/challenger retraining with promotion gates.
