@@ -1,7 +1,27 @@
+import enum
+from decimal import Decimal
 from typing import Optional, List, Dict, Any
-from datetime import date
+from datetime import date, datetime
 from sqlmodel import SQLModel, Field, Relationship, UniqueConstraint, Index
-from sqlalchemy import Column, JSON
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Column,
+    Computed,
+    DateTime,
+    Enum as SAEnum,
+    ForeignKey,
+    Integer,
+    JSON,
+    Numeric,
+    SmallInteger,
+    Text,
+    false as sa_false,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 
 
 class Season(SQLModel, table=True):
@@ -365,3 +385,302 @@ class PlayerMatchupStats(SQLModel, table=True):
         }
     )
 
+
+# ============================================================================
+# Phase 4: Quant Paper Trading
+# ============================================================================
+# Persistence layer for odds history, model predictions and simulated bets.
+# Target DB is PostgreSQL 15 (native enums, GENERATED columns, NULLS NOT
+# DISTINCT unique constraints, BRIN index). Tests run on SQLite through
+# SQLModel.metadata.create_all, so every dialect-specific feature is expressed
+# through a variant/kwarg that SQLite ignores. The Alembic migration
+# `add_quant_paper_trading` is hand written and must be kept in sync.
+# The views v_closing_odds / v_paper_performance exist only in the migration.
+
+
+class MarketType(str, enum.Enum):
+    h2h = "h2h"
+    spreads = "spreads"
+    totals = "totals"
+    player_points = "player_points"
+    player_rebounds = "player_rebounds"
+    player_assists = "player_assists"
+    player_pra = "player_pra"
+
+
+class BetSide(str, enum.Enum):
+    home = "home"
+    away = "away"
+    over = "over"
+    under = "under"
+
+
+class BetStatus(str, enum.Enum):
+    pending = "pending"
+    won = "won"
+    lost = "lost"
+    push = "push"
+    void = "void"
+
+
+class StakingStrategy(str, enum.Enum):
+    flat = "flat"
+    kelly_fractional = "kelly_fractional"
+
+
+def _pg_enum(py_enum: type[enum.Enum], name: str) -> SAEnum:
+    """Named enum: native PG enum type, VARCHAR + CHECK on SQLite."""
+    return SAEnum(
+        py_enum,
+        name=name,
+        values_callable=lambda e: [member.value for member in e],
+        create_constraint=True,
+    )
+
+
+_MARKET_TYPE = _pg_enum(MarketType, "market_type")
+_BET_SIDE = _pg_enum(BetSide, "bet_side")
+_BET_STATUS = _pg_enum(BetStatus, "bet_status")
+_STAKING_STRATEGY = _pg_enum(StakingStrategy, "staking_strategy")
+
+# SQLite only auto-increments a plain INTEGER primary key.
+_BIG_ID = BigInteger().with_variant(Integer(), "sqlite")
+_SMALL_ID = SmallInteger().with_variant(Integer(), "sqlite")
+_JSON = JSON().with_variant(JSONB(), "postgresql")
+
+
+def _timestamptz(**kwargs: Any) -> Column:
+    return Column(DateTime(timezone=True), **kwargs)
+
+
+class Sportsbook(SQLModel, table=True):
+    __tablename__ = "sportsbook"
+
+    __table_args__ = (UniqueConstraint("key", name="uq_sportsbook_key"),)
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_SMALL_ID, primary_key=True, autoincrement=True)
+    )
+    key: str = Field(sa_column=Column(Text, nullable=False))  # provider key, e.g. "pinnacle"
+    name: str = Field(sa_column=Column(Text, nullable=False))
+    region: str = Field(sa_column=Column(Text, nullable=False))
+    is_sharp: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=sa_false())
+    )
+
+
+class Game(SQLModel, table=True):
+    __tablename__ = "game"
+
+    __table_args__ = (
+        UniqueConstraint("nba_game_id", name="uq_game_nba_game_id"),
+        UniqueConstraint("provider_event_id", name="uq_game_provider_event_id"),
+        CheckConstraint("home_team_id <> away_team_id", name="ck_game_distinct_teams"),
+        CheckConstraint(
+            "status IN ('scheduled', 'live', 'final', 'postponed')", name="ck_game_status"
+        ),
+        Index("ix_game_commence_time", "commence_time"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    # Joins player_game_log.game_id
+    nba_game_id: Optional[str] = Field(default=None, sa_column=Column(Text))
+    provider_event_id: Optional[str] = Field(default=None, sa_column=Column(Text))
+    season_id: int = Field(sa_column=Column(Integer, ForeignKey("season.id"), nullable=False))
+    home_team_id: int = Field(sa_column=Column(Integer, ForeignKey("team.id"), nullable=False))
+    away_team_id: int = Field(sa_column=Column(Integer, ForeignKey("team.id"), nullable=False))
+    commence_time: datetime = Field(sa_column=_timestamptz(nullable=False))
+    status: str = Field(
+        default="scheduled",
+        sa_column=Column(Text, nullable=False, server_default=text("'scheduled'")),
+    )
+    home_score: Optional[int] = Field(default=None, sa_column=Column(SmallInteger))
+    away_score: Optional[int] = Field(default=None, sa_column=Column(SmallInteger))
+
+
+class OddsHistory(SQLModel, table=True):
+    """Append-only odds snapshots, one row per (book, market, side, line, book update)."""
+
+    __tablename__ = "odds_history"
+
+    __table_args__ = (
+        CheckConstraint(
+            "price_american <= -100 OR price_american >= 100", name="ck_odds_price_american"
+        ),
+        # NULLS NOT DISTINCT (PostgreSQL 15+): player_id/line are NULL for game markets.
+        UniqueConstraint(
+            "game_id",
+            "sportsbook_id",
+            "market",
+            "player_id",
+            "side",
+            "line",
+            "book_last_update",
+            name="uq_odds_history_quote",
+            postgresql_nulls_not_distinct=True,
+        ),
+        Index(
+            "ix_odds_history_lookup",
+            "game_id",
+            "market",
+            "player_id",
+            "side",
+            "sportsbook_id",
+            text("captured_at DESC"),
+        ),
+        Index("ix_odds_history_captured_brin", "captured_at", postgresql_using="brin"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    game_id: int = Field(
+        sa_column=Column(_BIG_ID, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    )
+    sportsbook_id: int = Field(
+        sa_column=Column(_SMALL_ID, ForeignKey("sportsbook.id"), nullable=False)
+    )
+    market: MarketType = Field(sa_column=Column(_MARKET_TYPE, nullable=False))
+    player_id: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, ForeignKey("player.id"))
+    )  # NULL for game markets
+    side: BetSide = Field(sa_column=Column(_BET_SIDE, nullable=False))
+    line: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
+    price_american: int = Field(sa_column=Column(Integer, nullable=False))
+    price_decimal: Optional[Decimal] = Field(
+        default=None,
+        sa_column=Column(
+            Numeric(8, 4),
+            Computed(
+                "CASE WHEN price_american > 0 THEN 1 + price_american / 100.0 "
+                "ELSE 1 + 100.0 / ABS(price_american) END",
+                persisted=True,
+            ),
+        ),
+    )
+    book_last_update: datetime = Field(sa_column=_timestamptz(nullable=False))
+    captured_at: Optional[datetime] = Field(
+        default=None, sa_column=_timestamptz(nullable=False, server_default=func.now())
+    )
+
+
+class ModelVersion(SQLModel, table=True):
+    __tablename__ = "model_version"
+
+    __table_args__ = (UniqueConstraint("name", "version", name="uq_model_version_name_version"),)
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True)
+    )
+    name: str = Field(sa_column=Column(Text, nullable=False))
+    version: str = Field(sa_column=Column(Text, nullable=False))
+    params: Dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(_JSON, nullable=False, server_default=text("'{}'")),
+    )
+    brier_oos: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(6, 5)))
+    trained_at: Optional[datetime] = Field(
+        default=None, sa_column=_timestamptz(server_default=func.now())
+    )
+
+
+class ModelPrediction(SQLModel, table=True):
+    __tablename__ = "model_prediction"
+
+    __table_args__ = (
+        CheckConstraint("model_prob > 0 AND model_prob < 1", name="ck_prediction_prob_range"),
+        UniqueConstraint(
+            "model_version_id",
+            "game_id",
+            "market",
+            "player_id",
+            "side",
+            "line",
+            name="uq_model_prediction_target",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    model_version_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("model_version.id"), nullable=False)
+    )
+    game_id: int = Field(
+        sa_column=Column(_BIG_ID, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    )
+    market: MarketType = Field(sa_column=Column(_MARKET_TYPE, nullable=False))
+    player_id: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, ForeignKey("player.id"))
+    )
+    side: BetSide = Field(sa_column=Column(_BET_SIDE, nullable=False))
+    line: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
+    model_prob: Decimal = Field(sa_column=Column(Numeric(6, 5), nullable=False))
+    fair_decimal: Optional[Decimal] = Field(
+        default=None,
+        sa_column=Column(Numeric(8, 4), Computed("1 / model_prob", persisted=True)),
+    )
+    projection: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(6, 2)))
+    predicted_at: Optional[datetime] = Field(
+        default=None, sa_column=_timestamptz(server_default=func.now())
+    )
+
+
+class SimulatedBet(SQLModel, table=True):
+    __tablename__ = "simulated_bet"
+
+    __table_args__ = (
+        CheckConstraint("stake_units > 0", name="ck_simulated_bet_stake_positive"),
+        CheckConstraint(
+            "closing_price IS NULL OR closing_price > 0", name="ck_simulated_bet_closing_price"
+        ),
+        CheckConstraint(
+            "status = 'pending' OR settled_at IS NOT NULL", name="ck_simulated_bet_settled_at"
+        ),
+        Index(
+            "ix_simulated_bet_pending",
+            "status",
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
+        Index("ix_simulated_bet_strategy_placed", "strategy", "placed_at"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    prediction_id: int = Field(
+        sa_column=Column(_BIG_ID, ForeignKey("model_prediction.id"), nullable=False)
+    )
+    odds_taken_id: int = Field(
+        sa_column=Column(_BIG_ID, ForeignKey("odds_history.id"), nullable=False)
+    )
+    price_taken: Decimal = Field(sa_column=Column(Numeric(8, 4), nullable=False))
+    line_taken: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
+    fair_prob_at_bet: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(6, 5)))
+    ev_per_unit: Decimal = Field(sa_column=Column(Numeric(7, 5), nullable=False))
+    strategy: StakingStrategy = Field(sa_column=Column(_STAKING_STRATEGY, nullable=False))
+    kelly_multiplier: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(4, 3)))
+    stake_units: Decimal = Field(sa_column=Column(Numeric(8, 3), nullable=False))
+    bankroll_before: Decimal = Field(sa_column=Column(Numeric(12, 3), nullable=False))
+    closing_odds_id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, ForeignKey("odds_history.id"))
+    )
+    closing_price: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(8, 4)))
+    closing_line: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
+    clv_pct: Optional[Decimal] = Field(
+        default=None,
+        sa_column=Column(Numeric(7, 5), Computed("price_taken / closing_price - 1", persisted=True)),
+    )
+    status: BetStatus = Field(
+        default=BetStatus.pending,
+        sa_column=Column(_BET_STATUS, nullable=False, server_default=text("'pending'")),
+    )
+    profit_units: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(10, 3)))
+    placed_at: Optional[datetime] = Field(
+        default=None, sa_column=_timestamptz(server_default=func.now())
+    )
+    settled_at: Optional[datetime] = Field(default=None, sa_column=_timestamptz())
