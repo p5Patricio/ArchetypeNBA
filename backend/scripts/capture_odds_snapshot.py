@@ -9,6 +9,7 @@ opening = 3 credits/day, closing = 3 credits per tip-off cluster + 1 per prop ma
 Capture state lives in the odds_snapshot_capture table (markers), so a run with nothing new to record
 spends nothing; apply the migration (alembic upgrade head) before the first scheduled run.
 `--dry-run` prints the planned calls and their cost without touching the network or the DB.
+Scheduled capture goes through scripts/run_tick.py (the `NBA-Odds-Tick` logon task); this CLI is for manual runs.
 
 Exit codes: 0 ok (including "nothing due"), 1 configuration error, 2 aborted by the credit guard,
 3 the game-lines API call failed (no marker written; the next run retries).

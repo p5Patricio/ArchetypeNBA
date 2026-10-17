@@ -16,19 +16,24 @@ A closing run skips the /odds call when every due game already has a `closing` m
 events independently (earliest tip-off first among games lacking a `closing_props` marker), so a
 props-only run costs just the props credits.
 
-Monthly budget (schedule = `--phase opening` once a day, `--phase closing` every 30 minutes),
-assuming ~3 tip-off clusters per game day and ~28 game days per month:
+Scheduling: the `NBA-Odds-Tick` task (scripts/register_tick_task.ps1) starts at user log on and runs
+`scripts/run_tick.py` every 15 minutes; app/services/tick.py calls `run_snapshot` for `opening` once per
+machine-local day and for `closing` with a 30 minute window and 1 props event per tick. The manual
+`scripts/capture_odds_snapshot.py --phase ...` CLI (default window 45 min) stays available for one-off runs.
+
+Monthly budget (opening once a day, closing on every tick), assuming ~3 tip-off clusters per game day
+and ~28 game days per month:
     opening  1/day x 3                              =  3
     closing  3 clusters x 3 (game lines)            =  9
-    props    3 clusters x 1-2 runs x 1 market       =  3-6  (--props-events 1 per closing run; a game
-                                                             can sit inside the 45 min window for two
-                                                             30 min runs, each picking one more event)
+    props    3 clusters x 1-2 runs x 1 market       =  3-6  (1 props event per closing run; a game
+                                                             can sit inside the 30 min window for two
+                                                             15 min ticks, each picking one more event)
     --------------------------------------------------------
     ~15-18 credits/day x 28 game days               ~ 420-504 (quota is 500; `--min-remaining` is the
                                                              hard stop and protects the floor)
 The closing default is 1 props event per run; raising it to 3 costs up to 3 + 3 x (3 + 3 x 2) per day
 and would exhaust the quota before month end.
-The number of clusters is set by how often `--phase closing` is scheduled and by --window-minutes:
+The number of clusters is set by how often closing runs (every tick) and by the window minutes:
 a run only spends credits when an event tips off inside the window and still lacks its marker, so extra
 scheduled runs are free.
 """
