@@ -5,7 +5,7 @@ from app.api.v1 import (
     health, teams, players, cluster, data, player_extras, historical,
     seasons, hall_of_fame, analytics, versus, lineup, training,
     pizza_chart, shotchart, doppelgangers, financial, matchups, timeline,
-    shot_zones, props
+    shot_zones, props, system
 )
 
 app = FastAPI(
@@ -52,6 +52,7 @@ app.include_router(matchups.router, prefix="/api/v1", tags=["matchups"])
 app.include_router(timeline.router, prefix="/api/v1", tags=["timeline"])
 app.include_router(shot_zones.router, prefix="/api/v1", tags=["shot-zones"])
 app.include_router(props.router, prefix="/api/v1", tags=["props"])
+app.include_router(system.router, prefix="/api/v1", tags=["system"])
 
 
 

@@ -51,3 +51,6 @@ desktop.ini
 .agents/
 skills-lock.json
 *.log
+
+# Runtime caches
+backend/app/data/last_props_cache.json

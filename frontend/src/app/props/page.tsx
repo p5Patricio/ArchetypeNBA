@@ -8,6 +8,7 @@ import { TeamLogo } from "@/components/TeamLogo";
 import { usePreferences } from "@/context/PreferencesContext";
 import {
   getTodayProps,
+  runPropsAnalysis,
   type TodayPropsResponse,
   type PropItem,
 } from "@/lib/api";
@@ -29,6 +30,7 @@ import {
   BarChart3,
   Cpu,
   CheckCircle2,
+  Send,
 } from "lucide-react";
 
 type StatCategory = "ALL" | "POINTS" | "REBOUNDS" | "ASSISTS" | "PRA";
@@ -47,6 +49,11 @@ export default function PropsPage() {
   const [onlyValuePicks, setOnlyValuePicks] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortBy, setSortBy] = useState<SortOption>("EV_DESC");
+
+  // On-demand AI Analysis & Telegram dispatch state
+  const [analyzing, setAnalyzing] = useState<boolean>(false);
+  const [sendTelegram, setSendTelegram] = useState<boolean>(true);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const loadPropsData = async (forceRefresh: boolean = false) => {
     if (forceRefresh) {
@@ -71,6 +78,33 @@ export default function PropsPage() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const handleRunAnalysis = async () => {
+    setAnalyzing(true);
+    setError(null);
+
+    try {
+      const res = await runPropsAnalysis({ send_telegram: sendTelegram });
+      setData(res);
+      setToastMessage(
+        language === "es"
+          ? `¡Análisis completado! Se generaron ${res.total_props} props (${res.value_picks_count} picks con +EV).${sendTelegram ? " Reporte despachado a Telegram." : ""}`
+          : `Analysis complete! Generated ${res.total_props} props (${res.value_picks_count} value picks).${sendTelegram ? " Dispatched to Telegram." : ""}`
+      );
+      setTimeout(() => setToastMessage(null), 7000);
+    } catch (err: unknown) {
+      console.error("Error running props analysis:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : language === "es"
+          ? "No se pudo completar el análisis con Gemini AI."
+          : "Failed to run AI props analysis."
+      );
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -220,30 +254,119 @@ export default function PropsPage() {
                 </p>
               </div>
 
-              {/* Refresh Action */}
-              <div className="shrink-0">
+              {/* Hero Action Controls */}
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                {/* Telegram Dispatch Toggle */}
+                <label className="flex items-center gap-2 cursor-pointer select-none px-3.5 py-2.5 rounded-2xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50 shadow-2xs transition-all">
+                  <input
+                    type="checkbox"
+                    checked={sendTelegram}
+                    onChange={(e) => setSendTelegram(e.target.checked)}
+                    className="rounded border-slate-300 text-orange-600 focus:ring-orange-500 h-4 w-4 cursor-pointer"
+                  />
+                  <Send className="h-3.5 w-3.5 text-sky-500" />
+                  <span>{isEs ? "Despachar a Telegram" : "Send to Telegram"}</span>
+                </label>
+
+                {/* Primary Trigger: On-Demand AI Analysis */}
                 <button
-                  onClick={() => loadPropsData(true)}
-                  disabled={refreshing || loading}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-800 shadow-xs hover:border-orange-300 hover:bg-orange-50/40 transition-all inline-flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                  onClick={handleRunAnalysis}
+                  disabled={analyzing || loading}
+                  className="rounded-2xl bg-gradient-to-r from-orange-600 via-orange-500 to-amber-600 px-5 py-2.5 text-xs font-black text-white shadow-md hover:from-orange-500 hover:to-amber-500 hover:shadow-orange-500/20 active:scale-[0.98] transition-all inline-flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {analyzing ? (
+                    <RefreshCw className="h-4 w-4 animate-spin text-white" />
+                  ) : (
+                    <Zap className="h-4 w-4 text-amber-200 fill-amber-200" />
+                  )}
+                  <span>
+                    {analyzing
+                      ? isEs
+                        ? "Simulando (10,000 corridas)..."
+                        : "Simulating (10k runs)..."
+                      : data && data.total_props > 0
+                      ? isEs
+                        ? "Re-ejecutar Análisis IA"
+                        : "Re-run AI Analysis"
+                      : isEs
+                      ? "Ejecutar Análisis IA"
+                      : "Run AI Analysis"}
+                  </span>
+                </button>
+
+                {/* Fast Cache Reload */}
+                <button
+                  onClick={() => loadPropsData(false)}
+                  disabled={refreshing || loading || analyzing}
+                  title={isEs ? "Recargar datos desde caché" : "Reload from cache"}
+                  className="rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-700 shadow-2xs hover:border-orange-300 hover:bg-orange-50/40 transition-all inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   <RefreshCw
-                    className={`h-4 w-4 text-orange-600 ${refreshing ? "animate-spin" : ""}`}
+                    className={`h-3.5 w-3.5 text-slate-500 ${refreshing ? "animate-spin text-orange-600" : ""}`}
                   />
-                  <span>
+                  <span className="hidden sm:inline">
                     {refreshing
                       ? isEs
-                        ? "Sincronizando..."
-                        : "Syncing..."
+                        ? "Leyendo..."
+                        : "Reading..."
                       : isEs
-                      ? "Actualizar Cuotas"
-                      : "Refresh Odds"}
+                      ? "Recargar"
+                      : "Reload"}
                   </span>
                 </button>
               </div>
             </div>
           </div>
         </section>
+
+        {/* Toast Alert Banner */}
+        {toastMessage && (
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 shadow-sm flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-3 text-xs sm:text-sm font-bold text-emerald-950">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                <span>{toastMessage}</span>
+              </div>
+              <button
+                onClick={() => setToastMessage(null)}
+                className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-2 py-1 rounded-lg hover:bg-emerald-100 transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Active Simulation Progress Banner */}
+        {analyzing && (
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6">
+            <div className="rounded-3xl border border-orange-200 bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-2xl bg-orange-600 text-white flex items-center justify-center shadow-md shadow-orange-600/20 shrink-0 animate-pulse">
+                  <Zap className="h-6 w-6 text-amber-200 fill-amber-200" />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                    <span>
+                      {isEs
+                        ? "Simulaciones Monte Carlo & Análisis Gemini en Ejecución"
+                        : "Monte Carlo Simulations & Gemini Analysis Running"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 font-medium">
+                    {isEs
+                      ? "Consultando The Odds API en vivo, simulando 10,000 corridas por jugador y evaluando Expected Value (+EV)..."
+                      : "Querying The Odds API live, computing 10,000 iterations per player, and evaluating +EV edges..."}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-white/80 border border-orange-200 text-xs font-bold text-orange-800 shrink-0 shadow-2xs">
+                <RefreshCw className="h-4 w-4 animate-spin text-orange-600" />
+                <span>{isEs ? "Calculando distribuciones..." : "Computing distributions..."}</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ========================================================================= */}
         {/* MAIN CONTENT AREA */}
@@ -638,6 +761,72 @@ export default function PropsPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Quota-Saving On-Demand Empty State */}
+          {!loading && !error && data && data.total_props === 0 && !analyzing && (
+            <div className="rounded-3xl border-2 border-dashed border-orange-200 bg-gradient-to-b from-orange-50/40 via-white to-white p-8 sm:p-12 text-center max-w-2xl mx-auto space-y-6 shadow-xs">
+              <div className="h-16 w-16 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center mx-auto shadow-inner">
+                <Zap className="h-8 w-8 text-orange-600" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900">
+                  {isEs ? "Análisis en Pausa (Ahorro de Cuota Activo)" : "Analysis on Standby (Quota-Saving Active)"}
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-lg mx-auto">
+                  {data.slate_summary ||
+                    (isEs
+                      ? "Las predicciones y simulaciones Monte Carlo no se ejecutan automáticamente al iniciar Windows para no consumir cuotas de Gemini AI ni The Odds API innecesariamente."
+                      : "Monte Carlo simulations and Gemini reasoning do not run on system startup to preserve API quota.")}
+                </p>
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-4">
+                <button
+                  onClick={handleRunAnalysis}
+                  disabled={analyzing}
+                  className="w-full sm:w-auto rounded-2xl bg-gradient-to-r from-orange-600 via-orange-500 to-amber-600 px-6 py-3.5 text-sm font-black text-white shadow-md hover:from-orange-500 hover:to-amber-500 hover:shadow-orange-500/25 active:scale-[0.98] transition-all inline-flex items-center justify-center gap-2.5 cursor-pointer"
+                >
+                  <Zap className="h-4 w-4 text-amber-200 fill-amber-200" />
+                  <span>{isEs ? "⚡ Iniciar Análisis de Props Ahora" : "⚡ Launch Props Analysis Now"}</span>
+                </button>
+              </div>
+
+              <div className="text-[11px] text-slate-400 font-medium pt-2 border-t border-slate-100">
+                {isEs
+                  ? "💡 Cada ejecución corre 10,000 simulaciones Binomial Negativa por jugador, extrae líneas de The Odds API y puede despachar el reporte a Telegram."
+                  : "💡 Each run computes 10,000 Negative Binomial simulations per player, fetches live sportsbook odds, and can dispatch executive alerts to Telegram."}
+              </div>
+            </div>
+          )}
+
+          {/* Filter Empty State (Props available but filtered out) */}
+          {!loading && !error && data && data.total_props > 0 && filteredItems.length === 0 && !analyzing && (
+            <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center max-w-md mx-auto space-y-4 shadow-xs">
+              <div className="h-12 w-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                <Search className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-base font-black text-slate-900">
+                  {isEs ? "No se encontraron props" : "No props found"}
+                </h4>
+                <p className="text-xs text-slate-500">
+                  {isEs
+                    ? "Probá cambiando la categoría, desactivando el filtro de solo valor (+EV) o limpiando la búsqueda."
+                    : "Try selecting a different stat category, disabling the value-only filter, or clearing search."}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedCategory("ALL");
+                  setOnlyValuePicks(false);
+                  setSearchQuery("");
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+              >
+                {isEs ? "Restablecer Filtros" : "Reset Filters"}
+              </button>
             </div>
           )}
         </main>
