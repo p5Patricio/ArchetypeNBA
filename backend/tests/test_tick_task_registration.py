@@ -43,6 +43,12 @@ def test_what_if_prints_a_well_formed_logon_task_definition():
     assert trigger.findtext("t:Repetition/t:Interval", namespaces=NS) == "PT15M"
     assert trigger.find("t:Repetition/t:Duration", NS) is None  # indefinite repetition
     assert trigger.findtext("t:Repetition/t:StopAtDurationEnd", namespaces=NS) == "false"
+    # a TimeTrigger starts the repetition right away and keeps it going between sessions
+    timed = root.find("t:Triggers/t:TimeTrigger", NS)
+    assert timed is not None
+    assert timed.findtext("t:Repetition/t:Interval", namespaces=NS) == "PT15M"
+    assert timed.find("t:Repetition/t:Duration", NS) is None
+    assert timed.findtext("t:StartBoundary", namespaces=NS)
     user = trigger.findtext("t:UserId", namespaces=NS)
     assert user and "\\" in user  # DOMAIN\user
 

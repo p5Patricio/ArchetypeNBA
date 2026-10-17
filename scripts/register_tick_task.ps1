@@ -82,6 +82,8 @@ function New-TickTaskXml([string]$UserName) {
     $user = ConvertTo-XmlText $UserName
     $xmlArguments = ConvertTo-XmlText $arguments
     $workDir = ConvertTo-XmlText $BackendDir
+    # TimeTrigger: la repeticion arranca ya (sin esperar al proximo login) y sigue entre sesiones; el LogonTrigger dispara un tick apenas inicias sesion.
+    $startBoundary = (Get-Date).AddMinutes(1).ToString("yyyy-MM-ddTHH:mm:ss")
     $description = ConvertTo-XmlText "Tick de cuotas NBA: captura apertura/cierre y registra predicciones cada $IntervalMinutes min mientras la sesion este abierta."
 
     return @"
@@ -99,6 +101,14 @@ function New-TickTaskXml([string]$UserName) {
       <Enabled>true</Enabled>
       <UserId>$user</UserId>
     </LogonTrigger>
+    <TimeTrigger>
+      <Repetition>
+        <Interval>PT${IntervalMinutes}M</Interval>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+      <StartBoundary>$startBoundary</StartBoundary>
+      <Enabled>true</Enabled>
+    </TimeTrigger>
   </Triggers>
   <Principals>
     <Principal id="Author">
@@ -183,7 +193,7 @@ if ($PSCmdlet.ShouldProcess($TaskName, "Register-ScheduledTask -Xml (inicio de s
     }
     $registered = Get-ScheduledTask -TaskName $TaskName
     Write-Host "[OK] Registrada: $TaskName (estado: $($registered.State))" -ForegroundColor Green
-    Write-Host "     La repeticion cada $IntervalMinutes min empieza en el proximo inicio de sesion." -ForegroundColor Gray
+    Write-Host "     Un tick al iniciar sesion y luego cada $IntervalMinutes min mientras la sesion este abierta (primer disparo en ~1 min)." -ForegroundColor Gray
 }
 
 if ($StartNow -and $PSCmdlet.ShouldProcess($TaskName, "Start-ScheduledTask (un tick ahora)")) {
