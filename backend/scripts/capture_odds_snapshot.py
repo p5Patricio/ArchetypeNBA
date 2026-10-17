@@ -6,9 +6,12 @@ Captures an opening or closing odds snapshot into odds_history (The Odds API fre
 
 Credit budget (500/month) and the cost model are documented in app/services/odds_snapshot.py:
 opening = 3 credits/day, closing = 3 credits per tip-off cluster + 1 per prop market per event.
+Capture state lives in the odds_snapshot_capture table (markers), so a run with nothing new to record
+spends nothing; apply the migration (alembic upgrade head) before the first scheduled run.
 `--dry-run` prints the planned calls and their cost without touching the network or the DB.
 
-Exit codes: 0 ok (including "nothing due"), 1 configuration error, 2 aborted by the credit guard.
+Exit codes: 0 ok (including "nothing due"), 1 configuration error, 2 aborted by the credit guard,
+3 the game-lines API call failed (no marker written; the next run retries).
 """
 import argparse
 import logging
@@ -107,7 +110,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             bookmakers=bookmakers,
         )
     print(format_summary(summary))
-    return 2 if summary.status == "aborted_low_credits" else 0
+    return {"aborted_low_credits": 2, "call_failed": 3}.get(summary.status, 0)
 
 
 if __name__ == "__main__":

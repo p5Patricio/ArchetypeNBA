@@ -6,31 +6,53 @@ Cost model (one region-equivalent per call, <= 10 bookmakers via `bookmakers=`)
 - /odds game lines: 3 markets (h2h, spreads, totals) x 1 = 3 credits for the whole slate.
 - /events/{id}/odds props: 1 credit per market per event.
 
+"Already captured" is tracked with explicit markers in `odds_snapshot_capture`, never inferred from
+`odds_history` (a run where no book moved a price inserts 0 rows). A marker is written only after a
+successful (HTTP 200) paid call:
+- `closing`: the game-lines call covered this game (3 credits, recorded on the first marker of the call).
+- `closing_props`: the props call for this game succeeded (len(markets) credits).
+- `opening`: informational, repeatable, never affects closing selection (game lines only).
+A closing run skips the /odds call when every due game already has a `closing` marker, and picks props
+events independently (earliest tip-off first among games lacking a `closing_props` marker), so a
+props-only run costs just the props credits.
+
 Monthly budget (schedule = `--phase opening` once a day, `--phase closing` every 30 minutes),
 assuming ~3 tip-off clusters per game day and ~28 game days per month:
     opening  1/day x 3                              =  3
     closing  3 clusters x 3 (game lines)            =  9
-    props    3 clusters x 1 event x 1 market        =  3   (--props-events 1 per closing run)
+    props    3 clusters x 1-2 runs x 1 market       =  3-6  (--props-events 1 per closing run; a game
+                                                             can sit inside the 45 min window for two
+                                                             30 min runs, each picking one more event)
     --------------------------------------------------------
-    ~15 credits/day x 28 game days                  ~ 420  (< 500, ~80 credits of margin)
-The closing default is 1 props event per run; raising it to 3 costs 3 + 3 x (3 + 3) = 21/day
-(~590/month) and would exhaust the quota before month end.
+    ~15-18 credits/day x 28 game days               ~ 420-504 (quota is 500; `--min-remaining` is the
+                                                             hard stop and protects the floor)
+The closing default is 1 props event per run; raising it to 3 costs up to 3 + 3 x (3 + 3 x 2) per day
+and would exhaust the quota before month end.
 The number of clusters is set by how often `--phase closing` is scheduled and by --window-minutes:
-a run only spends credits when an event tips off inside the window and has no snapshot captured
-within that window yet, so extra scheduled runs are free. `--min-remaining` is a hard stop.
+a run only spends credits when an event tips off inside the window and still lacks its marker, so extra
+scheduled runs are free.
 """
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from app.models import Game, OddsHistory
+from app.models import (
+    CAPTURE_CLOSING,
+    CAPTURE_CLOSING_PROPS,
+    CAPTURE_KINDS,
+    CAPTURE_OPENING,
+    Game,
+    OddsSnapshotCapture,
+)
 from app.services.odds_api_service import (
     DEFAULT_BOOKMAKERS,
     GAME_LINE_MARKETS,
     MARKET_TO_STAT,
+    GameQuote,
     OddsApiService,
 )
 from app.services.odds_ingestion import IngestResult, OddsIngestionService, parse_api_datetime
@@ -49,6 +71,7 @@ GAME_LINES_CREDITS = len(GAME_LINE_MARKETS)
 class PlanStep:
     label: str
     credits: int
+    skippable: bool = False  # closing game-lines call: skipped when every due game is already marked
 
 
 @dataclass(frozen=True)
@@ -59,6 +82,11 @@ class SnapshotPlan:
     @property
     def total_credits(self) -> int:
         return sum(step.credits for step in self.steps)
+
+    @property
+    def props_only_credits(self) -> int:
+        """Cost of a run whose game lines were already captured (the /odds call is skipped)."""
+        return sum(step.credits for step in self.steps if not step.skippable)
 
 
 def plan_snapshot(
@@ -72,20 +100,25 @@ def plan_snapshot(
     if phase not in PHASES:
         raise ValueError(f"unknown phase: {phase}")
     steps = [PlanStep("GET /events (free; reveals remaining quota)", 0)]
-    scope = "whole slate" if phase == "opening" else f"events tipping off within {window_minutes} min"
+    if phase == "opening":
+        scope = "whole slate"
+    else:
+        scope = (
+            f"events tipping off within {window_minutes} min; "
+            "skipped when every due event already has a closing marker"
+        )
     steps.append(
         PlanStep(
             f"GET /odds markets={','.join(GAME_LINE_MARKETS)} bookmakers={','.join(bookmakers)} ({scope})",
             GAME_LINES_CREDITS,
+            skippable=phase == "closing",
         )
     )
     for index in range(1, props_events + 1):
-        steps.append(
-            PlanStep(
-                f"GET /events/<event {index}>/odds markets={','.join(props_markets)}",
-                len(props_markets),
-            )
-        )
+        label = f"GET /events/<event {index}>/odds markets={','.join(props_markets)}"
+        if phase == "closing":
+            label += " (only events without a closing_props marker)"
+        steps.append(PlanStep(label, len(props_markets)))
     return SnapshotPlan(phase=phase, steps=tuple(steps))
 
 
@@ -111,8 +144,9 @@ def select_closing_events(
     already_captured: Set[str],
 ) -> List[Dict]:
     """
-    Events tipping off within the next `window_minutes` (not yet started) that have no closing
-    snapshot yet, earliest tip-off first. Pure function: callers supply the captured ids.
+    Events tipping off within the next `window_minutes` (not yet started) whose id is not in
+    `already_captured`, earliest tip-off first. Pure function: callers supply the marked ids
+    (the `closing` marker set for game lines, the `closing_props` marker set for props).
     """
     horizon = now + timedelta(minutes=window_minutes)
     due: List[Tuple[datetime, Dict]] = []
@@ -126,35 +160,68 @@ def select_closing_events(
     return [event for _, event in sorted(due, key=lambda item: (item[0], item[1]["id"]))]
 
 
-def events_with_closing_snapshot(
-    session: Session, events: Sequence[Dict], window_minutes: int
-) -> Set[str]:
-    """Event ids that already have an odds_history row captured within `window_minutes` before tip-off."""
-    captured: Set[str] = set()
-    for event in events:
-        event_id = event.get("id")
-        tip_off = _commence(event)
-        if not event_id or tip_off is None:
-            continue
-        game = session.exec(select(Game).where(Game.provider_event_id == event_id)).first()
-        if game is None:
-            continue
-        hit = session.exec(
-            select(OddsHistory.id)
-            .where(OddsHistory.game_id == game.id)
-            .where(OddsHistory.captured_at >= tip_off - timedelta(minutes=window_minutes))
-            .where(OddsHistory.captured_at <= tip_off)
-            .limit(1)
+def events_with_marker(session: Session, events: Sequence[Dict], kind: str) -> Set[str]:
+    """Event ids whose game already has a capture marker of `kind` (see odds_snapshot_capture)."""
+    if kind not in CAPTURE_KINDS:
+        raise ValueError(f"unknown capture kind: {kind}")
+    event_ids = [e["id"] for e in events if e.get("id")]
+    if not event_ids:
+        return set()
+    rows = session.exec(
+        select(Game.provider_event_id)
+        .join(OddsSnapshotCapture, OddsSnapshotCapture.game_id == Game.id)
+        .where(Game.provider_event_id.in_(event_ids))
+        .where(OddsSnapshotCapture.kind == kind)
+    ).all()
+    return set(rows)
+
+
+def record_capture(
+    session: Session,
+    game_id: int,
+    kind: str,
+    captured_at: datetime,
+    credits_spent: int = 0,
+    quotes_seen: int = 0,
+    quotes_inserted: int = 0,
+) -> Optional[OddsSnapshotCapture]:
+    """
+    Writes a capture marker. `closing` / `closing_props` are unique per game: when one already
+    exists (or another run wins the race on the unique index) nothing is written and None is
+    returned, so a duplicate never crashes a run. `opening` markers may repeat.
+    """
+    if kind not in CAPTURE_KINDS:
+        raise ValueError(f"unknown capture kind: {kind}")
+    if kind != CAPTURE_OPENING:
+        existing = session.exec(
+            select(OddsSnapshotCapture.id)
+            .where(OddsSnapshotCapture.game_id == game_id)
+            .where(OddsSnapshotCapture.kind == kind)
         ).first()
-        if hit is not None:
-            captured.add(event_id)
-    return captured
+        if existing is not None:
+            return None
+    marker = OddsSnapshotCapture(
+        game_id=game_id,
+        kind=kind,
+        captured_at=captured_at,
+        credits_spent=credits_spent,
+        quotes_seen=quotes_seen,
+        quotes_inserted=quotes_inserted,
+    )
+    try:
+        with session.begin_nested():
+            session.add(marker)
+            session.flush()
+    except IntegrityError:
+        logger.warning(f"odds_snapshot: {kind} marker for game {game_id} already exists; keeping the first.")
+        return None
+    return marker
 
 
 @dataclass
 class SnapshotSummary:
     phase: str
-    status: str  # captured | no_events | nothing_due | aborted_low_credits
+    status: str  # captured | no_events | nothing_due | aborted_low_credits | call_failed
     message: str = ""
     events_considered: int = 0
     events_targeted: int = 0
@@ -166,6 +233,7 @@ class SnapshotSummary:
     prop_quotes: int = 0
     prop_calls: int = 0
     credits_planned: int = 0
+    markers_written: int = 0
 
     @property
     def credits_spent(self) -> Optional[int]:
@@ -185,7 +253,11 @@ def run_snapshot(
     bookmakers: Sequence[str] = DEFAULT_BOOKMAKERS,
     now: Optional[datetime] = None,
 ) -> SnapshotSummary:
-    """Captures one snapshot. Spends credits only when there is something to record."""
+    """
+    Captures one snapshot. Spends credits only when there is something to record, and writes a
+    capture marker only after a call returned HTTP 200 (a failed call writes none, so the next
+    run retries it).
+    """
     if phase not in PHASES:
         raise ValueError(f"unknown phase: {phase}")
     now = now or datetime.now(timezone.utc)
@@ -200,51 +272,135 @@ def run_snapshot(
         return summary
 
     if phase == "closing":
-        captured = events_with_closing_snapshot(session, events, window_minutes)
-        targets = select_closing_events(events, now, window_minutes, captured)
-        if not targets:
-            summary.status = "nothing_due"
-            summary.message = (
-                f"No event tips off within {window_minutes} min without a closing snapshot "
-                "(no credits spent)."
+        lines_targets = select_closing_events(
+            events, now, window_minutes, events_with_marker(session, events, CAPTURE_CLOSING)
+        )
+        props_pool = (
+            select_closing_events(
+                events, now, window_minutes, events_with_marker(session, events, CAPTURE_CLOSING_PROPS)
             )
-            return summary
+            if props_events > 0 and props_markets
+            else []
+        )
     else:
-        targets = sorted(events, key=lambda e: (_commence(e) or now, e["id"]))
-    summary.events_targeted = len(targets)
+        lines_targets = sorted(events, key=lambda e: (_commence(e) or now, e["id"]))
+        props_pool = lines_targets if props_events > 0 and props_markets else []
 
-    allowed, reason = credit_guard(service.requests_remaining, GAME_LINES_CREDITS, min_remaining)
+    # Games must exist before markers (FK) or quotes can be stored; unresolved teams/seasons are skipped.
+    ingestion = OddsIngestionService(session)
+    games: Dict[str, Game] = {}
+    for event in {e["id"]: e for e in [*lines_targets, *props_pool]}.values():
+        tip_off = _commence(event)
+        if tip_off and event.get("home_team") and event.get("away_team"):
+            game = ingestion.upsert_game(event["id"], tip_off, event["home_team"], event["away_team"])
+            if game is not None:
+                games[event["id"]] = game
+    if phase == "closing":
+        # A game we cannot store quotes or markers for would be re-fetched (and re-paid) every run.
+        lines_targets = [e for e in lines_targets if e["id"] in games]
+        props_pool = [e for e in props_pool if e["id"] in games]
+    props_targets = props_pool[:props_events]
+
+    summary.events_targeted = len({e["id"] for e in [*lines_targets, *props_targets]})
+    if phase == "closing" and not lines_targets and not props_targets:
+        summary.status = "nothing_due"
+        summary.message = (
+            f"No event tips off within {window_minutes} min without a pending closing capture "
+            "(no credits spent)."
+        )
+        session.commit()
+        return summary
+
+    if lines_targets:
+        allowed, reason = credit_guard(service.requests_remaining, GAME_LINES_CREDITS, min_remaining)
+    else:  # every due game already has its closing marker: props-only run
+        allowed, reason = credit_guard(service.requests_remaining, len(props_markets), min_remaining)
     if not allowed:
         summary.status = "aborted_low_credits"
         summary.message = f"Aborted before spending: {reason}."
+        session.commit()
         return summary
 
-    ingestion = OddsIngestionService(session)
-    for event in targets:
-        tip_off = _commence(event)
-        if tip_off and event.get("home_team") and event.get("away_team"):
-            ingestion.upsert_game(event["id"], tip_off, event["home_team"], event["away_team"])
+    if lines_targets:
+        quotes = service.fetch_game_lines(bookmakers)
+        summary.credits_planned += GAME_LINES_CREDITS
+        if not service.last_call_ok:
+            summary.status = "call_failed"
+            summary.message = "Game-lines call failed; no markers written, the next run will retry."
+            session.commit()
+            summary.remaining_after = service.requests_remaining
+            return summary
+        _store_game_lines(session, ingestion, summary, phase, lines_targets, games, quotes, now)
+        session.commit()
 
-    target_ids = {e["id"] for e in targets}
-    lines = [q for q in service.fetch_game_lines(bookmakers) if q.event_id in target_ids]
-    summary.credits_planned += GAME_LINES_CREDITS
-    summary.game_line_quotes = len(lines)
-    summary.game_lines = ingestion.ingest_game_quotes(lines, now)
-
-    for event in targets[:props_events]:
+    for event in props_targets:
         allowed, reason = credit_guard(service.requests_remaining, len(props_markets), min_remaining)
         if not allowed:
             summary.message = f"Props stopped early: {reason}."
             break
-        quotes = service.fetch_event_prop_quotes(event["id"], markets=list(props_markets))
+        prop_quotes = service.fetch_event_prop_quotes(event["id"], markets=list(props_markets))
         summary.credits_planned += len(props_markets)
+        if not service.last_call_ok:
+            summary.message = f"Props call failed for event {event['id']}; no marker written, will retry."
+            continue
         summary.prop_calls += 1
-        summary.prop_quotes += len(quotes)
-        summary.props = summary.props.merge(ingestion.ingest_prop_quotes(event["id"], quotes, now))
+        summary.prop_quotes += len(prop_quotes)
+        result = ingestion.ingest_prop_quotes(event["id"], prop_quotes, now)
+        summary.props = summary.props.merge(result)
+        if phase == "closing" and record_capture(
+            session,
+            games[event["id"]].id,
+            CAPTURE_CLOSING_PROPS,
+            now,
+            credits_spent=len(props_markets),
+            quotes_seen=len(prop_quotes),
+            quotes_inserted=result.inserted,
+        ):
+            summary.markers_written += 1
+        session.commit()
 
     session.commit()  # persists games created for targets even if no quote rows were inserted
     summary.remaining_after = service.requests_remaining
     return summary
+
+
+def _store_game_lines(
+    session: Session,
+    ingestion: OddsIngestionService,
+    summary: SnapshotSummary,
+    phase: str,
+    targets: Sequence[Dict],
+    games: Dict[str, Game],
+    quotes: Sequence[GameQuote],
+    now: datetime,
+) -> None:
+    """
+    Ingests a successful game-lines response and marks every targeted game, even those with 0 new
+    rows. The call's credits are recorded on the first marker (earliest tip-off); the others carry 0.
+    """
+    kind = CAPTURE_CLOSING if phase == "closing" else CAPTURE_OPENING
+    by_event: Dict[str, List[GameQuote]] = {}
+    for quote in quotes:
+        by_event.setdefault(quote.event_id, []).append(quote)
+
+    credits_left = GAME_LINES_CREDITS
+    for event in targets:
+        event_quotes = by_event.get(event["id"], [])
+        result = ingestion.ingest_game_quotes(event_quotes, now) if event_quotes else IngestResult()
+        summary.game_line_quotes += len(event_quotes)
+        summary.game_lines = summary.game_lines.merge(result)
+        game = games.get(event["id"])  # opening may target events whose teams/season did not resolve
+        if game is not None and record_capture(
+            session,
+            game.id,
+            kind,
+            now,
+            credits_spent=credits_left,
+            quotes_seen=len(event_quotes),
+            quotes_inserted=result.inserted,
+        ):
+            summary.markers_written += 1
+            credits_left = 0
 
 
 def format_summary(summary: SnapshotSummary) -> str:
@@ -264,6 +420,7 @@ def format_summary(summary: SnapshotSummary) -> str:
             f"  props: {summary.prop_calls} calls, {summary.prop_quotes} quotes -> inserted {p.inserted}, "
             f"duplicate {p.skipped_duplicate}, unmatched {p.skipped_unmatched}, invalid {p.skipped_invalid}"
         )
+        lines.append(f"  markers: {summary.markers_written} written")
         lines.append(f"  credits: ~{summary.credits_planned} estimated")
     spent = summary.credits_spent
     if spent is not None:
@@ -278,6 +435,10 @@ def format_plan(plan: SnapshotPlan, min_remaining: int) -> str:
     for index, step in enumerate(plan.steps, start=1):
         lines.append(f"  {index}. {step.label} -> {step.credits} credit(s)")
     lines.append(f"  worst-case cost: {plan.total_credits} credits (guard floor: {min_remaining})")
+    if plan.props_only_credits != plan.total_credits:
+        lines.append(
+            f"  props-only run (every due game already has a closing marker): {plan.props_only_credits} credits"
+        )
     return "\n".join(lines)
 
 

@@ -684,3 +684,60 @@ class SimulatedBet(SQLModel, table=True):
         default=None, sa_column=_timestamptz(server_default=func.now())
     )
     settled_at: Optional[datetime] = Field(default=None, sa_column=_timestamptz())
+
+
+# Explicit capture markers for the odds snapshot job. `odds_history` alone cannot say
+# "this game was already captured": an unchanged-price run inserts 0 rows (the unique key
+# includes book_last_update). One row per successful paid call group.
+CAPTURE_OPENING = "opening"
+CAPTURE_CLOSING = "closing"
+CAPTURE_CLOSING_PROPS = "closing_props"
+CAPTURE_KINDS = (CAPTURE_OPENING, CAPTURE_CLOSING, CAPTURE_CLOSING_PROPS)
+
+
+class OddsSnapshotCapture(SQLModel, table=True):
+    """
+    Marker written after a successful snapshot API call for a game.
+
+    kind 'closing' / 'closing_props' are unique per game (the job never re-spends credits on
+    them); 'opening' is informational and may repeat (one per daily opening run).
+    credits_spent is the nominal cost of the call: game-lines credits sit on the first marker
+    of the call, props credits on that event's closing_props marker.
+    """
+
+    __tablename__ = "odds_snapshot_capture"
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('opening', 'closing', 'closing_props')", name="ck_odds_snapshot_capture_kind"
+        ),
+        Index("ix_odds_snapshot_capture_game_id", "game_id"),
+        Index(
+            "uq_odds_snapshot_capture_closing",
+            "game_id",
+            "kind",
+            unique=True,
+            postgresql_where=text("kind IN ('closing', 'closing_props')"),
+            sqlite_where=text("kind IN ('closing', 'closing_props')"),
+        ),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    game_id: int = Field(
+        sa_column=Column(_BIG_ID, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    )
+    kind: str = Field(sa_column=Column(Text, nullable=False))
+    captured_at: Optional[datetime] = Field(
+        default=None, sa_column=_timestamptz(nullable=False, server_default=func.now())
+    )
+    credits_spent: int = Field(
+        default=0, sa_column=Column(SmallInteger, nullable=False, server_default=text("0"))
+    )
+    quotes_seen: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+    quotes_inserted: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )

@@ -409,3 +409,35 @@ def test_httpx_request_logs_are_silenced_to_keep_api_key_out_of_logs():
     import logging
 
     assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
+
+
+def _patch_status(monkeypatch, status, payload):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, json=payload, headers={"x-requests-remaining": "490"})
+
+    monkeypatch.setattr(
+        odds_api_service.httpx,
+        "Client",
+        lambda *a, **k: REAL_CLIENT(transport=httpx.MockTransport(handler), timeout=k.get("timeout")),
+    )
+
+
+def test_last_call_ok_distinguishes_an_empty_success_from_a_failed_call(monkeypatch):
+    service = OddsApiService(api_key="real-key")
+    assert service.last_call_ok is False
+
+    _patch_status(monkeypatch, 200, [])
+    assert service.fetch_game_lines(["pinnacle"]) == []
+    assert service.last_call_ok is True  # HTTP 200 with no quotes is still a successful call
+
+    _patch_status(monkeypatch, 500, {"message": "boom"})
+    assert service.fetch_game_lines(["pinnacle"]) == []
+    assert service.last_call_ok is False
+
+    _patch_status(monkeypatch, 200, {"bookmakers": []})
+    assert service.fetch_event_prop_quotes("evt", markets=["player_points"]) == []
+    assert service.last_call_ok is True
+
+    _patch_status(monkeypatch, 422, {"message": "bad"})
+    assert service.fetch_event_prop_quotes("evt", markets=["player_points"]) == []
+    assert service.last_call_ok is False

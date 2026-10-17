@@ -210,6 +210,9 @@ class OddsApiService:
         self.requests_remaining: Optional[int] = None
         self.requests_used: Optional[int] = None
         self.last_fetch_live: bool = False  # True only if the last get_slate_props_map() returned live lines
+        # True only if the last fetch_game_lines()/fetch_event_prop_quotes() got HTTP 200 and parsed it;
+        # an empty result list alone cannot tell "no quotes" from "the call failed".
+        self.last_call_ok: bool = False
 
     @property
     def is_configured(self) -> bool:
@@ -243,6 +246,7 @@ class OddsApiService:
         (cost: 3 markets x 1 = 3 credits for up to 10 bookmakers). One GameQuote per
         bookmaker / market / side; malformed outcomes are skipped, never repaired.
         """
+        self.last_call_ok = False
         if not self.is_configured:
             return []
 
@@ -268,7 +272,9 @@ class OddsApiService:
                 if res.status_code != 200:
                     logger.error(f"OddsApiService: Error fetching game lines: {res.status_code} - {res.text}")
                     return []
-                return parse_game_quotes(res.json())
+                quotes = parse_game_quotes(res.json())
+                self.last_call_ok = True
+                return quotes
         except Exception as e:
             logger.error(f"OddsApiService: Exception during fetch_game_lines: {e}")
             return []
@@ -281,6 +287,7 @@ class OddsApiService:
         market costs 1 credit). One OddsQuote per bookmaker / market / player / side; nothing is
         merged or overwritten.
         """
+        self.last_call_ok = False
         if not self.is_configured:
             return []
 
@@ -341,6 +348,7 @@ class OddsApiService:
             logger.error(f"OddsApiService: Error fetching props for event {event_id}: {e}")
             return []
 
+        self.last_call_ok = True
         return quotes
 
     def get_slate_props_map(self) -> Dict[str, Dict[str, PropBetLine]]:
