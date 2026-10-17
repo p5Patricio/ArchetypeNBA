@@ -1209,6 +1209,14 @@ export interface PropItem {
   recommendation: string;
   risk_level: string;
   reasoning: string;
+  // Absent on slates cached before these fields existed. edge_pct, expected_value_pct,
+  // kelly_stake_pct and book_implied_prob refer to `side`; prob_over and over_odds do not.
+  side?: "over" | "under";
+  under_odds?: number | null;
+  prob_under?: number | null;
+  bookmaker?: string | null;
+  devigged?: boolean;
+  fair_prob?: number | null;
 }
 
 export interface TodayPropsResponse {

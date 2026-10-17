@@ -56,7 +56,7 @@ def build_telegram_message(
     slate_summary: str,
     results: list[PropSimulationResult],
     gemini_active: bool,
-    odds_source: str = "The Odds API (Consenso Vegas)",
+    odds_source: str = "The Odds API",
 ) -> str:
     """Formats an executive summary report optimized for Telegram Markdown."""
     model_label = settings.GEMINI_MODEL.replace("models/", "").replace("-", " ").title()
@@ -111,6 +111,44 @@ def build_telegram_message(
     return header + context_sec + picks_sec + alerts_sec + footer
 
 
+def evaluate_players(
+    engine: PropsEngine,
+    baselines: list[PlayerBaseline],
+    props_map: dict,
+    modifier_map: dict,
+) -> list[PropSimulationResult]:
+    """Evaluates one live prop per player; a player without a live line is skipped, never given a made-up one."""
+    results: list[PropSimulationResult] = []
+    for player in baselines:
+        player_props = props_map.get(player.name, {})
+        # Use available stat prop (prefer PTS or PRA or REB)
+        prop_line = (
+            player_props.get("PTS")
+            or player_props.get("PRA")
+            or player_props.get("REB")
+        )
+        if prop_line is None:
+            logger.info(f"No live line for {player.name}; skipping.")
+            continue
+        mod = modifier_map.get(player.name.lower())
+
+        min_mult = mod.minute_multiplier if mod else 1.0
+        usage_mult = mod.usage_multiplier if mod else 1.0
+        risk = mod.risk_level if mod else "LOW"
+        summary = mod.tactical_summary if mod else "Standard rotation baseline."
+
+        res = engine.evaluate_prop(
+            player=player,
+            prop=prop_line,
+            minute_multiplier=min_mult,
+            usage_multiplier=usage_mult,
+            risk_level=risk,
+            tactical_summary=summary,
+        )
+        results.append(res)
+    return results
+
+
 def run_pipeline(dry_run: bool = False) -> bool:
     """Executes the complete daily props intelligence workflow."""
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -148,34 +186,7 @@ def run_pipeline(dry_run: bool = False) -> bool:
     if not baselines:
         baselines = engine.get_standard_star_baselines()
 
-    results: list[PropSimulationResult] = []
-    for player in baselines:
-        player_props = props_map.get(player.name, {})
-        # Use available stat prop (prefer PTS or PRA or REB)
-        prop_line = (
-            player_props.get("PTS")
-            or player_props.get("PRA")
-            or player_props.get("REB")
-        )
-        if prop_line is None:
-            logger.info(f"No live line for {player.name}; skipping.")
-            continue
-        mod = modifier_map.get(player.name.lower())
-
-        min_mult = mod.minute_multiplier if mod else 1.0
-        usage_mult = mod.usage_multiplier if mod else 1.0
-        risk = mod.risk_level if mod else "LOW"
-        summary = mod.tactical_summary if mod else "Standard rotation baseline."
-
-        res = engine.evaluate_prop(
-            player=player,
-            prop=prop_line,
-            minute_multiplier=min_mult,
-            usage_multiplier=usage_mult,
-            risk_level=risk,
-            tactical_summary=summary,
-        )
-        results.append(res)
+    results = evaluate_players(engine, baselines, props_map, modifier_map)
 
     # 5. Generate formatted report
     odds_label = "The Odds API (En Vivo)" if odds_service.last_fetch_live else "The Odds API (Sin líneas en vivo)"

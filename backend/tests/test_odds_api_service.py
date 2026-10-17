@@ -175,3 +175,79 @@ def test_selection_prefers_two_sided_over_better_one_sided_price():
 
 def test_selection_ignores_under_only_players():
     assert select_best_lines([_q("a", "under", 20.5, -110)]) == {}
+
+
+def _patch_client(monkeypatch, handler):
+    monkeypatch.setattr(
+        odds_api_service.httpx,
+        "Client",
+        lambda *a, **k: REAL_CLIENT(transport=httpx.MockTransport(handler)),
+    )
+
+
+def test_quotes_with_missing_point_or_price_are_skipped(monkeypatch):
+    payload = {
+        "bookmakers": [
+            _book("alpha", "2026-10-06T18:00:00Z", "player_points", [
+                {"name": "Over", "description": "Test Player", "price": -110},  # no point
+                {"name": "Under", "description": "Test Player", "point": 24.5},  # no price
+                {"name": "Over", "description": None, "point": 24.5, "price": -110},  # no player
+                {"name": "Push", "description": "Test Player", "point": 24.5, "price": -110},  # unknown side
+                _outcome("Over", "Test Player", 25.5, -108),  # the only complete quote
+            ]),
+        ]
+    }
+    _patch_client(monkeypatch, lambda request: httpx.Response(200, json=payload))
+
+    quotes = OddsApiService(api_key="real-key").fetch_event_prop_quotes("evt1")
+
+    assert len(quotes) == 1
+    assert (quotes[0].line, quotes[0].price_american, quotes[0].side) == (25.5, -108, "over")
+
+
+def test_non_200_props_response_returns_no_quotes_and_not_live(monkeypatch):
+    def handler(request):
+        if request.url.path.endswith("/events"):
+            return httpx.Response(200, json=[{"id": "evt1"}])
+        return httpx.Response(500, json={"message": "boom"})
+
+    _patch_client(monkeypatch, handler)
+    service = OddsApiService(api_key="real-key")
+
+    assert service.fetch_event_prop_quotes("evt1") == []
+    assert service.get_slate_props_map() == {}
+    assert service.last_fetch_live is False
+
+
+def test_http_exception_returns_no_quotes_and_not_live(monkeypatch):
+    def handler(request):
+        raise httpx.ConnectError("network down", request=request)
+
+    _patch_client(monkeypatch, handler)
+    service = OddsApiService(api_key="real-key")
+
+    assert service.fetch_upcoming_events() == []
+    assert service.fetch_event_prop_quotes("evt1") == []
+    assert service.get_slate_props_map() == {}
+    assert service.last_fetch_live is False
+
+
+def test_failed_refetch_resets_last_fetch_live(monkeypatch):
+    state = {"fail": False}
+
+    def handler(request):
+        if state["fail"]:
+            return httpx.Response(503, json={})
+        if request.url.path.endswith("/events"):
+            return httpx.Response(200, json=[{"id": "evt1"}])
+        return httpx.Response(200, json=EVENT_PAYLOAD)
+
+    _patch_client(monkeypatch, handler)
+    service = OddsApiService(api_key="real-key")
+
+    assert service.get_slate_props_map()
+    assert service.last_fetch_live is True
+
+    state["fail"] = True
+    assert service.get_slate_props_map() == {}
+    assert service.last_fetch_live is False

@@ -13,7 +13,6 @@ from app.services.odds_api_service import OddsApiService
 from app.services.telegram_service import TelegramService
 from app.analytics.props_engine import (
     PropsEngine,
-    PropBetLine,
     PropSimulationResult,
 )
 
@@ -29,6 +28,9 @@ CACHE_FILE = DATA_DIR / "last_props_cache.json"
 _cached_response: Optional["TodayPropsResponse"] = None
 _last_computed_time: Optional[float] = None
 CACHE_TTL_SECONDS = 3600  # 1 hour in memory
+
+ODDS_SOURCE_LIVE = "The Odds API (En Vivo)"
+ODDS_SOURCE_NO_LIVE = "The Odds API (Sin líneas en vivo)"
 
 
 class PropItemResponse(BaseModel):
@@ -49,6 +51,14 @@ class PropItemResponse(BaseModel):
     recommendation: str
     risk_level: str
     reasoning: str
+    # Fields below default so slates cached before they existed still load. edge_pct, expected_value_pct,
+    # kelly_stake_pct and book_implied_prob refer to `side`; prob_over and over_odds keep their meaning.
+    side: str = "over"
+    under_odds: Optional[int] = None
+    prob_under: Optional[float] = None
+    bookmaker: Optional[str] = None
+    devigged: bool = False
+    fair_prob: Optional[float] = None
 
 
 class TodayPropsResponse(BaseModel):
@@ -102,16 +112,28 @@ def _send_telegram_report(response: TodayPropsResponse) -> bool:
     if not value_picks:
         value_picks = sorted(response.items, key=lambda x: x.edge_pct, reverse=True)[:3]
 
+    if not value_picks:
+        picks_sec += "_Sin líneas en vivo: no hay picks para evaluar._\n\n"
+
     for p in value_picks[:4]:
+        side_label = p.side.capitalize()
+        side_odds = p.under_odds if p.side == "under" and p.under_odds is not None else p.over_odds
+        if p.side == "under" and p.prob_under is not None:
+            side_prob = p.prob_under
+        elif p.side == "under":
+            side_prob = 1.0 - p.prob_over  # slate cached before prob_under existed
+        else:
+            side_prob = p.prob_over
+        book_note = f" · {p.bookmaker}" if p.bookmaker else ""
         emoji = "🟢" if "STRONG" in p.recommendation else "🟡"
         edge_fmt = f"+{p.edge_pct:.1f}%" if p.edge_pct > 0 else f"{p.edge_pct:.1f}%"
         ev_fmt = f"+{p.expected_value_pct:.1f}%" if p.expected_value_pct > 0 else f"{p.expected_value_pct:.1f}%"
         picks_sec += (
             f"{emoji} *{p.player_name}* ({p.team})\n"
-            f"   • *Prop:* {p.stat_type} Línea: *{p.line}* (Cuota: {p.over_odds:+d})\n"
+            f"   • *Prop:* {p.stat_type} Línea: *{p.line}* (Cuota {side_label}: {side_odds:+d}{book_note})\n"
             f"   • *Dictamen:* {p.recommendation} | *Edge:* `{edge_fmt}` | *EV:* `{ev_fmt}`\n"
             f"   • *Proyección:* Media: *{p.projected_mean:.1f}* | Rango P10-P90: [{p.projected_p10:.1f} - {p.projected_p90:.1f}]\n"
-            f"   • *Prob. Over:* `{p.prob_over * 100:.1f}%` (Libro: `{p.book_implied_prob * 100:.1f}%`)\n"
+            f"   • *Prob. {side_label}:* `{side_prob * 100:.1f}%` (Libro: `{p.book_implied_prob * 100:.1f}%`)\n"
         )
         if p.reasoning:
             picks_sec += f"   • *Contexto IA:* _{p.reasoning}_\n"
@@ -132,7 +154,7 @@ def _send_telegram_report(response: TodayPropsResponse) -> bool:
     )
 
     msg = header + context_sec + picks_sec + alerts_sec + footer
-    return telegram.send_message(msg)
+    return telegram.send_message_sync(msg)
 
 
 def _compute_today_props() -> TodayPropsResponse:
@@ -169,13 +191,9 @@ def _compute_today_props() -> TodayPropsResponse:
     value_count = 0
 
     for player in baselines:
+        # Only real quoted lines are evaluated; a player without a live line is skipped.
         player_props = props_map.get(player.name, {})
-        available_lines = [
-            player_props.get("PTS", PropBetLine(stat_type="PTS", line=22.5)),
-            player_props.get("REB"),
-            player_props.get("AST"),
-            player_props.get("PRA"),
-        ]
+        available_lines = [player_props.get(stat) for stat in ("PTS", "REB", "AST", "PRA")]
 
         mod = modifier_map.get(player.name.lower())
         min_mult = mod.minute_multiplier if mod else 1.0
@@ -218,12 +236,18 @@ def _compute_today_props() -> TodayPropsResponse:
                     recommendation=res.recommendation,
                     risk_level=res.risk_level,
                     reasoning=res.reasoning,
+                    side=res.side,
+                    under_odds=res.under_odds,
+                    prob_under=res.prob_under,
+                    bookmaker=res.bookmaker,
+                    devigged=res.devigged,
+                    fair_prob=res.fair_prob,
                 )
             )
 
     model_label = settings.GEMINI_MODEL.replace("models/", "").replace("-", " ").title()
     ai_label = model_label if analysis.engine_source == "GEMINI" else "Modo Heurístico Local"
-    odds_label = "The Odds API (En Vivo)" if odds_service.is_configured else "The Odds API (Consenso)"
+    odds_label = ODDS_SOURCE_LIVE if odds_service.last_fetch_live else ODDS_SOURCE_NO_LIVE
 
     resp = TodayPropsResponse(
         date=today_str,
