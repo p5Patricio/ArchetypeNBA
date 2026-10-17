@@ -54,3 +54,4 @@ skills-lock.json
 
 # Runtime caches
 backend/app/data/last_props_cache.json
+.codex-run-logs/
