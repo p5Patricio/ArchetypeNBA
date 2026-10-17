@@ -71,6 +71,14 @@ Game lines are the cheapest data under the free quota (3 credits per slate call)
 - SportsGameOdds second feed.
 - Excel legacy cleanup.
 
+## E4 design (decided 2026-10-17)
+- Single source of truth for results stays `player_game_log` (Elo reads it): reuse the existing nba_api ingestion (`scripts/bulk_ingest_nba.py`, free, no key) for the current season incrementally instead of adding a second results path; if it is too heavy per tick, use the team-level LeagueGameLog behind a provider interface and keep Elo consistent. A provider interface (Protocol) keeps tests offline.
+- After ingestion: set `game.nba_game_id`, scores and `status='final'` by matching home/away team + date (+-1 day); then `EloRatingService.update_new_games()`; then settle bets; then fill CLV; then the recorder (so predictions use fresh ratings). Tick step order: opening, closing, results, record.
+- Settlement: h2h by winner; spreads by margin + line_taken (home bet: home_margin + line; away bet: away_margin + line); profit won = stake*(price-1), lost = -stake, push/void = 0.
+- CLV: only for games with a `closing` marker, closing quote captured after the bet, same sportsbook, market, side and line; otherwise NULL (never a stale opening price). Report coverage.
+- Report CLI: v_paper_performance by strategy + CLV coverage + Brier of the model vs Brier of Pinnacle's de-vigged close on the same final games (the skill test).
+- The results step only calls the network when a game that tipped off more than 3 h ago is not final.
+
 ## Notes for E2/E4 (resolved in E2: recorder derives the season from the tip-off date and applies carryover)
 - `EloRatingService.current_ratings(for_season_id=...)` applies the 25% regression once when a team's latest game is in an earlier season; `game.season_id` is wrong for 2026-27 (no season row), so the recorder must create/resolve the 2026-27 season and pass it explicitly. Opening-night ratings must include the carryover.
 - Sigma comes from the registered model_version (14.14).
