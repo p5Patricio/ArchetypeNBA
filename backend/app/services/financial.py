@@ -53,9 +53,12 @@ class FinancialService:
         self.session = session
 
     def get_financial_analytics(self) -> FinancialAnalyticsResponse:
-        # Retrieve recent season (e.g. 2023-24 or active)
+        # Most recent season that actually has player stats. Seasons created ahead of time (e.g. the
+        # upcoming season for scheduled games) have no stats and must not be picked.
         active_season = self.session.exec(
-            select(Season).order_by(Season.id.desc())
+            select(Season)
+            .where(select(PlayerSeasonStats.id).where(PlayerSeasonStats.season_id == Season.id).exists())
+            .order_by(Season.id.desc())
         ).first()
 
         if not active_season:
