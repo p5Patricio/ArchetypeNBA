@@ -647,6 +647,8 @@ class SimulatedBet(SQLModel, table=True):
             sqlite_where=text("status = 'pending'"),
         ),
         Index("ix_simulated_bet_strategy_placed", "strategy", "placed_at"),
+        # One paper bet per prediction and staking strategy (the recorder is idempotent).
+        Index("uq_simulated_bet_prediction_strategy", "prediction_id", "strategy", unique=True),
     )
 
     id: Optional[int] = Field(

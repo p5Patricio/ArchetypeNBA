@@ -139,7 +139,12 @@ def test_clv_is_computed_only_when_closing_price_is_set(db_session, world):
 
     open_bet = _bet(world, odds, prediction)
     closed_bet = _bet(
-        world, odds, prediction, closing_price=Decimal("2.0000"), closing_odds_id=odds.id
+        world,
+        odds,
+        prediction,
+        strategy=StakingStrategy.kelly_fractional,
+        closing_price=Decimal("2.0000"),
+        closing_odds_id=odds.id,
     )
     db_session.add_all([open_bet, closed_bet])
     db_session.commit()
@@ -177,5 +182,19 @@ def test_settled_bet_requires_settled_at(db_session, world):
     prediction = _prediction(db_session, world, "0.45000")
 
     db_session.add(_bet(world, odds, prediction, status=BetStatus.won))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+
+def test_one_bet_per_prediction_and_strategy(db_session, world):
+    odds = _odds(world, 150)
+    db_session.add(odds)
+    db_session.commit()
+    prediction = _prediction(db_session, world, "0.45000")
+    db_session.add(_bet(world, odds, prediction))
+    db_session.add(_bet(world, odds, prediction, strategy=StakingStrategy.kelly_fractional))
+    db_session.commit()  # same prediction, different strategy: fine
+
+    db_session.add(_bet(world, odds, prediction))
     with pytest.raises(IntegrityError):
         db_session.commit()
