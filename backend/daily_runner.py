@@ -36,6 +36,8 @@ from app.analytics.props_engine import (
     PropsEngine,
     PropSimulationResult,
     PlayerBaseline,
+    index_props_by_player,
+    normalize_player_key,
 )
 
 # Setup logging
@@ -119,8 +121,10 @@ def evaluate_players(
 ) -> list[PropSimulationResult]:
     """Evaluates one live prop per player; a player without a live line is skipped, never given a made-up one."""
     results: list[PropSimulationResult] = []
+    # API names carry diacritics ("Luka Dončić"); baselines usually do not.
+    props_by_key = index_props_by_player(props_map)
     for player in baselines:
-        player_props = props_map.get(player.name, {})
+        player_props = props_by_key.get(normalize_player_key(player.name), {})
         # Use available stat prop (prefer PTS or PRA or REB)
         prop_line = (
             player_props.get("PTS")

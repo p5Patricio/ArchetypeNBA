@@ -14,6 +14,8 @@ from app.services.telegram_service import TelegramService
 from app.analytics.props_engine import (
     PropsEngine,
     PropSimulationResult,
+    index_props_by_player,
+    normalize_player_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -171,7 +173,7 @@ def _compute_today_props() -> TodayPropsResponse:
 
     # 3. Retrieve live sportsbook lines via The Odds API
     odds_service = OddsApiService()
-    props_map = odds_service.get_slate_props_map()
+    props_map = index_props_by_player(odds_service.get_slate_props_map())
 
     # 4. Quantitative simulations with PropsEngine
     engine = PropsEngine(simulation_runs=settings.PROPS_SIMULATION_RUNS)
@@ -192,7 +194,7 @@ def _compute_today_props() -> TodayPropsResponse:
 
     for player in baselines:
         # Only real quoted lines are evaluated; a player without a live line is skipped.
-        player_props = props_map.get(player.name, {})
+        player_props = props_map.get(normalize_player_key(player.name), {})
         available_lines = [player_props.get(stat) for stat in ("PTS", "REB", "AST", "PRA")]
 
         mod = modifier_map.get(player.name.lower())
