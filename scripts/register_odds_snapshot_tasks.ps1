@@ -65,7 +65,7 @@ if (($PythonExe -ne "python") -and -not (Test-Path $PythonExe)) {
 }
 
 function New-SnapshotAction([string]$Phase, [string]$ExtraArgs) {
-    $inner = "& '$PythonExe' -u '$CaptureScript' --phase $Phase $ExtraArgs *>> '$LogFile'"
+    $inner = "& '$PythonExe' -u '$CaptureScript' --phase $Phase $ExtraArgs 2>&1 | Out-File -FilePath '$LogFile' -Append -Encoding utf8; exit `$LASTEXITCODE"
     $arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$inner`""
     return New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arguments -WorkingDirectory $BackendDir
 }

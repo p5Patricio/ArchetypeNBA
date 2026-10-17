@@ -29,9 +29,9 @@ Make unattended odds capture reliable and credit-safe before the 2026-27 NBA sea
 
 ## Tasks
 - [ ] S1 Merge PRs #1-#6 into main — BLOCKED: denied by permission classifier; waiting for the user.
-- [ ] S2 Capture marker table, migration, service logic, tests — route: delegated writer
-- [ ] S3 Registration script: closing from 10:30 local — route: delegated writer (same writer, separate commit)
-- [ ] S4 Apply migration to the local DB, register tasks, run one live verification — route: inline (bounded actions)
+- [x] S2 Capture marker table, migration, service logic, tests — route: delegated writer. Commit 2f66f98: `odds_snapshot_capture` (kinds opening/closing/closing_props, partial unique index), success-only markers via `OddsApiService.last_call_ok`, props-only runs spend only props credits. Checks: pytest 168 passed; offline alembic up/down render. Worst case ~18 credits/day (~504/month) if every game spans two runs; guard floor 25 protects the quota.
+- [x] S3 Registration script: closing from 10:30 local — route: delegated writer (same writer, separate commit). Commit 2575ea0.
+- [x] S4 Apply migration to the local DB, register tasks, run one live verification — route: inline (bounded actions). Migration b7d41e9a2c85 applied to the real DB. Tasks NBA-Odds-Opening (11:00) and NBA-Odds-Closing (10:30-23:30 every 30 min) registered, state Ready. Live opening run: 804 quotes, 46 markers, quota 497→494. Found and fixed: PowerShell wrapped Python's stderr (exit code 1, UTF-16 log); logging now goes to stdout and the task writes UTF-8 and returns the real exit code. Closing task test run: exit 0, nothing_due, 0 credits.
 - [ ] S5 Push and open PR #7 stacked on #6 — route: inline
 
 ## Acceptance criteria
@@ -47,6 +47,8 @@ Make unattended odds capture reliable and credit-safe before the 2026-27 NBA sea
 
 ## Progress
 - Branch feat/season-readiness created from feat/quant-paper-trading.
+- RDD: S2/S3 slice medium; user declined review.
+- Tasks run the code in the working tree: keep this checkout on a branch containing PR #6 and #7 (or main once merged); switching to an older branch breaks the scheduled captures.
 
 ## Follow-ups (out of scope)
 - Prediction recorder: persist model_prediction / simulated_bet at analysis time (perishable, cannot be backfilled).
@@ -56,4 +58,4 @@ Make unattended odds capture reliable and credit-safe before the 2026-27 NBA sea
 - Shutdown endpoint CSRF hardening (separate spawned task).
 
 ## Next step
-Run S2 and S3.
+S5: push and open PR #7. S1 (merging #1-#6) waits for the user. Then the prediction recorder before opening night (2026-10-20).

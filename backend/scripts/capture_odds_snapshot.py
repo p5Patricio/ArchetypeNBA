@@ -76,7 +76,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        stream=sys.stdout,  # scheduled tasks capture stdout cleanly; stderr gets wrapped as PowerShell errors
+    )
 
     try:
         props_markets = valid_prop_markets([m.strip() for m in args.props_markets.split(",") if m.strip()])
