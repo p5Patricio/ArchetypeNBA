@@ -32,7 +32,7 @@ Make unattended odds capture reliable and credit-safe before the 2026-27 NBA sea
 - [x] S2 Capture marker table, migration, service logic, tests — route: delegated writer. Commit 2f66f98: `odds_snapshot_capture` (kinds opening/closing/closing_props, partial unique index), success-only markers via `OddsApiService.last_call_ok`, props-only runs spend only props credits. Checks: pytest 168 passed; offline alembic up/down render. Worst case ~18 credits/day (~504/month) if every game spans two runs; guard floor 25 protects the quota.
 - [x] S3 Registration script: closing from 10:30 local — route: delegated writer (same writer, separate commit). Commit 2575ea0.
 - [x] S4 Apply migration to the local DB, register tasks, run one live verification — route: inline (bounded actions). Migration b7d41e9a2c85 applied to the real DB. Tasks NBA-Odds-Opening (11:00) and NBA-Odds-Closing (10:30-23:30 every 30 min) registered, state Ready. Live opening run: 804 quotes, 46 markers, quota 497→494. Found and fixed: PowerShell wrapped Python's stderr (exit code 1, UTF-16 log); logging now goes to stdout and the task writes UTF-8 and returns the real exit code. Closing task test run: exit 0, nothing_due, 0 credits.
-- [ ] S5 Push and open PR #7 stacked on #6 — route: inline
+- [x] S5 Push and open PR #7 stacked on #6 — route: inline. https://github.com/p5Patricio/ArchetypeNBA/pull/7 (757 lines, size:exception).
 
 ## Acceptance criteria
 - A closing run is recorded per game even when 0 quotes were inserted; the next run does not spend credits for that game.
@@ -49,6 +49,10 @@ Make unattended odds capture reliable and credit-safe before the 2026-27 NBA sea
 - Branch feat/season-readiness created from feat/quant-paper-trading.
 - RDD: S2/S3 slice medium; user declined review.
 - Tasks run the code in the working tree: keep this checkout on a branch containing PR #6 and #7 (or main once merged); switching to an older branch breaks the scheduled captures.
+
+## Findings
+- `team_elo_rating` and `team_season_stats` are empty (0 rows) although the tables exist: there is no Elo baseline yet. `player_game_log` has ~1,390-1,400 games per season for 2022-23 through 2025-26, enough to build Elo from history.
+- The `season` table has no 2026-27 row (active season is 2025-26); `game.season_id` currently falls back to the latest season.
 
 ## Follow-ups (out of scope)
 - Prediction recorder: persist model_prediction / simulated_bet at analysis time (perishable, cannot be backfilled).
