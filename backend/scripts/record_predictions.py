@@ -71,6 +71,14 @@ def format_summary(summary: RecorderSummary) -> str:
     if eligible:
         lines.append(f"  raw edge of eligible: {_pct([c.raw_edge for c in eligible])}")
         lines.append(f"  EV of eligible: {_pct([c.ev for c in eligible])}")
+    if len(summary.models) > 1:
+        lines.append("models (only the champion bets):")
+        for stats in summary.models.values():
+            lines.append(
+                f"  {stats.name} {stats.version:<8}{stats.role:<11} games {stats.games_predicted:>3}  "
+                f"predictions {verb} {stats.predictions_written} (existing {stats.predictions_existing}), "
+                f"missing ratings {stats.skipped_missing_ratings}"
+            )
     if summary.skipped:
         lines.append("skip reasons:")
         lines.extend(f"  {reason:<28}{count:>5}" for reason, count in sorted(summary.skipped.items()))

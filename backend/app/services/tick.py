@@ -387,6 +387,9 @@ def record_step(ctx: TickContext) -> StepResult:
         f"{summary.games_considered} game(s) in horizon, {summary.games_processed} processed; "
         f"{verb} {summary.predictions_written} prediction(s) ({summary.predictions_existing} existing); bets: {bets}"
     )
+    shadows = [m for m in summary.models.values() if m.role != "champion"]
+    if shadows:
+        message += "; shadow: " + ", ".join(f"{m.name} {m.version}={m.predictions_written}" for m in shadows)
     return StepResult("", STEP_OK, message, f"skipped: {skipped}")
 
 

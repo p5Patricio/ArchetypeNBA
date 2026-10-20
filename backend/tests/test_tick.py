@@ -346,6 +346,28 @@ def test_the_real_recorder_writes_predictions_through_the_tick(world, tmp_path):
     assert len(rows) == 2 and {r.game_id for r in rows} == {game.id}
 
 
+def test_the_tick_records_challenger_predictions_and_reports_them(world, tmp_path):
+    champion = world.exec(select(ModelVersion)).one()
+    challenger = ModelVersion(name=MODEL_NAME, version="2.0", params={"sigma": 13.0, "home_advantage": 90.0})
+    world.add(challenger)
+    world.commit()
+    for rating in world.exec(select(TeamEloRating)).all():
+        world.add(TeamEloRating(
+            model_version_id=challenger.id, team_id=rating.team_id, season_id=rating.season_id, game_id=rating.game_id,
+            game_date=rating.game_date, rating_after=rating.rating_after,
+        ))
+    world.commit()
+    game = _add_game(world, "g1", NOW + timedelta(hours=5))
+
+    summary = _tick(world, FakeService([]), tmp_path=tmp_path, steps=default_steps(skip=["opening", "closing"]))
+
+    record = summary.steps[-1]
+    assert record.status == "ok" and "shadow: elo_538 2.0=2" in record.message
+    rows = world.exec(select(ModelPrediction)).all()
+    assert {(r.model_version_id, r.game_id) for r in rows} == {(champion.id, game.id), (challenger.id, game.id)}
+    assert world.exec(select(SimulatedBet)).all() == []
+
+
 # --- lock --------------------------------------------------------------------------------------------------------------------
 
 def test_a_fresh_lock_skips_the_tick_without_doing_any_work(world, order, tmp_path):

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.models import BetSide, BetStatus, MarketType, StakingStrategy
+from app.models import BetSide, BetStatus, MarketType, ModelPrediction, ModelVersion, StakingStrategy
 from app.services.paper_report import build_report, format_report
 from tests.test_settlement import (  # noqa: F401  (world is a fixture)
     CLOSING_AT,
@@ -171,3 +171,33 @@ def test_cli_prints_the_report(world, capsys):
 
     out = capsys.readouterr().out
     assert "Paper trading report" in out and "Strategy performance" in out and "Bankroll" in out
+
+
+def test_model_skill_uses_the_champion_only_and_the_active_models_table_lists_everyone(world):
+    # champion (role-based) and a challenger that disagrees strongly on the same final game
+    legacy = world.model_version
+    champion = ModelVersion(name="elo_538", version="2.0", role="champion", params={"sigma": 13.0})
+    challenger = ModelVersion(name="elo_538", version="3.0", params={"sigma": 12.0})
+    retired = ModelVersion(name="elo_538", version="0.9", role="retired", params={"sigma": 12.0})
+    world.add_all([champion, challenger, retired])
+    world.commit()
+    game = closed_game(world, "BOS", "LAC", 110, 100, 0.70, pinnacle=(-200, 170))  # legacy row predicted 0.70
+    open_game = add_game(world, "NYK", "LAL")
+    for model, prob in ((champion, "0.60000"), (challenger, "0.95000")):
+        world.add(ModelPrediction(model_version_id=model.id, game_id=game.id, market=MarketType.h2h,
+                                  side=BetSide.home, model_prob=Decimal(prob)))
+    world.add(ModelPrediction(model_version_id=challenger.id, game_id=open_game.id, market=MarketType.h2h,
+                              side=BetSide.home, model_prob=Decimal("0.50000")))
+    world.commit()
+
+    report = build_report(world, NOW)
+
+    assert report.skill.model == "elo_538 2.0"
+    assert report.skill.brier_model == pytest.approx((0.60 - 1) ** 2, abs=1e-4)  # the champion's, not 0.70 / 0.95
+    rows = {(m.version, m.role): (m.predictions, m.final_games) for m in report.models}
+    assert rows == {("2.0", "champion"): (1, 1), ("3.0", "challenger"): (2, 1), ("1.1", "challenger"): (2, 1)}
+    assert all(m.version != "0.9" for m in report.models)  # retired models are not listed
+    text = format_report(report)
+    assert "Model skill of the champion (elo_538 2.0)" in text
+    assert "Active models (only the champion bets)" in text and "challenger" in text
+    assert legacy.id != champion.id
