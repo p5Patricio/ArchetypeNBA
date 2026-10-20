@@ -5,20 +5,49 @@ Model registry: which models exist, which one is the champion and which ones run
 shadow predictions only) or ``retired`` (ignored). A *model family* (the ``name`` of a model_version) is the code
 that turns the version's ``params`` into predictions.
 
+A family exposes ``predict(home_team_id, away_team_id, season_id, game_time) -> Prediction | None`` (``None`` =
+the model cannot predict that game, for example because a team has no rating yet) and is built per run by
+``load_model``; the registry maps ``model_version.name`` to the factory that builds it.
+
 Databases that predate roles (and test fixtures that register the model without one) have no champion row: in
 that case the single registered ``elo_538`` ``1.1`` model counts as the champion, which is exactly what the
 schema migration turns it into.
 """
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Callable, Dict, List, Optional, Protocol
 
 from sqlalchemy import select
 from sqlmodel import Session
 
+from app.analytics.elo import EloParams
 from app.models import MODEL_ROLE_CHALLENGER, MODEL_ROLE_CHAMPION, MODEL_ROLE_RETIRED, ModelVersion
 
 ELO_FAMILY_NAME = "elo_538"
 LEGACY_CHAMPION_VERSION = "1.1"  # 1.1: home advantage 60 (538 original: 100)
+
+
+class ModelRegistryError(RuntimeError):
+    """A model version cannot be turned into a predictor (unknown family, unusable params)."""
+
+
+@dataclass(frozen=True)
+class Prediction:
+    p_home: float  # P(home wins)
+    mu: float  # expected home margin in points
+    sigma: float  # standard deviation of the margin
+
+
+class ModelFamily(Protocol):
+    name: str
+    version: str
+    model_version_id: int
+
+    def predict(
+        self, home_team_id: int, away_team_id: int, season_id: int, game_time: datetime
+    ) -> Optional[Prediction]:
+        """Pre-game prediction using only information available before ``game_time``; None when impossible."""
+        ...
 
 
 def get_champion(session: Session) -> Optional[ModelVersion]:
@@ -65,3 +94,54 @@ def ensure_default_champion(session: Session) -> ModelVersion:
         session.add(row)
         session.flush()
     return row
+
+
+# ------------------------------------------------------------------------------------------- families
+
+class EloFamily:
+    """``elo_538``: Elo with hyperparameters in ``params`` (missing keys keep the defaults) and a margin sigma."""
+
+    def __init__(self, session: Session, model_version: ModelVersion):
+        from app.services.elo_service import EloRatingService  # lazy: elo_service imports this module
+
+        params = model_version.params or {}
+        sigma = float(params.get("sigma") or 0.0)
+        if sigma <= 0:
+            raise ModelRegistryError(f"model_version {model_version.name} {model_version.version} has no sigma in its params")
+        self.name = model_version.name
+        self.version = model_version.version
+        self.model_version_id = model_version.id
+        self.sigma = sigma
+        self._service = EloRatingService(
+            session, sigma=sigma, model_version_id=model_version.id, params=EloParams.from_dict(params)
+        )
+        self._ratings: Dict[int, Dict[int, float]] = {}  # season id -> current ratings (with the season carryover)
+
+    def predict(
+        self, home_team_id: int, away_team_id: int, season_id: int, game_time: datetime
+    ) -> Optional[Prediction]:
+        if season_id not in self._ratings:
+            self._ratings[season_id] = self._service.current_ratings(for_season_id=season_id)
+        ratings = self._ratings[season_id]
+        if home_team_id not in ratings or away_team_id not in ratings:
+            return None
+        prediction = self._service.predict(home_team_id, away_team_id, ratings)
+        return Prediction(prediction.p_home, prediction.expected_margin, prediction.sigma)
+
+
+FamilyFactory = Callable[[Session, ModelVersion], ModelFamily]
+
+_FAMILIES: Dict[str, FamilyFactory] = {ELO_FAMILY_NAME: EloFamily}
+
+
+def register_family(name: str, factory: FamilyFactory) -> None:
+    """Make ``model_version`` rows named ``name`` loadable (used by model families defined elsewhere)."""
+    _FAMILIES[name] = factory
+
+
+def load_model(session: Session, model_version: ModelVersion) -> ModelFamily:
+    """Build the predictor of a model version from its ``params``."""
+    factory = _FAMILIES.get(model_version.name)
+    if factory is None:
+        raise ModelRegistryError(f"model_version {model_version.name} {model_version.version}: unknown model family")
+    return factory(session, model_version)
