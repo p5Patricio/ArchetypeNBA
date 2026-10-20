@@ -26,8 +26,8 @@ from app.services.model_registry import ModelRegistryError, Prediction, register
 
 FAMILY_NAME = "margin_features"
 
-RIDGE_ALPHAS = (1.0, 10.0, 30.0, 100.0, 300.0, 1000.0, 3000.0, 10000.0)
-LOGISTIC_CS = (0.003, 0.01, 0.03, 0.1, 0.3, 1.0)
+RIDGE_ALPHAS = (0.1, 1.0, 10.0, 30.0, 100.0, 300.0, 1000.0, 3000.0, 10000.0)
+LOGISTIC_CS = (0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0)
 CV_SEASONS = 5  # validation folds: the last 5 training seasons, each predicted by all seasons before it
 DEFAULT_ALPHA = 300.0
 DEFAULT_C = 0.1

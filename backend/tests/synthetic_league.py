@@ -53,3 +53,53 @@ def make_league(
             day += timedelta(days=rng.choice((1, 1, 2)))
     games.sort(key=lambda g: g.sort_key)
     return games
+
+
+def insert_league(session, games: List[HistoricalGame]) -> List[HistoricalGame]:
+    """
+    Store a synthetic league as player_game_log rows (2 players per team, points split between them) with real
+    team abbreviations, and return the games re-keyed to the database ids (what ``load_games`` will yield).
+    """
+    from dataclasses import replace
+
+    from app.models import Player, PlayerGameLog, Season, Team
+    from app.services.elo_service import CURRENT_TEAMS
+
+    team_ids = sorted({g.home_team_id for g in games} | {g.away_team_id for g in games})
+    abbreviations = sorted(CURRENT_TEAMS)[: len(team_ids)]
+    teams: Dict[int, Team] = {}
+    players: Dict[int, List[Player]] = {}
+    for team_id, abbr in zip(team_ids, abbreviations):
+        teams[team_id] = Team(abbreviation=abbr, full_name=abbr, city=abbr, conference="E", division="X")
+        session.add(teams[team_id])
+        players[team_id] = [Player(full_name=f"{abbr} player {n}") for n in (1, 2)]
+        session.add_all(players[team_id])
+    seasons: Dict[int, Season] = {}
+    for season_id in sorted({g.season_id for g in games}):
+        seasons[season_id] = Season(season_label=f"{2000 + season_id}-{str(season_id + 1).zfill(2)[-2:]}")
+        session.add(seasons[season_id])
+    session.flush()
+
+    rekeyed = []
+    for game in games:
+        home, away = teams[game.home_team_id], teams[game.away_team_id]
+        season = seasons[game.season_id]
+        for team, opponent, pts, matchup in (
+            (home, away, game.home_pts, f"{home.abbreviation} vs. {away.abbreviation}"),
+            (away, home, game.away_pts, f"{away.abbreviation} @ {home.abbreviation}"),
+        ):
+            for n, share in ((0, pts // 2), (1, pts - pts // 2)):
+                session.add(
+                    PlayerGameLog(
+                        player_id=players[game.home_team_id if team is home else game.away_team_id][n].id,
+                        team_id=team.id,
+                        season_id=season.id,
+                        game_id=game.game_id,
+                        game_date=game.game_date,
+                        matchup=matchup,
+                        pts=share,
+                    )
+                )
+        rekeyed.append(replace(game, season_id=season.id, home_team_id=home.id, away_team_id=away.id))
+    session.commit()
+    return rekeyed
