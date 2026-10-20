@@ -12,6 +12,10 @@ They never create a ``simulated_bet`` row: only the champion bets, so bankrolls 
 that cannot predict a game (for example a team without ratings) or cannot be loaded is skipped without
 affecting the champion; retired models are ignored.
 
+A challenger can never break the champion: the champion is processed and committed first, then each challenger
+runs in its own transaction. Any exception while loading or running a challenger rolls back only that
+challenger's uncommitted writes, is logged and counted (``challenger_error``), and the next challenger runs.
+
 Design notes
 - Ratings: the model family (``ModelFamily.predict``) with the season of the game derived from its tip-off date
   (not from ``game.season_id``, which was wrong for rows created before the season existed), so the 25%
@@ -105,6 +109,7 @@ class ModelRecorderStats:
     predictions_written: int = 0  # would-be writes on a dry run
     predictions_existing: int = 0
     skipped_missing_ratings: int = 0
+    errors: int = 0  # 1 when the challenger failed and its writes of this run were rolled back
 
 
 @dataclass
@@ -200,21 +205,51 @@ class PredictionRecorder:
                     summary.skipped[reason] += 1
                     continue
                 season_id = self._season_id_for(game, season_ids)
-                game_quotes = quotes.get(game.id, [])
                 prediction = self._predict(champion, game, season_id)
                 if prediction is None:
                     summary.skipped["missing_ratings"] += 1
                 else:
                     summary.games_processed += 1
-                    self._record_game(game, champion, prediction, game_quotes, summary)
-                for challenger in challengers:
-                    self._record_shadow(game, challenger, season_id, game_quotes, summary)
+                    self._record_game(game, champion, prediction, quotes.get(game.id, []), summary)
             if not dry_run:
-                self.session.commit()
+                self.session.commit()  # the champion's work is durable before any challenger runs
         except Exception:
             self.session.rollback()
             raise
+
+        for challenger in challengers:
+            self._run_challenger(challenger, games, blocked, quotes, season_ids, summary)
         return summary
+
+    def _run_challenger(
+        self,
+        model: _ActiveModel,
+        games: Sequence[Game],
+        blocked: Dict[int, str],
+        quotes: Dict[int, List[_Quote]],
+        season_ids: Dict[str, int],
+        summary: RecorderSummary,
+    ) -> None:
+        """One challenger in its own transaction; any failure is contained (rolled back, logged, counted)."""
+        stats = model.stats
+        model_id = stats.model_version_id  # a plain int: safe to read after a rollback expired the ORM rows
+        known = {key for key in self._predictions if key[0] == model_id}
+        try:
+            for game in games:
+                if game.id in blocked:
+                    continue
+                self._record_shadow(game, model, self._season_id_for(game, season_ids), quotes.get(game.id, []), summary)
+            if not self._dry_run:
+                self.session.commit()
+        except Exception as exc:
+            self.session.rollback()
+            for key in [key for key in self._predictions if key[0] == model_id and key not in known]:
+                del self._predictions[key]
+            logger.warning(f"recorder: challenger {stats.name} {stats.version} failed and was rolled back: {exc!r}")
+            summary.skipped["challenger_error"] += 1
+            stats.games_predicted = stats.predictions_written = 0
+            stats.predictions_existing = stats.skipped_missing_ratings = 0
+            stats.errors += 1
 
     # ------------------------------------------------------------------ inputs
 
@@ -236,6 +271,13 @@ class PredictionRecorder:
                     raise RecorderError(str(exc)) from exc
                 logger.warning(f"recorder: challenger {row.name} {row.version} skipped: {exc}")
                 summary.skipped["challenger_unusable"] += 1
+                continue
+            except Exception as exc:
+                if is_champion:
+                    raise
+                self.session.rollback()  # a failed query must not poison the session the champion still needs
+                logger.warning(f"recorder: challenger {row.name} {row.version} failed to load: {exc!r}")
+                summary.skipped["challenger_error"] += 1
                 continue
             stats = ModelRecorderStats(row.id, row.name, row.version, "champion" if is_champion else row.role)
             summary.models[row.id] = stats

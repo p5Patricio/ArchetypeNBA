@@ -145,8 +145,12 @@ def register_family(name: str, factory: FamilyFactory) -> None:
 def _import_family_module(name: str) -> None:
     """Import the module that registers family ``name`` (a model_version row is loadable without prior imports)."""
     module = _FAMILY_MODULES.get(name)
-    if module is not None:
+    if module is None:
+        return
+    try:
         importlib.import_module(module)
+    except Exception as exc:  # a broken family module must not escape as a bare ImportError (or anything else)
+        raise ModelRegistryError(f"model family {name}: cannot import {module}: {exc!r}") from exc
 
 
 def load_model(session: Session, model_version: ModelVersion) -> ModelFamily:
@@ -156,4 +160,11 @@ def load_model(session: Session, model_version: ModelVersion) -> ModelFamily:
     factory = _FAMILIES.get(model_version.name)
     if factory is None:
         raise ModelRegistryError(f"model_version {model_version.name} {model_version.version}: unknown model family")
-    return factory(session, model_version)
+    try:
+        return factory(session, model_version)
+    except ModelRegistryError:
+        raise
+    except Exception as exc:  # constructing a family from malformed params can fail in any number of ways
+        raise ModelRegistryError(
+            f"model_version {model_version.name} {model_version.version}: cannot build the model: {exc!r}"
+        ) from exc
