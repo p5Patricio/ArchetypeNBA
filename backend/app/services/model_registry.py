@@ -13,6 +13,7 @@ Databases that predate roles (and test fixtures that register the model without 
 that case the single registered ``elo_538`` ``1.1`` model counts as the champion, which is exactly what the
 schema migration turns it into.
 """
+import importlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional, Protocol
@@ -132,6 +133,8 @@ class EloFamily:
 FamilyFactory = Callable[[Session, ModelVersion], ModelFamily]
 
 _FAMILIES: Dict[str, FamilyFactory] = {ELO_FAMILY_NAME: EloFamily}
+# Families defined in their own module register themselves on import; load_model imports them on first use.
+_FAMILY_MODULES: Dict[str, str] = {"margin_features": "app.services.margin_features_model"}
 
 
 def register_family(name: str, factory: FamilyFactory) -> None:
@@ -139,8 +142,17 @@ def register_family(name: str, factory: FamilyFactory) -> None:
     _FAMILIES[name] = factory
 
 
+def _import_family_module(name: str) -> None:
+    """Import the module that registers family ``name`` (a model_version row is loadable without prior imports)."""
+    module = _FAMILY_MODULES.get(name)
+    if module is not None:
+        importlib.import_module(module)
+
+
 def load_model(session: Session, model_version: ModelVersion) -> ModelFamily:
     """Build the predictor of a model version from its ``params``."""
+    if model_version.name not in _FAMILIES:
+        _import_family_module(model_version.name)
     factory = _FAMILIES.get(model_version.name)
     if factory is None:
         raise ModelRegistryError(f"model_version {model_version.name} {model_version.version}: unknown model family")
