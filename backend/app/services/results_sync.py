@@ -16,7 +16,8 @@ a second, team-level results path:
    the tip-off is shifted to US time and +-1 day is tolerated; the closest date wins). Set ``nba_game_id``,
    ``home_score`` / ``away_score`` (sum of ``pts`` per team) and ``status = 'final'``. A game with no result
    (postponed) stays ``scheduled`` and is retried until it is older than ``LOOKBACK``.
-4. ``EloRatingService.update_new_games()`` rates every new game of ``player_game_log``.
+4. ``update_active_models`` rates every new game of ``player_game_log`` for the champion and for each active
+   Elo challenger.
 
 Atomicity: the provider is called first (a failure raises ``ResultsProviderError`` and nothing is written); logs
 and game updates are written in one transaction that is rolled back on any error. The Elo update commits on its
@@ -34,7 +35,8 @@ from sqlalchemy import func, select
 from sqlmodel import Session
 
 from app.models import Game, Player, PlayerGameLog, Team, TeamEloRating
-from app.services.elo_service import INCLUDED_GAME_TYPES, EloRatingService
+from app.services import model_registry
+from app.services.elo_service import INCLUDED_GAME_TYPES, update_active_models
 from app.services.odds_ingestion import OddsIngestionService
 
 logger = logging.getLogger(__name__)
@@ -222,11 +224,15 @@ def find_pending_games(session: Session, now: datetime) -> Tuple[List[Game], int
 
 def count_final_games_without_ratings(session: Session) -> int:
     """
-    Final games (with an nba_game_id) that have no row in ``team_elo_rating`` yet. Only game types Elo rates
-    (regular season, playoffs, play-in, Cup final) count: a preseason or all-star game never gets ratings and
-    would otherwise keep the catch-up pending forever.
+    Final games (with an nba_game_id) that have no row in ``team_elo_rating`` yet for the champion model. Only
+    game types Elo rates (regular season, playoffs, play-in, Cup final) count: a preseason or all-star game never
+    gets ratings and would otherwise keep the catch-up pending forever.
     """
-    rated = select(TeamEloRating.game_id).where(TeamEloRating.game_id.is_not(None))
+    champion = model_registry.get_champion(session)
+    rated = select(TeamEloRating.game_id).where(
+        TeamEloRating.game_id.is_not(None),
+        TeamEloRating.model_version_id == (champion.id if champion is not None else -1),
+    )
     return int(
         session.execute(
             select(func.count(Game.id)).where(
@@ -438,9 +444,9 @@ def sync_results(
             session.rollback()
             raise
 
-    elo = EloRatingService(session).update_new_games()
-    summary.rating_rows_added = elo.rows_written
-    summary.elo_rebuilt = elo.rebuilt
+    updates = [update for _, update in update_active_models(session)]
+    summary.rating_rows_added = sum(update.rows_written for update in updates)
+    summary.elo_rebuilt = any(update.rebuilt for update in updates)
     return summary
 
 

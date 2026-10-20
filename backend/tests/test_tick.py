@@ -55,12 +55,13 @@ def world(db_session):
     for abbr, full in [("BOS", "Boston Celtics"), ("LAC", "LA Clippers")]:
         teams[abbr] = Team(abbreviation=abbr, full_name=full, city="", conference="", division="")
         db_session.add(teams[abbr])
-    db_session.add(ModelVersion(name=MODEL_NAME, version=MODEL_VERSION, params={"sigma": 14.0}))
+    model = ModelVersion(name=MODEL_NAME, version=MODEL_VERSION, params={"sigma": 14.0})
+    db_session.add(model)
     db_session.commit()
     for index, (abbr, rating) in enumerate([("BOS", 1600.0), ("LAC", 1500.0)]):
         db_session.add(
             TeamEloRating(
-                team_id=teams[abbr].id, season_id=old.id, game_id=f"00225{index:05d}",
+                model_version_id=model.id, team_id=teams[abbr].id, season_id=old.id, game_id=f"00225{index:05d}",
                 game_date=date(2026, 4, 10), rating_after=rating,
             )
         )
@@ -343,6 +344,28 @@ def test_the_real_recorder_writes_predictions_through_the_tick(world, tmp_path):
     assert _statuses(summary) == {"results": "skipped", "record": "ok"}
     rows = world.exec(select(ModelPrediction)).all()
     assert len(rows) == 2 and {r.game_id for r in rows} == {game.id}
+
+
+def test_the_tick_records_challenger_predictions_and_reports_them(world, tmp_path):
+    champion = world.exec(select(ModelVersion)).one()
+    challenger = ModelVersion(name=MODEL_NAME, version="2.0", params={"sigma": 13.0, "home_advantage": 90.0})
+    world.add(challenger)
+    world.commit()
+    for rating in world.exec(select(TeamEloRating)).all():
+        world.add(TeamEloRating(
+            model_version_id=challenger.id, team_id=rating.team_id, season_id=rating.season_id, game_id=rating.game_id,
+            game_date=rating.game_date, rating_after=rating.rating_after,
+        ))
+    world.commit()
+    game = _add_game(world, "g1", NOW + timedelta(hours=5))
+
+    summary = _tick(world, FakeService([]), tmp_path=tmp_path, steps=default_steps(skip=["opening", "closing"]))
+
+    record = summary.steps[-1]
+    assert record.status == "ok" and "shadow: elo_538 2.0=2" in record.message
+    rows = world.exec(select(ModelPrediction)).all()
+    assert {(r.model_version_id, r.game_id) for r in rows} == {(champion.id, game.id), (challenger.id, game.id)}
+    assert world.exec(select(SimulatedBet)).all() == []
 
 
 # --- lock --------------------------------------------------------------------------------------------------------------------

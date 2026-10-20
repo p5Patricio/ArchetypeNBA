@@ -10,9 +10,13 @@ Rating update after a game, with ``diff`` = home rating + home advantage - away 
 is pulled a quarter of the way back to the league mean (``season_carryover``). A rating gap converts to
 an expected point margin at ELO_PER_POINT Elo points per point, and ``spread_probabilities`` turns that
 margin into win / push / loss probabilities for a spread line using a discrete (integer) normal.
+
+Every hyperparameter has a module-level default (the champion's) and can be passed explicitly; ``EloParams``
+bundles them for callers that run several parameterizations side by side.
 """
 import math
-from typing import Tuple
+from dataclasses import dataclass, fields
+from typing import Any, Dict, Mapping, Tuple
 
 K = 20.0
 # FiveThirtyEight used 100. Walk-forward residuals on the last five completed seasons show the modern
@@ -23,8 +27,49 @@ INITIAL_RATING = 1500.0
 MEAN_RATING = 1505.0
 CARRYOVER = 0.75
 ELO_PER_POINT = 28.0
+MOV_EXPONENT = 0.8
 
 _ROUND_EPS = 1e-9
+
+
+@dataclass(frozen=True)
+class EloParams:
+    """The tunable hyperparameters of the Elo model; the defaults reproduce the module constants."""
+
+    k: float = K
+    home_advantage: float = HOME_ADVANTAGE
+    initial_rating: float = INITIAL_RATING
+    carryover: float = CARRYOVER
+    mean_rating: float = MEAN_RATING
+    elo_per_point: float = ELO_PER_POINT
+    mov_exponent: float = MOV_EXPONENT
+
+    # Names under which model_version.params stores them (historical keys first).
+    _KEYS = {
+        "k": "K",
+        "home_advantage": "home_advantage",
+        "initial_rating": "initial_rating",
+        "carryover": "carryover",
+        "mean_rating": "mean_rating",
+        "elo_per_point": "elo_per_point",
+        "mov_exponent": "mov_exponent",
+    }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "EloParams":
+        """Reads ``model_version.params``; missing or null keys keep the default, unknown keys are ignored."""
+        values = {}
+        for field in fields(cls):
+            raw = (data or {}).get(cls._KEYS[field.name])
+            if raw is not None:
+                values[field.name] = float(raw)
+        return cls(**values)
+
+    def to_dict(self) -> Dict[str, float]:
+        return {self._KEYS[field.name]: getattr(self, field.name) for field in fields(self)}
+
+
+DEFAULT_PARAMS = EloParams()
 
 
 def expected_home_win_prob(r_home: float, r_away: float, home_advantage: float = HOME_ADVANTAGE) -> float:
@@ -32,9 +77,9 @@ def expected_home_win_prob(r_home: float, r_away: float, home_advantage: float =
     return 1.0 / (1.0 + 10.0 ** (-diff / 400.0))
 
 
-def mov_multiplier(margin: float, elo_diff_winner: float) -> float:
+def mov_multiplier(margin: float, elo_diff_winner: float, exponent: float = MOV_EXPONENT) -> float:
     """Margin-of-victory multiplier. ``elo_diff_winner`` = winner rating - loser rating (home edge included)."""
-    return ((abs(margin) + 3.0) ** 0.8) / (7.5 + 0.006 * elo_diff_winner)
+    return ((abs(margin) + 3.0) ** exponent) / (7.5 + 0.006 * elo_diff_winner)
 
 
 def update_ratings(
@@ -44,6 +89,7 @@ def update_ratings(
     away_pts: float,
     k: float = K,
     home_advantage: float = HOME_ADVANTAGE,
+    mov_exponent: float = MOV_EXPONENT,
 ) -> Tuple[float, float, float]:
     """Return (new_home, new_away, p_home) where p_home is the pre-game home win probability."""
     diff = r_home + home_advantage - r_away
@@ -55,17 +101,19 @@ def update_ratings(
         score, winner_diff = 0.0, -diff
     else:  # the NBA has no ties; keep the update well-defined (and zero-sum) anyway
         score, winner_diff = 0.5, 0.0
-    delta = k * mov_multiplier(margin, winner_diff) * (score - p_home)
+    delta = k * mov_multiplier(margin, winner_diff, mov_exponent) * (score - p_home)
     return r_home + delta, r_away - delta, p_home
 
 
-def season_carryover(rating: float) -> float:
-    return CARRYOVER * rating + (1.0 - CARRYOVER) * MEAN_RATING
+def season_carryover(rating: float, carryover: float = CARRYOVER, mean_rating: float = MEAN_RATING) -> float:
+    return carryover * rating + (1.0 - carryover) * mean_rating
 
 
-def expected_margin(r_home: float, r_away: float, home_advantage: float = HOME_ADVANTAGE) -> float:
+def expected_margin(
+    r_home: float, r_away: float, home_advantage: float = HOME_ADVANTAGE, elo_per_point: float = ELO_PER_POINT
+) -> float:
     """Expected home margin in points (positive = home favoured)."""
-    return (r_home + home_advantage - r_away) / ELO_PER_POINT
+    return (r_home + home_advantage - r_away) / elo_per_point
 
 
 def _normal_cdf(x: float) -> float:

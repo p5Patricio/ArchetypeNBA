@@ -6,10 +6,12 @@ Paper-trading report: how the strategies are doing and whether the model has any
   ROI on settled stake, average CLV and the share of bets that beat the close (both over bets that have a CLV).
 * CLV coverage: bets with a CLV over bets whose game has tipped off, and the closing captures that were missed
   (games that tipped off without a ``closing`` marker, so their closing line is lost for good).
-* Model skill: Brier score of the model's h2h home probability against the Brier score of the sharp book's
+* Model skill: Brier score of the champion's h2h home probability against the Brier score of the sharp book's
   de-vigged closing home probability, on the SAME final games. Only games with a ``closing`` marker, a recorded
   h2h home prediction and a two-sided closing quote from the sharp book take part. Lower is better; a model that
   does not beat the close has no edge to bet.
+* Active models: the champion and every challenger with the predictions each has recorded (challengers only
+  predict, they never bet) and how many final games those predictions cover.
 * Bankroll per strategy: ``START_BANKROLL`` plus settled P/L.
 """
 from collections import defaultdict
@@ -17,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlmodel import Session
 
 from app.analytics.betting_policy import START_BANKROLL
@@ -29,14 +31,13 @@ from app.models import (
     Game,
     MarketType,
     ModelPrediction,
-    ModelVersion,
     OddsHistory,
     OddsSnapshotCapture,
     SimulatedBet,
     Sportsbook,
     StakingStrategy,
 )
-from app.services.elo_service import MODEL_NAME, MODEL_VERSION
+from app.services import model_registry
 
 _SETTLED = (BetStatus.won, BetStatus.lost, BetStatus.push)
 
@@ -79,6 +80,7 @@ class ClvCoverage:
 
 @dataclass
 class ModelSkill:
+    model: Optional[str] = None  # the champion the numbers belong to, e.g. "elo_538 1.1"
     sharp_book: Optional[str] = None
     final_games: int = 0
     final_games_with_closing: int = 0
@@ -95,11 +97,21 @@ class ModelSkill:
 
 
 @dataclass
+class ActiveModel:
+    name: str
+    version: str
+    role: str
+    predictions: int = 0  # model_prediction rows recorded (all markets)
+    final_games: int = 0  # distinct final games those predictions cover
+
+
+@dataclass
 class PaperReport:
     now: datetime
     strategies: List[StrategyPerformance] = field(default_factory=list)
     clv: ClvCoverage = field(default_factory=ClvCoverage)
     skill: ModelSkill = field(default_factory=ModelSkill)
+    models: List[ActiveModel] = field(default_factory=list)
 
 
 def build_report(session: Session, now: Optional[datetime] = None) -> PaperReport:
@@ -109,6 +121,7 @@ def build_report(session: Session, now: Optional[datetime] = None) -> PaperRepor
         strategies=_performance(session),
         clv=_clv_coverage(session, now),
         skill=_model_skill(session),
+        models=_active_models(session),
     )
 
 
@@ -192,8 +205,39 @@ def _clv_coverage(session: Session, now: datetime) -> ClvCoverage:
 
 # -------------------------------------------------------------------------------------------------- skill
 
+def _active_models(session: Session) -> List[ActiveModel]:
+    champion = model_registry.get_champion(session)
+    models: List[ActiveModel] = []
+    for row in model_registry.list_active(session):
+        role = "champion" if champion is not None and row.id == champion.id else row.role
+        active = ActiveModel(row.name, row.version, role)
+        active.predictions = int(
+            session.execute(
+                select(func.count(ModelPrediction.id)).where(
+                    ModelPrediction.model_version_id == row.id, ModelPrediction.player_id.is_(None)
+                )
+            ).scalar_one()
+        )
+        active.final_games = int(
+            session.execute(
+                select(func.count(func.distinct(ModelPrediction.game_id)))
+                .join(Game, Game.id == ModelPrediction.game_id)
+                .where(
+                    ModelPrediction.model_version_id == row.id,
+                    ModelPrediction.player_id.is_(None),
+                    Game.status == "final",
+                )
+            ).scalar_one()
+        )
+        models.append(active)
+    return models
+
+
 def _model_skill(session: Session) -> ModelSkill:
     skill = ModelSkill()
+    champion = model_registry.get_champion(session)
+    if champion is not None:
+        skill.model = f"{champion.name} {champion.version}"
     finals = {
         game_id: (commence, home_score > away_score)
         for game_id, commence, home_score, away_score in session.execute(
@@ -216,11 +260,8 @@ def _model_skill(session: Session) -> ModelSkill:
 
     model_probs: Dict[int, float] = {}
     for game_id, prob in session.execute(
-        select(ModelPrediction.game_id, ModelPrediction.model_prob)
-        .join(ModelVersion, ModelVersion.id == ModelPrediction.model_version_id)
-        .where(
-            ModelVersion.name == MODEL_NAME,
-            ModelVersion.version == MODEL_VERSION,
+        select(ModelPrediction.game_id, ModelPrediction.model_prob).where(
+            ModelPrediction.model_version_id == (champion.id if champion is not None else -1),
             ModelPrediction.market == MarketType.h2h,
             ModelPrediction.side == BetSide.home,
             ModelPrediction.player_id.is_(None),
@@ -308,7 +349,8 @@ def format_report(report: PaperReport) -> str:
     lines.append("")
 
     skill = report.skill
-    lines.append("Model skill vs the de-vigged closing line (same final games, Brier: lower is better)")
+    title = f"Model skill of the champion ({skill.model})" if skill.model else "Model skill (no champion registered)"
+    lines.append(f"{title} vs the de-vigged closing line (same final games, Brier: lower is better)")
     lines.append(
         f"  final games {skill.final_games}, with a closing capture {skill.final_games_with_closing}, "
         f"compared {skill.games_compared}" + (f" (sharp book: {skill.sharp_book})" if skill.sharp_book else "")
@@ -321,6 +363,17 @@ def format_report(report: PaperReport) -> str:
         )
     else:
         lines.append("  Cannot be computed yet: no final game has a closing capture, a model prediction and a sharp close.")
+    lines.append("")
+
+    lines.append("Active models (only the champion bets)")
+    if report.models:
+        lines.append(f"  {'model':<22}{'role':<12}{'predictions':>12}{'final games':>13}")
+        for active in report.models:
+            lines.append(
+                f"  {active.name + ' ' + active.version:<22}{active.role:<12}{active.predictions:>12}{active.final_games:>13}"
+            )
+    else:
+        lines.append("  No model registered.")
     lines.append("")
 
     lines.append("Bankroll (start + settled P/L)")

@@ -12,6 +12,7 @@ from app.services.elo_service import (
     out_of_sample_summary,
     replay_games,
 )
+from app.services.model_registry import ensure_default_champion
 
 TEAMS = ["ATL", "BOS", "BKN", "NJN", "NOP", "NOH", "EST"]  # EST = All-Star junk row, not an NBA franchise
 
@@ -229,7 +230,10 @@ def test_dry_run_writes_nothing(world):
 def test_rebuild_removes_rows_a_replay_no_longer_produces(world):
     populate_three_seasons(world)
     world["session"].add(
-        TeamEloRating(team_id=world["teams"]["NJN"], season_id=world["seasons"]["2003-04"], game_id="0020300001")
+        TeamEloRating(
+            model_version_id=ensure_default_champion(world["session"]).id,
+            team_id=world["teams"]["NJN"], season_id=world["seasons"]["2003-04"], game_id="0020300001",
+        )
     )
     world["session"].commit()
     summary = EloRatingService(world["session"]).rebuild_all()

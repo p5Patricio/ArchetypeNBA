@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from sqlmodel import select
 
-from app.models import Game, Player, PlayerGameLog, Season, Team, TeamEloRating
+from app.models import Game, ModelVersion, Player, PlayerGameLog, Season, Team, TeamEloRating
 from app.services.elo_service import EloRatingService
 from app.services.results_sync import (
     FetchedLogs,
@@ -307,6 +307,25 @@ def test_elo_is_updated_after_the_sync_and_equals_a_full_rebuild(world):
         assert values == pytest.approx(rebuilt[key])
     boston = world.teams["BOS"].id
     assert incremental[(boston, "0022600001")][1] > 1500  # the winner moved up
+
+
+def test_the_sync_rates_the_champion_and_every_active_elo_challenger(world):
+    champion = ModelVersion(name="elo_538", version="1.1", role="champion", params={"sigma": 14.0})
+    challenger = ModelVersion(name="elo_538", version="2.0", params={"sigma": 13.0, "K": 40.0})
+    world.add_all([champion, challenger])
+    world.commit()
+    add_game(world, "BOS", "LAC", TIPOFF_1)
+
+    summary = sync_results(world, FakeProvider(log_rows("0022600001", date(2026, 10, 21), "BOS", "LAC", 112, 104)), NOW)
+
+    assert summary.rating_rows_added == 4  # two rows per model
+    boston = world.teams["BOS"].id
+    after = {
+        r.model_version_id: r.rating_after
+        for r in world.exec(select(TeamEloRating).where(TeamEloRating.team_id == boston)).all()
+    }
+    assert set(after) == {champion.id, challenger.id}
+    assert after[challenger.id] > after[champion.id] > 1500  # K=40 moves further than K=20
 
 
 def test_a_final_game_waiting_for_its_rating_is_rated_without_any_network_call(world):

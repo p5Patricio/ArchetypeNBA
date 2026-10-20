@@ -1,16 +1,22 @@
 """
-Records Elo predictions and paper bets at decision time.
+Records model predictions and paper bets at decision time.
 
-For every scheduled game that tips off within the horizon the recorder stores the model's probabilities in
+For every scheduled game that tips off within the horizon the recorder stores the champion's probabilities in
 ``model_prediction`` and, when the betting policy (``app.analytics.betting_policy``) finds an edge over the
 sharp book, a flat and a fractional-Kelly paper bet in ``simulated_bet``. Predictions that were not saved
 before tip-off cannot be reconstructed later, which is why this runs on every tick and is idempotent.
 
+Active challengers (``app.services.model_registry``) record shadow predictions for the same games under the same
+guards and idempotency (h2h plus every quoted spread line, with the expected home margin as ``projection``).
+They never create a ``simulated_bet`` row: only the champion bets, so bankrolls are never mixed. A challenger
+that cannot predict a game (for example a team without ratings) or cannot be loaded is skipped without
+affecting the champion; retired models are ignored.
+
 Design notes
-- Ratings: ``EloRatingService.current_ratings`` with the season of the game derived from its tip-off date (not
-  from ``game.season_id``, which was wrong for rows created before the season existed), so the 25% carryover
-  is applied on opening night. A season with no row yet is represented by a sentinel id that no team has
-  played in, which triggers the same carryover.
+- Ratings: the model family (``ModelFamily.predict``) with the season of the game derived from its tip-off date
+  (not from ``game.season_id``, which was wrong for rows created before the season existed), so the 25%
+  carryover is applied on opening night. A season with no row yet is represented by a sentinel id that no team
+  has played in, which triggers the same carryover.
 - Stale-ratings guard: a game is skipped while either team has an earlier game that has not been settled
   (status scheduled/live and tipped off less than 24 h ago or still ahead); its rating would be out of date.
 - Quotes: for every (sportsbook, market, side) the newest row by (book_last_update, captured_at) captured at
@@ -50,7 +56,9 @@ from app.models import (
     Sportsbook,
     StakingStrategy,
 )
-from app.services.elo_service import MODEL_NAME, MODEL_VERSION, EloRatingService
+from app.services import model_registry
+from app.services.elo_service import MODEL_NAME, MODEL_VERSION
+from app.services.model_registry import ModelFamily, ModelRegistryError, Prediction
 from app.services.odds_ingestion import OddsIngestionService
 
 logger = logging.getLogger(__name__)
@@ -86,6 +94,28 @@ class CandidateRecord:
 
 
 @dataclass
+class ModelRecorderStats:
+    """What the recorder did for one active model."""
+
+    model_version_id: int
+    name: str
+    version: str
+    role: str
+    games_predicted: int = 0
+    predictions_written: int = 0  # would-be writes on a dry run
+    predictions_existing: int = 0
+    skipped_missing_ratings: int = 0
+
+
+@dataclass
+class _ActiveModel:
+    row: ModelVersion
+    family: ModelFamily
+    is_champion: bool
+    stats: ModelRecorderStats
+
+
+@dataclass
 class RecorderSummary:
     now: datetime
     dry_run: bool = False
@@ -96,6 +126,7 @@ class RecorderSummary:
     bets_placed: Counter = field(default_factory=Counter)  # strategy -> bets (would-be on a dry run)
     skipped: Counter = field(default_factory=Counter)  # reason -> count
     candidates: List[CandidateRecord] = field(default_factory=list)
+    models: Dict[int, ModelRecorderStats] = field(default_factory=dict)  # champion first, then challengers
 
 
 @dataclass(frozen=True)
@@ -146,10 +177,8 @@ class PredictionRecorder:
 
     def run(self, dry_run: bool = False) -> RecorderSummary:
         summary = RecorderSummary(now=self.now, dry_run=dry_run)
-        model_version = self._model_version()
-        sigma = float((model_version.params or {}).get("sigma") or 0.0)
-        if sigma <= 0:
-            raise RecorderError(f"model_version {MODEL_NAME} {MODEL_VERSION} has no sigma in its params")
+        models = self._load_models(summary)
+        champion, challengers = models[0], models[1:]
 
         games = self._window_games()
         summary.games_considered = len(games)
@@ -157,11 +186,7 @@ class PredictionRecorder:
             return summary
 
         self._dry_run = dry_run
-        self._model_version_id = model_version.id
-        self._sigma = sigma
-        self._elo = EloRatingService(self.session, sigma=sigma)
-        self._ratings: Dict[int, Dict[int, float]] = {}
-        self._load_ledger(games)
+        self._load_ledger(games, [model.row.id for model in models])
 
         game_ids = [g.id for g in games]
         quotes = self._load_quotes(game_ids)
@@ -174,12 +199,16 @@ class PredictionRecorder:
                 if reason is not None:
                     summary.skipped[reason] += 1
                     continue
-                ratings = self._ratings_for(self._season_id_for(game, season_ids))
-                if game.home_team_id not in ratings or game.away_team_id not in ratings:
+                season_id = self._season_id_for(game, season_ids)
+                game_quotes = quotes.get(game.id, [])
+                prediction = self._predict(champion, game, season_id)
+                if prediction is None:
                     summary.skipped["missing_ratings"] += 1
-                    continue
-                summary.games_processed += 1
-                self._record_game(game, ratings, quotes.get(game.id, []), summary)
+                else:
+                    summary.games_processed += 1
+                    self._record_game(game, champion, prediction, game_quotes, summary)
+                for challenger in challengers:
+                    self._record_shadow(game, challenger, season_id, game_quotes, summary)
             if not dry_run:
                 self.session.commit()
         except Exception:
@@ -189,16 +218,32 @@ class PredictionRecorder:
 
     # ------------------------------------------------------------------ inputs
 
-    def _model_version(self) -> ModelVersion:
-        row = self.session.execute(
-            select(ModelVersion).where(ModelVersion.name == MODEL_NAME, ModelVersion.version == MODEL_VERSION)
-        ).scalar_one_or_none()
-        if row is None:
+    def _load_models(self, summary: RecorderSummary) -> List[_ActiveModel]:
+        """The champion followed by every challenger that can be loaded; registers their stats in the summary."""
+        champion_row = model_registry.get_champion(self.session)
+        if champion_row is None:
             raise RecorderError(
                 f"model_version {MODEL_NAME} {MODEL_VERSION} is not registered; "
                 "run scripts/backfill_elo.py --evaluate --register first"
             )
-        return row
+        models: List[_ActiveModel] = []
+        for row in model_registry.list_active(self.session):
+            is_champion = row.id == champion_row.id
+            try:
+                family = model_registry.load_model(self.session, row)
+            except ModelRegistryError as exc:
+                if is_champion:
+                    raise RecorderError(str(exc)) from exc
+                logger.warning(f"recorder: challenger {row.name} {row.version} skipped: {exc}")
+                summary.skipped["challenger_unusable"] += 1
+                continue
+            stats = ModelRecorderStats(row.id, row.name, row.version, "champion" if is_champion else row.role)
+            summary.models[row.id] = stats
+            models.append(_ActiveModel(row, family, is_champion, stats))
+        return models
+
+    def _predict(self, model: _ActiveModel, game: Game, season_id: int) -> Optional[Prediction]:
+        return model.family.predict(game.home_team_id, game.away_team_id, season_id, _aware_utc(game.commence_time))
 
     def _window_games(self) -> List[Game]:
         """Scheduled games that tip off after ``now`` and within the horizon, soonest first."""
@@ -244,11 +289,6 @@ class PredictionRecorder:
     def _season_id_for(game: Game, season_ids: Dict[str, int]) -> int:
         label = OddsIngestionService.season_label_for(_aware_utc(game.commence_time).date())
         return season_ids.get(label, UNKNOWN_SEASON_ID)
-
-    def _ratings_for(self, season_id: int) -> Dict[int, float]:
-        if season_id not in self._ratings:
-            self._ratings[season_id] = self._elo.current_ratings(for_season_id=season_id)
-        return self._ratings[season_id]
 
     def _load_quotes(self, game_ids: Sequence[int]) -> Dict[int, List[_Quote]]:
         """The fresh current quote of every (book, market, side) for each game."""
@@ -308,25 +348,26 @@ class PredictionRecorder:
             game_quotes.sort(key=lambda q: (q.market, q.side, q.book_key))
         return quotes
 
-    def _load_ledger(self, games: Sequence[Game]) -> None:
-        """Existing predictions, placed bets and the bankroll of each strategy."""
+    def _load_ledger(self, games: Sequence[Game], model_ids: Sequence[int]) -> None:
+        """Existing predictions (of every active model), placed bets and the bankroll of each strategy."""
         game_ids = [g.id for g in games]
         window = set(game_ids)
-        self._predictions: Dict[Tuple[int, str, str, Optional[Decimal]], int] = {}
-        for pred_id, game_id, market, side, line in self.session.execute(
+        self._predictions: Dict[Tuple[int, int, str, str, Optional[Decimal]], int] = {}
+        for pred_id, model_id, game_id, market, side, line in self.session.execute(
             select(
                 ModelPrediction.id,
+                ModelPrediction.model_version_id,
                 ModelPrediction.game_id,
                 ModelPrediction.market,
                 ModelPrediction.side,
                 ModelPrediction.line,
             ).where(
-                ModelPrediction.model_version_id == self._model_version_id,
+                ModelPrediction.model_version_id.in_(list(model_ids)),
                 ModelPrediction.game_id.in_(game_ids),
                 ModelPrediction.player_id.is_(None),
             )
         ):
-            self._predictions[(game_id, _enum_value(market), _enum_value(side), _line(line))] = pred_id
+            self._predictions[(model_id, game_id, _enum_value(market), _enum_value(side), _line(line))] = pred_id
 
         self._placed: Set[Tuple[str, int, str, str]] = set()
         self._game_stake: Dict[str, Dict[int, float]] = {s.value: defaultdict(float) for s in _STRATEGIES}
@@ -362,27 +403,52 @@ class PredictionRecorder:
 
     # ------------------------------------------------------------------ per game
 
-    def _record_game(self, game: Game, ratings: Dict[int, float], quotes: List[_Quote], summary: RecorderSummary) -> None:
-        prediction = self._elo.predict(game.home_team_id, game.away_team_id, ratings)
-        mu, sigma = prediction.expected_margin, prediction.sigma
+    @staticmethod
+    def _home_lines(quotes: Sequence[_Quote]) -> List[Decimal]:
+        """Every distinct home spread line quoted by any fresh book, ascending."""
+        spread_quotes = [q for q in quotes if q.market == MarketType.spreads.value and q.line is not None]
+        return sorted({q.line if q.side == BetSide.home.value else -q.line for q in spread_quotes})
+
+    def _record_shadow(
+        self, game: Game, model: _ActiveModel, season_id: int, quotes: List[_Quote], summary: RecorderSummary
+    ) -> None:
+        """A challenger's predictions for the game (h2h and every quoted spread line); never a bet."""
+        prediction = self._predict(model, game, season_id)
+        if prediction is None:
+            model.stats.skipped_missing_ratings += 1
+            return
+        model.stats.games_predicted += 1
+        projection = Decimal(f"{prediction.mu:.2f}")
+        self._store_prediction(model, game, MarketType.h2h, BetSide.home, None, prediction.p_home, projection, summary)
+        self._store_prediction(model, game, MarketType.h2h, BetSide.away, None, 1.0 - prediction.p_home, projection, summary)
+        for home_line in self._home_lines(quotes):
+            p_home_win, _, p_away_win = elo.spread_probabilities(prediction.mu, prediction.sigma, float(home_line))
+            self._store_prediction(model, game, MarketType.spreads, BetSide.home, home_line, p_home_win, projection, summary)
+            self._store_prediction(model, game, MarketType.spreads, BetSide.away, -home_line, p_away_win, projection, summary)
+
+    def _record_game(
+        self, game: Game, model: _ActiveModel, prediction: Prediction, quotes: List[_Quote], summary: RecorderSummary
+    ) -> None:
+        """The champion's predictions and paper bets for the game."""
+        model.stats.games_predicted += 1
+        mu, sigma = prediction.mu, prediction.sigma
         projection = Decimal(f"{mu:.2f}")
 
         # h2h: always recorded, odds or not.
         h2h_ids = {
-            BetSide.home.value: self._store_prediction(game, MarketType.h2h, BetSide.home, None, prediction.p_home, projection, summary),
-            BetSide.away.value: self._store_prediction(game, MarketType.h2h, BetSide.away, None, 1.0 - prediction.p_home, projection, summary),
+            BetSide.home.value: self._store_prediction(model, game, MarketType.h2h, BetSide.home, None, prediction.p_home, projection, summary),
+            BetSide.away.value: self._store_prediction(model, game, MarketType.h2h, BetSide.away, None, 1.0 - prediction.p_home, projection, summary),
         }
 
         # spreads: one prediction pair per distinct home line quoted by any fresh book.
-        spread_quotes = [q for q in quotes if q.market == MarketType.spreads.value and q.line is not None]
         spread_ids: Dict[Decimal, Dict[str, Optional[int]]] = {}
         spread_probs: Dict[Decimal, Tuple[float, float, float]] = {}
-        for home_line in sorted({q.line if q.side == BetSide.home.value else -q.line for q in spread_quotes}):
+        for home_line in self._home_lines(quotes):
             p_home_win, p_push, p_away_win = elo.spread_probabilities(mu, sigma, float(home_line))
             spread_probs[home_line] = (p_home_win, p_push, p_away_win)
             spread_ids[home_line] = {
-                BetSide.home.value: self._store_prediction(game, MarketType.spreads, BetSide.home, home_line, p_home_win, projection, summary),
-                BetSide.away.value: self._store_prediction(game, MarketType.spreads, BetSide.away, -home_line, p_away_win, projection, summary),
+                BetSide.home.value: self._store_prediction(model, game, MarketType.spreads, BetSide.home, home_line, p_home_win, projection, summary),
+                BetSide.away.value: self._store_prediction(model, game, MarketType.spreads, BetSide.away, -home_line, p_away_win, projection, summary),
             }
 
         if not quotes:
@@ -460,6 +526,7 @@ class PredictionRecorder:
 
     def _store_prediction(
         self,
+        model: _ActiveModel,
         game: Game,
         market: MarketType,
         side: BetSide,
@@ -469,15 +536,19 @@ class PredictionRecorder:
         summary: RecorderSummary,
     ) -> Optional[int]:
         """Id of the prediction for this target, creating it when new (None for a new one on a dry run)."""
-        key = (game.id, market.value, side.value, _line(line))
+        key = (model.row.id, game.id, market.value, side.value, _line(line))
         if key in self._predictions:
-            summary.predictions_existing += 1
+            model.stats.predictions_existing += 1
+            if model.is_champion:
+                summary.predictions_existing += 1
             return self._predictions[key]
-        summary.predictions_written += 1
+        model.stats.predictions_written += 1
+        if model.is_champion:
+            summary.predictions_written += 1
         if self._dry_run:
             return None
         row = ModelPrediction(
-            model_version_id=self._model_version_id,
+            model_version_id=model.row.id,
             game_id=game.id,
             market=market,
             side=side,

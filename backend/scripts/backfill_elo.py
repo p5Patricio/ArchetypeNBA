@@ -5,9 +5,12 @@ Builds, updates and evaluates the Elo ratings stored in team_elo_rating (derived
     python scripts/backfill_elo.py --update             # rate only games without rows yet
     python scripts/backfill_elo.py --dry-run --evaluate # compute and print, write nothing
     python scripts/backfill_elo.py --evaluate --register
+    python scripts/backfill_elo.py --model-id 3         # rebuild the rating rows of challenger model 3
 
 --evaluate prints the per-season walk-forward metrics; --register upserts the elo_538 model_version
 (sigma and Brier over the last 5 completed seasons). --dry-run never writes to the database.
+--model-id selects the model_version whose rating rows are built and evaluated (default: the champion);
+the model's own params drive the Elo maths.
 """
 import argparse
 import sys
@@ -18,7 +21,9 @@ from typing import List, Optional
 backend_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_dir))
 
+from app.models import ModelVersion  # noqa: E402
 from app.services.elo_service import (  # noqa: E402
+    MODEL_NAME,
     BackfillSummary,
     EloRatingService,
     OOS_SEASONS,
@@ -36,6 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--update", action="store_true", help="rate only games without rating rows yet")
     parser.add_argument("--evaluate", action="store_true", help="print per-season walk-forward metrics")
     parser.add_argument("--register", action="store_true", help="upsert the elo_538 model_version row")
+    parser.add_argument("--model-id", type=int, default=None, help="model_version id to build (default: the champion)")
     parser.add_argument("--dry-run", action="store_true", help="compute and print without writing to the database")
     return parser
 
@@ -79,13 +85,22 @@ def format_summary(summary: BackfillSummary, service: EloRatingService, mode: st
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.model_id is not None and args.register:
+        parser.error("--register only registers the default elo_538 model; it cannot be combined with --model-id")
     mode = "update" if args.update else "rebuild"
 
     from app.deps import get_db_context  # imported late so --help never builds a DB engine
 
     with get_db_context() as session:
-        service = EloRatingService(session)
+        if args.model_id is not None:
+            model = session.get(ModelVersion, args.model_id)
+            if model is None or model.name != MODEL_NAME:
+                print(f"model_version {args.model_id} is not an {MODEL_NAME} model", file=sys.stderr)
+                return 1
+            print(f"model: {model.name} {model.version} (id={model.id}, role={model.role})")
+        service = EloRatingService(session, model_version_id=args.model_id)
         # --evaluate/--register alone should not rewrite ratings, but a plain run is the default rebuild.
         if args.update:
             summary = service.update_new_games(dry_run=args.dry_run)

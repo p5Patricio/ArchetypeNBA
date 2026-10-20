@@ -55,11 +55,13 @@ class World:
             for key in ("pinnacle", "draftkings", "fanduel")
         }
         session.add_all(self.books.values())
-        session.add(ModelVersion(name=MODEL_NAME, version=MODEL_VERSION, params={"sigma": SIGMA}))
+        model = ModelVersion(name=MODEL_NAME, version=MODEL_VERSION, params={"sigma": SIGMA})
+        session.add(model)
         session.commit()
         for i, (abbr, rating) in enumerate(RATINGS.items()):
             session.add(
                 TeamEloRating(
+                    model_version_id=model.id,
                     team_id=self.teams[abbr].id,
                     season_id=self.old.id,
                     game_id=f"00225{i:05d}",

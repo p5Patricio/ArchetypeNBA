@@ -14,6 +14,7 @@ from app.models import (
     Team,
     TeamEloRating,
 )
+from app.services.model_registry import ensure_default_champion
 from app.repositories.historical import HistoricalRepository
 from app.repositories.player import PlayerRepository
 from app.repositories.team import TeamRepository
@@ -82,6 +83,7 @@ def _seed_service_data(db_session: Session, base_id: int = 501):
                 similarity_score=0.88,
             ),
             TeamEloRating(
+                model_version_id=ensure_default_champion(db_session).id,
                 team_id=base_id,
                 season_id=base_id,
                 game_id=f"SVC-GAME-{base_id}",

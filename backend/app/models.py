@@ -268,11 +268,15 @@ class TeamEloRating(SQLModel, table=True):
     __tablename__ = "team_elo_rating"
 
     __table_args__ = (
-        UniqueConstraint("team_id", "season_id", "game_id", name="uq_team_season_game_elo"),
+        # Each model version keeps its own rating line per team (see ModelVersion).
+        UniqueConstraint("model_version_id", "team_id", "season_id", "game_id", name="uq_model_team_season_game_elo"),
         Index("ix_elo_season", "season_id", "rating_after"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    model_version_id: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, ForeignKey("model_version.id"), nullable=False)
+    )
     team_id: int = Field(foreign_key="team.id")
     season_id: int = Field(foreign_key="season.id")
 
@@ -566,15 +570,40 @@ class OddsHistory(SQLModel, table=True):
     )
 
 
+MODEL_ROLE_CHAMPION = "champion"  # drives the paper bets; exactly one at a time
+MODEL_ROLE_CHALLENGER = "challenger"  # shadow predictions only
+MODEL_ROLE_RETIRED = "retired"
+MODEL_ROLES = (MODEL_ROLE_CHAMPION, MODEL_ROLE_CHALLENGER, MODEL_ROLE_RETIRED)
+
+EVALUATION_DECISIONS = (
+    "insufficient_data", "keep", "promote", "retire", "rollback", "proposal", "dry_run",
+)
+
+
+def _in_list(column: str, values) -> str:
+    return f"{column} IN ({', '.join(repr(v) for v in values)})"
+
+
 class ModelVersion(SQLModel, table=True):
     __tablename__ = "model_version"
 
-    __table_args__ = (UniqueConstraint("name", "version", name="uq_model_version_name_version"),)
+    __table_args__ = (
+        UniqueConstraint("name", "version", name="uq_model_version_name_version"),
+        CheckConstraint(_in_list("role", MODEL_ROLES), name="ck_model_version_role"),
+        # At most one champion; any number of challengers and retired models.
+        Index(
+            "uq_model_version_single_champion",
+            "role",
+            unique=True,
+            postgresql_where=text("role = 'champion'"),
+            sqlite_where=text("role = 'champion'"),
+        ),
+    )
 
     id: Optional[int] = Field(
         default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True)
     )
-    name: str = Field(sa_column=Column(Text, nullable=False))
+    name: str = Field(sa_column=Column(Text, nullable=False))  # model family, see app.services.model_registry
     version: str = Field(sa_column=Column(Text, nullable=False))
     params: Dict[str, Any] = Field(
         default_factory=dict,
@@ -584,6 +613,44 @@ class ModelVersion(SQLModel, table=True):
     trained_at: Optional[datetime] = Field(
         default=None, sa_column=_timestamptz(server_default=func.now())
     )
+    role: str = Field(
+        default=MODEL_ROLE_CHALLENGER,
+        sa_column=Column(Text, nullable=False, server_default=text("'challenger'")),
+    )
+    promoted_at: Optional[datetime] = Field(default=None, sa_column=_timestamptz())
+    retired_at: Optional[datetime] = Field(default=None, sa_column=_timestamptz())
+    parent_id: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, ForeignKey("model_version.id"))
+    )  # the model this one was derived from
+    notes: Optional[str] = Field(default=None, sa_column=Column(Text))
+
+
+class ModelEvaluation(SQLModel, table=True):
+    """Audit row of one champion-vs-challenger evaluation and the decision taken on it."""
+
+    __tablename__ = "model_evaluation"
+
+    __table_args__ = (
+        CheckConstraint(_in_list("decision", EVALUATION_DECISIONS), name="ck_model_evaluation_decision"),
+        Index("ix_model_evaluation_challenger", "challenger_id", "evaluated_at"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    evaluated_at: Optional[datetime] = Field(
+        default=None, sa_column=_timestamptz(server_default=func.now())
+    )
+    champion_id: int = Field(sa_column=Column(Integer, ForeignKey("model_version.id"), nullable=False))
+    challenger_id: int = Field(sa_column=Column(Integer, ForeignKey("model_version.id"), nullable=False))
+    n_games: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
+    n_market_games: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
+    metrics: Dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(_JSON, nullable=False, server_default=text("'{}'")),
+    )  # every number behind the decision: estimates, confidence intervals, the bootstrap seed
+    decision: str = Field(sa_column=Column(Text, nullable=False))
+    reason: Optional[str] = Field(default=None, sa_column=Column(Text))
 
 
 class ModelPrediction(SQLModel, table=True):
