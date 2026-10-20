@@ -45,7 +45,7 @@ The user's goal is a system that improves with time. With ~2,600 held-out games 
 - RDD: on (default); assess each work-unit commit.
 
 ## Tasks
-- [ ] L1 Registry and shadow predictions: migration (model_version role/status fields, `model_evaluation`, `team_elo_rating.model_version_id`), model family protocol + registry + Elo family with params, recorder predicts for champion and active challengers (bets only from champion) — route: delegated writer (PR 1, branch feat/model-registry)
+- [x] L1 (PR #13, merged and deployed 2026-10-20) Registry and shadow predictions: migration (model_version role/status fields, `model_evaluation`, `team_elo_rating.model_version_id`), model family protocol + registry + Elo family with params, recorder predicts for champion and active challengers (bets only from champion) — route: delegated writer (PR 1, branch feat/model-registry). Commits 97215df (migration d7a2f5b81c39: roles, `model_evaluation`, `team_elo_rating.model_version_id`), b947914 (`model_registry.py`, `EloParams`, per-model `EloRatingService`, golden-row equivalence test), d033ed8 (shadow predictions; only the champion bets). Checks: pytest 455 passed; migration up/down/up on a scratch PostgreSQL with 60,000 rows; champion equivalence on a copy of real data (identical predictions and bets). Deployed with the tick paused: pg_dump backup of the affected tables, merge, pull, `alembic upgrade head` (59,284 rating rows assigned to model 1, one champion), dry runs, task re-enabled, tick exit 0. Incident: the writer's first equivalence script ran old code against the real DB (non-dry); verified no rows written.
 - [ ] L2 Feature model and candidate lab: `margin_features` family (training, numpy inference), leak-free feature builder, historical walk-forward lab CLI, Elo random search with time split, challenger registration — route: delegated writer (PR 2)
 - [ ] L3 Evaluation, promotion engine and `learn` tick step: paired bootstrap evaluation, gates, promotion/retirement/rollback, audit rows, report section "Model league", flag/kill switch — route: delegated writer (PR 3)
 - [ ] L4 Operate: apply migrations in lockstep with each merge, first candidate proposal, verify with a dry run and the report — route: inline
@@ -71,5 +71,12 @@ The user's goal is a system that improves with time. With ~2,600 held-out games 
 - Telegram notification on promotion.
 - Closing-quote presence record; shutdown endpoint CSRF hardening; second odds feed.
 
+## Notes from L1 for L2/L3
+- `register_family(name, factory)` exists for `margin_features`; a challenger whose family is unknown is skipped and counted (`challenger_unusable`).
+- `get_champion` falls back to the elo_538 1.1 row for pre-migration databases; a champion that is not an Elo family is not yet handled by `EloRatingService()` default resolution (L3 must make it explicit).
+- Max 3 challengers is not enforced yet (L3). `model_evaluation` exists but nothing writes it.
+- A new Elo challenger replays ~25k games the first time `update_active_models` runs; the lab CLI must run that backfill at registration time to avoid a tick spike.
+- Deploy pattern for schema changes: pg_dump of affected tables to `../ArchetypeNBA-backups/`, `Disable-ScheduledTask NBA-Odds-Tick`, merge, pull, `alembic upgrade head`, dry runs, `Enable-ScheduledTask`.
+
 ## Next step
-Run L1.
+Run L2.
