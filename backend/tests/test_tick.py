@@ -55,12 +55,13 @@ def world(db_session):
     for abbr, full in [("BOS", "Boston Celtics"), ("LAC", "LA Clippers")]:
         teams[abbr] = Team(abbreviation=abbr, full_name=full, city="", conference="", division="")
         db_session.add(teams[abbr])
-    db_session.add(ModelVersion(name=MODEL_NAME, version=MODEL_VERSION, params={"sigma": 14.0}))
+    model = ModelVersion(name=MODEL_NAME, version=MODEL_VERSION, params={"sigma": 14.0})
+    db_session.add(model)
     db_session.commit()
     for index, (abbr, rating) in enumerate([("BOS", 1600.0), ("LAC", 1500.0)]):
         db_session.add(
             TeamEloRating(
-                team_id=teams[abbr].id, season_id=old.id, game_id=f"00225{index:05d}",
+                model_version_id=model.id, team_id=teams[abbr].id, season_id=old.id, game_id=f"00225{index:05d}",
                 game_date=date(2026, 4, 10), rating_after=rating,
             )
         )

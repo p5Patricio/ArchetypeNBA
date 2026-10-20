@@ -9,6 +9,7 @@ from app.models import (
     PlayerSimilarity,
     TeamEloRating,
 )
+from app.services import model_registry
 
 
 class HistoricalRepository:
@@ -64,15 +65,15 @@ class HistoricalRepository:
         return self.session.exec(stmt).all()
 
     def list_team_elo(self, team_id: int, season_id: int) -> List[TeamEloRating]:
-        stmt = (
-            select(TeamEloRating)
-            .where(
-                TeamEloRating.team_id == team_id,
-                TeamEloRating.season_id == season_id,
-            )
-            .order_by(TeamEloRating.game_date)
+        """The champion's rating timeline (every model keeps its own rows in team_elo_rating)."""
+        stmt = select(TeamEloRating).where(
+            TeamEloRating.team_id == team_id,
+            TeamEloRating.season_id == season_id,
         )
-        return self.session.exec(stmt).all()
+        champion = model_registry.get_champion(self.session)
+        if champion is not None:
+            stmt = stmt.where(TeamEloRating.model_version_id == champion.id)
+        return self.session.exec(stmt.order_by(TeamEloRating.game_date)).all()
 
     def save_advanced_stats(self, stats: PlayerAdvancedStats) -> PlayerAdvancedStats:
         existing = self.get_player_advanced_stats(stats.player_id, stats.season_id)

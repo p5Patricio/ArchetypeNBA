@@ -12,6 +12,7 @@ from app.models import (
     Team,
     TeamEloRating,
 )
+from app.services.model_registry import ensure_default_champion
 
 
 def _seed_api_data(db_session: Session, base_id: int = 901):
@@ -74,6 +75,7 @@ def _seed_api_data(db_session: Session, base_id: int = 901):
                 similarity_score=0.93,
             ),
             TeamEloRating(
+                model_version_id=ensure_default_champion(db_session).id,
                 team_id=base_id,
                 season_id=base_id,
                 game_id=f"API-GAME-{base_id}",

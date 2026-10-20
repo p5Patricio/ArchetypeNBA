@@ -12,6 +12,7 @@ from app.models import (
     Team,
     TeamEloRating,
 )
+from app.services.model_registry import ensure_default_champion
 from app.repositories.historical import HistoricalRepository
 
 
@@ -73,6 +74,7 @@ def _seed_historical_data(db_session: Session, base_id: int = 301):
                 similarity_score=0.91,
             ),
             TeamEloRating(
+                model_version_id=ensure_default_champion(db_session).id,
                 team_id=base_id,
                 season_id=base_id,
                 game_id=f"HIST-GAME-{base_id}",

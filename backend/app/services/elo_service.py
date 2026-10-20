@@ -14,6 +14,9 @@ The Elo maths lives in ``app.analytics.elo``. This module owns the data side:
   game of a new season. ``rebuild_all`` and ``update_new_games`` share the same replay code, so the
   incremental path produces exactly the numbers of a full rebuild.
 
+Each model version keeps its own rating line per team (``team_elo_rating.model_version_id``): a service is
+bound to one model, by default the champion (see ``app.services.model_registry``).
+
 Note: ``app.services.elo`` (older, per-team timeline helper) is unrelated and left untouched.
 """
 import math
@@ -29,10 +32,11 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session
 
 from app.analytics import elo
-from app.models import ModelVersion, PlayerGameLog, Season, Team, TeamEloRating
+from app.models import MODEL_ROLE_CHAMPION, ModelVersion, PlayerGameLog, Season, Team, TeamEloRating
+from app.services import model_registry
 
-MODEL_NAME = "elo_538"
-MODEL_VERSION = "1.1"  # 1.1: home advantage 60 (538 original: 100)
+MODEL_NAME = model_registry.ELO_FAMILY_NAME
+MODEL_VERSION = model_registry.LEGACY_CHAMPION_VERSION
 DEFAULT_SIGMA = 12.0
 OOS_SEASONS = 5
 
@@ -149,11 +153,17 @@ def replay_games(
     return results, state
 
 
-def rating_rows(rating: GameRating) -> List[dict]:
+def rating_rows(rating: GameRating, model_version_id: Optional[int] = None) -> List[dict]:
     """The two team_elo_rating rows (home, away) a replayed game produces."""
     game = rating.game
     home_won = game.home_pts > game.away_pts
-    common = {"season_id": game.season_id, "game_id": game.game_id, "game_date": game.game_date, "k_factor": elo.K}
+    common = {
+        "model_version_id": model_version_id,
+        "season_id": game.season_id,
+        "game_id": game.game_id,
+        "game_date": game.game_date,
+        "k_factor": elo.K,
+    }
     return [
         {
             **common,
@@ -223,10 +233,28 @@ def out_of_sample_summary(metrics: Sequence[SeasonMetrics], last_n: int = OOS_SE
 
 
 class EloRatingService:
-    def __init__(self, session: Session, sigma: Optional[float] = None):
+    def __init__(self, session: Session, sigma: Optional[float] = None, model_version_id: Optional[int] = None):
         self.session = session
         self.sigma = sigma
         self.last_load_report = LoadReport()
+        self._model_version_id = model_version_id
+
+    # ------------------------------------------------------------------ model
+
+    @property
+    def model_version_id(self) -> Optional[int]:
+        """The model whose rating rows this service reads and writes: the one given, else the champion."""
+        if self._model_version_id is None:
+            champion = model_registry.get_champion(self.session)
+            if champion is not None:
+                self._model_version_id = champion.id
+        return self._model_version_id
+
+    def _model_id_for_write(self) -> int:
+        """Like ``model_version_id``, registering the default model first when none exists yet."""
+        if self.model_version_id is None:
+            self._model_version_id = model_registry.ensure_default_champion(self.session).id
+        return self._model_version_id
 
     # ------------------------------------------------------------------ games
 
@@ -312,6 +340,7 @@ class EloRatingService:
     # ------------------------------------------------------------ persistence
 
     def _upsert_rows(self, rows: List[dict]) -> int:
+        """Insert or update rating rows (each already carries its model_version_id)."""
         if not rows:
             return 0
         dialect = self.session.get_bind().dialect.name
@@ -331,19 +360,21 @@ class EloRatingService:
         for start in range(0, len(rows), _INSERT_CHUNK):
             stmt = make_insert(table).values(rows[start : start + _INSERT_CHUNK])
             stmt = stmt.on_conflict_do_update(
-                index_elements=["team_id", "season_id", "game_id"],
+                index_elements=["model_version_id", "team_id", "season_id", "game_id"],
                 set_={col: getattr(stmt.excluded, col) for col in updatable},
             )
             self.session.execute(stmt)
         return len(rows)
 
     def _delete_stale(self, keep: Set[Tuple[int, int, str]]) -> int:
-        """Remove rating rows (for example under a pre-mapping team id) that a full replay no longer produces."""
+        """Remove this model's rating rows (for example under a pre-mapping team id) that a full replay no longer produces."""
         table = TeamEloRating.__table__
         stale = [
             row_id
             for row_id, team_id, season_id, game_id in self.session.execute(
-                select(table.c.id, table.c.team_id, table.c.season_id, table.c.game_id)
+                select(table.c.id, table.c.team_id, table.c.season_id, table.c.game_id).where(
+                    table.c.model_version_id == self.model_version_id
+                )
             ).all()
             if (team_id, season_id, game_id) not in keep
         ]
@@ -352,11 +383,11 @@ class EloRatingService:
         return len(stale)
 
     def _load_state(self, as_of: Optional[date] = None) -> Tuple[TeamState, Set[str], Optional[Tuple[date, str]]]:
-        """Latest rating per team, the game_ids that already have rows, and the newest (date, game_id) rated."""
+        """This model's latest rating per team, the game_ids that already have rows, and the newest (date, game_id) rated."""
         table = TeamEloRating.__table__
         stmt = select(
             table.c.team_id, table.c.season_id, table.c.game_id, table.c.game_date, table.c.rating_after
-        ).where(table.c.game_date.is_not(None))
+        ).where(table.c.model_version_id == self.model_version_id, table.c.game_date.is_not(None))
         if as_of is not None:
             stmt = stmt.where(table.c.game_date <= as_of)
         stmt = stmt.order_by(table.c.game_date, table.c.game_id)
@@ -386,7 +417,8 @@ class EloRatingService:
             summary.rows_written = 2 * len(ratings)
             return summary
 
-        rows = [row for rating in ratings for row in rating_rows(rating)]
+        model_id = self._model_id_for_write()
+        rows = [row for rating in ratings for row in rating_rows(rating, model_id)]
         summary.rows_written = self._upsert_rows(rows)
         summary.rows_deleted = self._delete_stale({(r["team_id"], r["season_id"], r["game_id"]) for r in rows})
         self.session.commit()
@@ -413,10 +445,11 @@ class EloRatingService:
             final_ratings={team_id: rating for team_id, (rating, _) in new_state.items()},
             report=self.last_load_report,
         )
-        rows = [row for rating in ratings for row in rating_rows(rating)]
         if dry_run:
-            summary.rows_written = len(rows)
+            summary.rows_written = 2 * len(ratings)
             return summary
+        model_id = self._model_id_for_write()
+        rows = [row for rating in ratings for row in rating_rows(rating, model_id)]
         summary.rows_written = self._upsert_rows(rows)
         self.session.commit()
         return summary
@@ -440,9 +473,9 @@ class EloRatingService:
         return ratings
 
     def load_sigma(self) -> float:
-        """Sigma registered in model_version, or DEFAULT_SIGMA when the model was never registered."""
+        """Sigma registered for this model, or DEFAULT_SIGMA when the model was never registered."""
         row = self.session.execute(
-            select(ModelVersion.params).where(ModelVersion.name == MODEL_NAME, ModelVersion.version == MODEL_VERSION)
+            select(ModelVersion.params).where(ModelVersion.id == self.model_version_id)
         ).first()
         sigma = (row[0] or {}).get("sigma") if row else None
         return float(sigma) if sigma else DEFAULT_SIGMA
@@ -492,7 +525,10 @@ class EloRatingService:
         trained_through: Optional[date] = None,
         seasons_evaluated: Optional[Sequence[str]] = None,
     ) -> ModelVersion:
-        """Upsert the elo_538 / 1.1 model_version row. Idempotent."""
+        """
+        Upsert the elo_538 / 1.1 model_version row. Idempotent. A row created here becomes the champion when
+        the registry has none yet; an existing row keeps its role.
+        """
         params = {
             "K": elo.K,
             "home_advantage": elo.HOME_ADVANTAGE,
@@ -510,6 +546,8 @@ class EloRatingService:
         ).scalar_one_or_none()
         if row is None:
             row = ModelVersion(name=MODEL_NAME, version=MODEL_VERSION)
+            if model_registry.get_champion(self.session) is None:
+                row.role, row.promoted_at = MODEL_ROLE_CHAMPION, datetime.now(timezone.utc)
             self.session.add(row)
         row.params = params
         row.brier_oos = brier
