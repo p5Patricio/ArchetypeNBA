@@ -59,6 +59,12 @@ if (-not $PythonExe -and (Test-Path $PipelineBat)) {
     if ($match) { $PythonExe = $match.Matches[0].Groups[1].Value }
 }
 if (-not $PythonExe) { $PythonExe = "python" }
+# pythonw.exe (subsistema GUI) no crea consola: es lo unico que evita el parpadeo de ventana que roba el foco.
+# "powershell -WindowStyle Hidden" oculta la ventana DESPUES de crearla, y ese instante basta para sacarte de un juego o una reunion.
+if ($PythonExe -match '(?i)python\.exe$') {
+    $candidate = $PythonExe -replace '(?i)python\.exe$', 'pythonw.exe'
+    if (Test-Path $candidate) { $PythonExe = $candidate }
+}
 if (($PythonExe -ne "python") -and -not (Test-Path $PythonExe)) {
     Write-Host "[ERROR] No se encontro Python en: $PythonExe (usa -PythonExe)" -ForegroundColor Red
     exit 1
@@ -74,10 +80,9 @@ function ConvertTo-XmlText([string]$Text) {
 
 function New-TickTaskXml([string]$UserName) {
     # Las comillas simples de las rutas se duplican para el literal de PowerShell; luego todo se escapa para XML.
-    $quotedPython = $PythonExe.Replace("'", "''")
-    $quotedScript = $TickScript.Replace("'", "''")
-    $inner = "& '$quotedPython' -u '$quotedScript'; exit `$LASTEXITCODE"
-    $arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$inner`""
+    # Sin envoltorio de PowerShell: el propio tick escribe logs/tick.log y Task Scheduler guarda el codigo de salida de Python.
+    $arguments = "-u `"$TickScript`""
+    $xmlCommand = ConvertTo-XmlText $PythonExe
 
     $user = ConvertTo-XmlText $UserName
     $xmlArguments = ConvertTo-XmlText $arguments
@@ -138,7 +143,7 @@ function New-TickTaskXml([string]$UserName) {
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>powershell.exe</Command>
+      <Command>$xmlCommand</Command>
       <Arguments>$xmlArguments</Arguments>
       <WorkingDirectory>$workDir</WorkingDirectory>
     </Exec>
