@@ -1,0 +1,406 @@
+"""Promotion engine: passes, atomic swaps, retirements, rollbacks, audit rows and the manual overrides."""
+import json
+from datetime import datetime, timedelta, timezone
+
+import numpy as np
+import pytest
+from sqlmodel import select
+
+from app.models import ModelEvaluation, ModelVersion
+from app.services import model_evaluation as ev
+from app.services import model_promotion as promo
+from tests.test_model_evaluation import LONG_AGO, NOW, SIGMA, League, _p_from_mu, simulate
+
+UTC = timezone.utc
+CONFIG = ev.EvaluationConfig(resamples=500)
+
+
+@pytest.fixture
+def league(db_session):
+    return League(db_session)
+
+
+def run_pass(league, now=NOW, **kwargs):
+    kwargs.setdefault("config", CONFIG)
+    kwargs.setdefault("autopromote", True)
+    kwargs.setdefault("local_tz", UTC)
+    return promo.run_evaluation_pass(league.session, now, **kwargs)
+
+
+def champions(session):
+    return session.exec(select(ModelVersion).where(ModelVersion.role == "champion")).all()
+
+
+def audit(session):
+    return session.exec(select(ModelEvaluation).order_by(ModelEvaluation.id)).all()
+
+
+def add_model(league, version, mus, role="challenger", **fields):
+    """A model that predicted every existing game with the given expected margins."""
+    model = ModelVersion(name="elo_538", version=version, role=role, params={"sigma": SIGMA}, **fields)
+    league.session.add(model)
+    league.session.commit()
+    predict_all(league, model, mus)
+    return model
+
+
+def predict_all(league, model, mus):
+    for game, mu in zip(league.games, mus):
+        league.predict(model, game, _p_from_mu(mu), mu)
+
+
+def better_league(league, n=400, days=40, seed=21):
+    win, margin, mu_champion, mu_challenger = simulate(n, seed, 7.0, 1.0)
+    league.populate(win, margin, mu_champion, mu_challenger, days)
+    return win, margin, mu_champion, mu_challenger
+
+
+# ------------------------------------------------------------------------------------------- promotion
+
+def test_a_pass_promotes_a_clearly_better_challenger_and_writes_the_audit_row(league):
+    better_league(league)
+    session = league.session
+    old_id, new_id = league.champion.id, league.challenger.id
+
+    outcome = run_pass(league)
+
+    (entry,) = outcome.entries
+    assert entry.action == promo.ACTION_PROMOTED and outcome.promoted == [entry]
+    session.expire_all()
+    (champion,) = champions(session)
+    assert champion.id == new_id
+    old = session.get(ModelVersion, old_id)
+    assert old.role == "challenger" and old.retired_at is None  # the ex-champion stays on watch
+    assert champion.promoted_at is not None and champion.parent_id == old_id
+    promotion = json.loads(champion.notes)["promotion"]
+    assert promotion["decision"] == "promote" and promotion["champion_id"] == old_id
+
+    (row,) = audit(session)
+    assert (row.decision, row.champion_id, row.challenger_id, row.n_games) == ("promote", old_id, new_id, 400)
+    assert promotion["evaluation_id"] == row.id
+    assert row.metrics["seed"] == ev.SEED and row.metrics["k"] == 1 and row.metrics["applied"] is True
+    assert row.metrics["thresholds"]["min_games"] == 150 and row.metrics["log_loss_gain"]["bound_low"] > 0
+    assert row.metrics["challenger"]["log_loss"] < row.metrics["champion"]["log_loss"]
+    assert row.reason.startswith("log-loss gain")
+
+
+def test_the_notes_of_a_lab_candidate_are_extended_not_overwritten(league):
+    better_league(league)
+    league.challenger.notes = json.dumps({"source": "model_lab", "seed": 42})
+    league.session.commit()
+
+    run_pass(league)
+
+    league.session.expire_all()
+    notes = json.loads(league.session.get(ModelVersion, league.challenger.id).notes)
+    assert notes["source"] == "model_lab" and notes["promotion"]["decision"] == "promote"
+
+
+def test_at_most_one_promotion_per_pass_and_the_best_evidence_wins(league):
+    win, margin, mu_champion, mu_challenger = better_league(league)
+    session = league.session
+    # a second challenger that is also better than the champion, but less so than the first
+    rng = np.random.default_rng(3)
+    second = add_model(league, "lab-2", [m + rng.normal(0, 0.1) for m in mu_challenger * 0.0 + (mu_champion + mu_challenger) / 2])
+    first_id = league.challenger.id
+
+    outcome = run_pass(league)
+
+    assert [e.action for e in outcome.entries].count(promo.ACTION_PROMOTED) == 1
+    session.expire_all()
+    (champion,) = champions(session)
+    assert champion.id == first_id
+    loser = next(e for e in outcome.entries if e.model_id == second.id)
+    assert loser.action == promo.ACTION_RECORDED and loser.decision == "keep"
+    assert "another challenger" in loser.note
+    assert sorted(r.decision for r in audit(session)) == ["keep", "promote"]
+    assert session.get(ModelVersion, second.id).role == "challenger"
+
+
+def test_a_failure_in_the_middle_of_a_swap_leaves_exactly_the_old_champion(league, monkeypatch):
+    better_league(league)
+    session = league.session
+    old_id, new_id = league.champion.id, league.challenger.id
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr(promo, "_promote_row", explode)  # runs after the old champion was demoted and flushed
+
+    outcome = run_pass(league)
+
+    (entry,) = outcome.entries
+    assert entry.action == promo.ACTION_FAILED and "disk on fire" in entry.note
+    session.expire_all()
+    (champion,) = champions(session)
+    assert champion.id == old_id and session.get(ModelVersion, new_id).role == "challenger"
+    (row,) = audit(session)  # the audit row of the failed promotion rolled back with it; the failure is recorded
+    assert row.decision == "keep" and "failed and was rolled back" in row.reason and row.metrics["failed"] is True
+    assert session.get(ModelVersion, old_id).promoted_at is not None  # untouched
+
+
+def test_the_single_champion_index_makes_a_double_champion_impossible(league):
+    session = league.session
+    league.challenger.role = "champion"
+    with pytest.raises(Exception):
+        session.commit()
+    session.rollback()
+
+
+def test_a_cooldown_blocks_promotion_and_is_recorded_as_keep(league):
+    better_league(league)
+    league.champion.promoted_at = NOW - timedelta(days=10)
+    league.session.commit()
+
+    run_pass(league)
+
+    league.session.expire_all()
+    assert champions(league.session)[0].id == league.champion.id
+    (row,) = audit(league.session)
+    assert row.decision == "keep" and "cooldown until" in row.reason
+
+
+def test_nothing_is_promoted_below_the_sample_gates(league):
+    win, margin, mu_champion, mu_challenger = simulate(120, 21, 7.0, 1.0)
+    league.populate(win, margin, mu_champion, mu_challenger, days=20)
+
+    run_pass(league)
+
+    league.session.expire_all()
+    assert champions(league.session)[0].id == league.champion.id
+    (row,) = audit(league.session)
+    assert row.decision == "insufficient_data" and row.n_games == 120
+
+
+# ---------------------------------------------------------------------------------- retire and rollback
+
+def test_a_significantly_worse_challenger_is_retired(league):
+    win, margin, mu_champion, mu_challenger = simulate(130, 8, 1.0, 14.0)
+    league.populate(win, margin, mu_champion, mu_challenger, days=20)
+
+    outcome = run_pass(league)
+
+    assert outcome.retired and outcome.entries[0].action == promo.ACTION_RETIRED
+    league.session.expire_all()
+    challenger = league.session.get(ModelVersion, league.challenger.id)
+    assert challenger.role == "retired" and challenger.retired_at is not None
+    assert json.loads(challenger.notes)["retirement"]["decision"] == "retire"
+    assert champions(league.session)[0].id == league.champion.id
+    (row,) = audit(league.session)
+    assert row.decision == "retire" and "significantly worse" in row.reason
+    # a retired model is no longer evaluated
+    assert run_pass(league, now=NOW + timedelta(days=1)).entries == []
+
+
+def test_the_previous_champion_returns_through_a_rollback(league):
+    better_league(league)
+    session = league.session
+    # the "challenger" is the ex-champion of the current champion and is clearly better: it must pass the same gate
+    league.champion.parent_id = league.challenger.id
+    league.champion.promoted_at = NOW - timedelta(days=45)
+    session.commit()
+    old_id, back_id = league.champion.id, league.challenger.id
+
+    outcome = run_pass(league)
+
+    (entry,) = outcome.entries
+    assert entry.action == promo.ACTION_ROLLED_BACK
+    session.expire_all()
+    (champion,) = champions(session)
+    assert champion.id == back_id and champion.parent_id == old_id
+    (row,) = audit(session)
+    assert row.decision == "rollback" and row.metrics["previous_champion"] is True
+
+
+def test_a_rollback_candidate_faces_the_same_cooldown(league):
+    better_league(league)
+    league.champion.parent_id = league.challenger.id
+    league.champion.promoted_at = NOW - timedelta(days=5)
+    league.session.commit()
+
+    run_pass(league)
+
+    league.session.expire_all()
+    assert champions(league.session)[0].id == league.champion.id
+    assert audit(league.session)[0].decision == "keep"
+
+
+# ----------------------------------------------------------------------------------- kill switch / dry
+
+def test_with_autopromote_off_the_decision_is_recorded_and_nothing_changes(league):
+    better_league(league)
+
+    outcome = run_pass(league, autopromote=False)
+
+    league.session.expire_all()
+    assert champions(league.session)[0].id == league.champion.id
+    assert league.session.get(ModelVersion, league.challenger.id).role == "challenger"
+    (row,) = audit(league.session)
+    assert row.decision == "dry_run" and row.reason == "autopromote disabled (would promote)"
+    assert row.metrics["proposed_decision"] == "promote" and row.metrics["applied"] is False
+    assert outcome.entries[0].action == promo.ACTION_RECORDED and not outcome.autopromote
+
+
+def test_with_autopromote_off_a_retirement_is_not_applied_either(league):
+    win, margin, mu_champion, mu_challenger = simulate(130, 8, 1.0, 14.0)
+    league.populate(win, margin, mu_champion, mu_challenger, days=20)
+
+    run_pass(league, autopromote=False)
+
+    league.session.expire_all()
+    assert league.session.get(ModelVersion, league.challenger.id).role == "challenger"
+    assert audit(league.session)[0].reason == "autopromote disabled (would retire)"
+
+
+def test_the_kill_switch_defaults_to_the_setting(league, monkeypatch):
+    better_league(league)
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "LEARNING_AUTOPROMOTE", False)
+    run_pass(league, autopromote=None)
+    league.session.expire_all()
+    assert champions(league.session)[0].id == league.champion.id
+    assert audit(league.session)[0].decision == "dry_run"
+
+
+def test_a_preview_pass_writes_nothing_at_all(league):
+    better_league(league)
+
+    outcome = run_pass(league, apply=False)
+
+    assert outcome.entries[0].action == promo.ACTION_PREVIEW and outcome.entries[0].result.decision == "promote"
+    assert audit(league.session) == []
+    league.session.expire_all()
+    assert champions(league.session)[0].id == league.champion.id
+    assert "would promote" in promo.format_pass(outcome)
+
+
+# ----------------------------------------------------------------------------------- audit row cadence
+
+def test_a_row_is_written_only_for_new_paired_games_and_once_per_local_day(league):
+    session = league.session
+    win, margin, mu_champion, mu_challenger = simulate(60, 5, 6.0, 5.0)
+    league.populate(win, margin, mu_champion, mu_challenger, days=20)
+    morning = datetime(2026, 12, 1, 9, 0, tzinfo=UTC)
+
+    first = run_pass(league, now=morning)
+    assert first.rows_written == 1 and len(audit(session)) == 1
+
+    again = run_pass(league, now=morning + timedelta(hours=1))
+    assert again.entries[0].action == promo.ACTION_SKIPPED and "no new paired games" in again.entries[0].note
+    assert len(audit(session)) == 1
+
+    for index in range(10):  # new evidence arrives
+        game = league.game(1 + index)
+        league.predict(league.champion, game, 0.6, 3.0)
+        league.predict(league.challenger, game, 0.6, 3.0)
+    same_day = run_pass(league, now=morning + timedelta(hours=3))
+    assert same_day.entries[0].action == promo.ACTION_SKIPPED and "already evaluated today" in same_day.entries[0].note
+    assert len(audit(session)) == 1
+
+    next_day = run_pass(league, now=morning + timedelta(days=1))
+    assert next_day.rows_written == 1 and len(audit(session)) == 2
+    assert [r.n_games for r in audit(session)] == [60, 70]
+
+
+def test_a_new_champion_means_a_fresh_evaluation_even_without_new_games(league):
+    session = league.session
+    win, margin, mu_champion, mu_challenger = simulate(60, 5, 6.0, 5.0)
+    league.populate(win, margin, mu_champion, mu_challenger, days=20)
+    run_pass(league, now=datetime(2026, 12, 1, 9, 0, tzinfo=UTC))
+    promo.manual_promote(session, league.challenger.id, "swap for the test", NOW, force=True)
+
+    # the old champion is a challenger of the new one: its last row compared it with another champion
+    outcome = run_pass(league, now=NOW + timedelta(days=2))
+
+    assert outcome.entries[0].model_id == league.champion.id and outcome.entries[0].action == promo.ACTION_RECORDED
+
+
+def test_with_no_champion_or_no_challengers_a_pass_is_a_harmless_no_op(db_session):
+    outcome = promo.run_evaluation_pass(db_session, NOW, autopromote=True)
+    assert outcome.entries == [] and "no champion" in outcome.message
+    db_session.add(ModelVersion(name="elo_538", version="1.1", role="champion", params={"sigma": SIGMA}))
+    db_session.commit()
+    outcome = promo.run_evaluation_pass(db_session, NOW, autopromote=True)
+    assert outcome.entries == [] and "no active challengers" in promo.format_pass(outcome)
+
+
+# ------------------------------------------------------------------------------------------- manual
+
+def test_a_manual_promotion_swaps_atomically_and_always_writes_an_audit_row(league):
+    session = league.session
+    old_id, new_id = league.champion.id, league.challenger.id
+    league.champion.promoted_at = NOW - timedelta(days=3)  # inside the cooldown
+    session.commit()
+
+    with pytest.raises(promo.ManualOverrideRefused, match="cooldown"):
+        promo.manual_promote(session, new_id, "because", NOW)
+    assert audit(session) == [] and champions(session)[0].id == old_id
+
+    row = promo.manual_promote(session, new_id, "operator decision", NOW, force=True)
+
+    session.expire_all()
+    (champion,) = champions(session)
+    assert champion.id == new_id and champion.parent_id == old_id and session.get(ModelVersion, old_id).role == "challenger"
+    assert (row.decision, row.reason) == ("promote", "manual: operator decision")
+    assert (row.champion_id, row.challenger_id) == (old_id, new_id)
+    assert row.metrics["manual"] is True and row.metrics["force"] is True and row.metrics["previous_champion_id"] == old_id
+    assert promo.last_evaluation(session, new_id) is None  # a manual row is not an evaluation
+
+
+def test_manual_promotion_refuses_the_champion_a_retired_model_and_a_missing_reason(league):
+    session = league.session
+    retired = ModelVersion(name="elo_538", version="old", role="retired", params={"sigma": SIGMA})
+    session.add(retired)
+    session.commit()
+    with pytest.raises(promo.ManualOverrideRefused, match="already the champion"):
+        promo.manual_promote(session, league.champion.id, "x", NOW, force=True)
+    with pytest.raises(promo.ManualOverrideRefused, match="retired"):
+        promo.manual_promote(session, retired.id, "x", NOW)
+    with pytest.raises(promo.ManualOverrideRefused, match="reason"):
+        promo.manual_promote(session, league.challenger.id, "  ", NOW)
+    with pytest.raises(promo.ManualOverrideRefused, match="does not exist"):
+        promo.manual_promote(session, 999, "x", NOW)
+    assert audit(session) == [] and len(champions(session)) == 1
+
+    promo.manual_promote(session, retired.id, "bring it back", NOW, force=True)  # --force lifts the retirement
+    session.expire_all()
+    (champion,) = champions(session)
+    assert champion.id == retired.id and champion.retired_at is None
+
+
+def test_manual_retirement_never_retires_the_champion(league):
+    session = league.session
+    with pytest.raises(promo.ManualOverrideRefused, match="champion"):
+        promo.manual_retire(session, league.champion.id, "x", NOW)
+    row = promo.manual_retire(session, league.challenger.id, "not worth the compute", NOW)
+    session.expire_all()
+    challenger = session.get(ModelVersion, league.challenger.id)
+    assert challenger.role == "retired" and challenger.retired_at is not None
+    assert (row.decision, row.reason) == ("retire", "manual: not worth the compute")
+    with pytest.raises(promo.ManualOverrideRefused, match="already retired"):
+        promo.manual_retire(session, league.challenger.id, "again", NOW)
+    assert len(champions(session)) == 1
+
+
+def test_a_failing_manual_swap_rolls_back_completely(league, monkeypatch):
+    session = league.session
+    monkeypatch.setattr(promo, "_promote_row", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    with pytest.raises(RuntimeError):
+        promo.manual_promote(session, league.challenger.id, "x", NOW, force=True)
+    session.expire_all()
+    assert [c.id for c in champions(session)] == [league.champion.id] and audit(session) == []
+
+
+# --------------------------------------------------------------------------------------- the league view
+
+def test_the_league_rows_and_role_changes_describe_the_registry(league):
+    better_league(league, n=200)
+    promo.manual_promote(league.session, league.challenger.id, "swap", NOW, force=True)
+
+    rows = promo.league_rows(league.session)
+
+    assert [r.role for r in rows] == ["champion", "challenger"]
+    assert rows[0].model_id == league.challenger.id and rows[0].predictions == 200 and rows[0].final_games == 200
+    assert promo.league_rows(league.session)[1].last_decision is None
+    assert [c.decision for c in promo.role_changes(league.session)] == ["promote"]

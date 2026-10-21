@@ -335,14 +335,14 @@ class EvaluationResult:
 
     def to_metrics(self) -> Dict[str, Any]:
         """Every number behind the decision as JSON-safe data (stored in ``model_evaluation.metrics``)."""
-        return _jsonable(asdict(self))
+        return jsonable(asdict(self))
 
 
-def _jsonable(value: Any) -> Any:
+def jsonable(value: Any) -> Any:
     if isinstance(value, dict):
-        return {str(key): _jsonable(item) for key, item in value.items()}
+        return {str(key): jsonable(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
-        return [_jsonable(item) for item in value]
+        return [jsonable(item) for item in value]
     if isinstance(value, datetime):
         return _aware_utc(value).isoformat()
     if isinstance(value, (np.floating, float)):

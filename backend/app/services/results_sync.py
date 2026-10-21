@@ -224,14 +224,14 @@ def find_pending_games(session: Session, now: datetime) -> Tuple[List[Game], int
 
 def count_final_games_without_ratings(session: Session) -> int:
     """
-    Final games (with an nba_game_id) that have no row in ``team_elo_rating`` yet for the champion model. Only
-    game types Elo rates (regular season, playoffs, play-in, Cup final) count: a preseason or all-star game never
-    gets ratings and would otherwise keep the catch-up pending forever.
+    Final games (with an nba_game_id) that have no row in ``team_elo_rating`` yet for the Elo reference model (the
+    champion while it is an Elo model). Only game types Elo rates (regular season, playoffs, play-in, Cup final)
+    count: a preseason or all-star game never gets ratings and would otherwise keep the catch-up pending forever.
     """
-    champion = model_registry.get_champion(session)
+    reference = model_registry.get_elo_reference(session)
     rated = select(TeamEloRating.game_id).where(
         TeamEloRating.game_id.is_not(None),
-        TeamEloRating.model_version_id == (champion.id if champion is not None else -1),
+        TeamEloRating.model_version_id == (reference.id if reference is not None else -1),
     )
     return int(
         session.execute(

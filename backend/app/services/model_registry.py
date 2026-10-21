@@ -78,6 +78,44 @@ def list_active(session: Session) -> List[ModelVersion]:
     ]
 
 
+def get_elo_reference(session: Session) -> Optional[ModelVersion]:
+    """
+    The Elo model that stays the default for rating queries, whatever family the champion is: the champion
+    itself when it is an Elo model, else the most recent active ``elo_538`` row (the previous champion usually
+    stays registered as a challenger), else, as a last resort, the most recent ``elo_538`` row of any role.
+    """
+    champion = get_champion(session)
+    if champion is not None and champion.name == ELO_FAMILY_NAME:
+        return champion
+    active = [row for row in list_active(session) if row.name == ELO_FAMILY_NAME]
+    if active:
+        return max(active, key=lambda row: row.id)
+    return session.execute(
+        select(ModelVersion).where(ModelVersion.name == ELO_FAMILY_NAME).order_by(ModelVersion.id.desc()).limit(1)
+    ).scalar_one_or_none()
+
+
+def ensure_elo_reference(session: Session) -> ModelVersion:
+    """
+    The Elo reference model, registering the default elo_538 1.1 first when no Elo model exists (as the champion
+    when the registry has none, else as a challenger). Flushes, never commits.
+    """
+    row = get_elo_reference(session)
+    if row is not None:
+        return row
+    has_champion = get_champion(session) is not None
+    row = ModelVersion(
+        name=ELO_FAMILY_NAME,
+        version=LEGACY_CHAMPION_VERSION,
+        params={},
+        role=MODEL_ROLE_CHALLENGER if has_champion else MODEL_ROLE_CHAMPION,
+        promoted_at=None if has_champion else datetime.now(timezone.utc),
+    )
+    session.add(row)
+    session.flush()
+    return row
+
+
 def ensure_default_champion(session: Session) -> ModelVersion:
     """
     The champion, registering the default elo_538 1.1 model as champion first when the registry has none.

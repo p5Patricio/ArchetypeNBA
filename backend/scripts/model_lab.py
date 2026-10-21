@@ -31,7 +31,7 @@ from app.services.model_lab import (  # noqa: E402
     PairedDelta,
     RegistrationRefused,
     RegistrationResult,
-    champion_elo_params,
+    lab_baseline,
     load_lab_data,
     register_candidates,
     run_lab,
@@ -142,15 +142,17 @@ def main(argv: Optional[List[str]] = None, session_factory=None) -> int:
     started = time.monotonic()
     with session_factory() as session:
         try:
-            _, champion_params = champion_elo_params(session)
+            _, baseline_params, baseline_note = lab_baseline(session)
             report = run_lab(
                 load_lab_data(session),
-                champion_params,
+                baseline_params,
                 model_registry.list_active(session),
                 seed=args.seed,
                 n_configs=args.configs,
                 deadline=started + args.max_seconds,
             )
+            if baseline_note:
+                report.notes.append(baseline_note)
         except LabError as exc:
             print(f"model lab cannot run: {exc}", file=sys.stderr)
             return 1
