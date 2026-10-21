@@ -12,6 +12,8 @@ Paper-trading report: how the strategies are doing and whether the model has any
   does not beat the close has no edge to bet.
 * Active models: the champion and every challenger with the predictions each has recorded (challengers only
   predict, they never bet) and how many final games those predictions cover.
+* Model league: each challenger's live paired evaluation against the champion, its promotion gate in words and the
+  promotion/retirement history (``app.services.league_report``).
 * Bankroll per strategy: ``START_BANKROLL`` plus settled P/L.
 """
 from collections import defaultdict
@@ -23,7 +25,6 @@ from sqlalchemy import func, select
 from sqlmodel import Session
 
 from app.analytics.betting_policy import START_BANKROLL
-from app.analytics.props_engine import american_to_decimal, devig_two_way
 from app.models import (
     CAPTURE_CLOSING,
     BetSide,
@@ -31,13 +32,12 @@ from app.models import (
     Game,
     MarketType,
     ModelPrediction,
-    OddsHistory,
     OddsSnapshotCapture,
     SimulatedBet,
-    Sportsbook,
     StakingStrategy,
 )
-from app.services import model_registry
+from app.services import market_close, model_registry
+from app.services.league_report import League, build_league, format_league
 
 _SETTLED = (BetStatus.won, BetStatus.lost, BetStatus.push)
 
@@ -112,6 +112,7 @@ class PaperReport:
     clv: ClvCoverage = field(default_factory=ClvCoverage)
     skill: ModelSkill = field(default_factory=ModelSkill)
     models: List[ActiveModel] = field(default_factory=list)
+    league: Optional[League] = None
 
 
 def build_report(session: Session, now: Optional[datetime] = None) -> PaperReport:
@@ -122,6 +123,7 @@ def build_report(session: Session, now: Optional[datetime] = None) -> PaperRepor
         clv=_clv_coverage(session, now),
         skill=_model_skill(session),
         models=_active_models(session),
+        league=build_league(session, now),
     )
 
 
@@ -250,11 +252,7 @@ def _model_skill(session: Session) -> ModelSkill:
     if not finals:
         return skill
 
-    with_closing = set(
-        session.execute(
-            select(OddsSnapshotCapture.game_id).where(OddsSnapshotCapture.kind == CAPTURE_CLOSING)
-        ).scalars()
-    )
+    with_closing = market_close.closing_marker_game_ids(session)
     closing_games = [game_id for game_id in finals if game_id in with_closing]
     skill.final_games_with_closing = len(closing_games)
 
@@ -269,39 +267,17 @@ def _model_skill(session: Session) -> ModelSkill:
     ).all():
         model_probs[game_id] = float(prob)
 
-    books = session.execute(select(Sportsbook.id, Sportsbook.key).where(Sportsbook.is_sharp.is_(True))).all()
-    book_keys = {book_id: key for book_id, key in books}
+    book_keys = market_close.sharp_books(session)
     if book_keys:
         skill.sharp_book = ", ".join(sorted(book_keys.values()))
-
-    latest: Dict[tuple, tuple] = {}  # (game, book, side) -> (recency, price_american)
-    for row in session.execute(
-        select(OddsHistory).where(
-            OddsHistory.game_id.in_(closing_games or [-1]),
-            OddsHistory.sportsbook_id.in_(list(book_keys) or [-1]),
-            OddsHistory.market == MarketType.h2h,
-            OddsHistory.player_id.is_(None),
-        )
-    ).scalars():
-        if row.captured_at is None or _aware_utc(row.captured_at) > _aware_utc(finals[row.game_id][0]):
-            continue
-        recency = (_aware_utc(row.captured_at), _aware_utc(row.book_last_update), row.id)
-        key = (row.game_id, row.sportsbook_id, _enum_value(row.side))
-        if key not in latest or recency > latest[key][0]:
-            latest[key] = (recency, row.price_american)
+    fair_home_by_game = market_close.sharp_closing_home_probs(
+        session, {game_id: finals[game_id][0] for game_id in closing_games}, closing_games, book_keys
+    )
 
     squared_model = squared_market = 0.0
     for game_id in closing_games:
-        if game_id not in model_probs:
-            continue
-        fair_home = None
-        for book_id in sorted(book_keys, key=lambda b: book_keys[b]):
-            home = latest.get((game_id, book_id, BetSide.home.value))
-            away = latest.get((game_id, book_id, BetSide.away.value))
-            if home is not None and away is not None:
-                fair_home = devig_two_way(american_to_decimal(home[1]), american_to_decimal(away[1]))[0]
-                break
-        if fair_home is None:
+        fair_home = fair_home_by_game.get(game_id)
+        if game_id not in model_probs or fair_home is None:
             continue
         outcome = 1.0 if finals[game_id][1] else 0.0
         squared_model += (model_probs[game_id] - outcome) ** 2
@@ -375,6 +351,10 @@ def format_report(report: PaperReport) -> str:
     else:
         lines.append("  No model registered.")
     lines.append("")
+
+    if report.league is not None:
+        lines.append(format_league(report.league))
+        lines.append("")
 
     lines.append("Bankroll (start + settled P/L)")
     for perf in report.strategies:

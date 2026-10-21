@@ -140,17 +140,24 @@ def compute_metrics(p: np.ndarray, mu: np.ndarray, sigma: np.ndarray, win: np.nd
     )
 
 
-def paired_bootstrap(
-    gains: np.ndarray, seed: int, resamples: int = BOOTSTRAP_RESAMPLES, level: float = 0.95
-) -> PairedDelta:
-    """Mean of per-game ``gains`` with a seeded percentile bootstrap interval (chunked to bound memory)."""
+def bootstrap_means(gains: np.ndarray, seed: int, resamples: int = BOOTSTRAP_RESAMPLES) -> np.ndarray:
+    """Means of ``resamples`` seeded resamples of ``gains`` (chunked to bound memory); the same seed and length
+    always draw the same indices, so two metrics resampled with one seed are resampled over the same games."""
     n = len(gains)
     rng = np.random.default_rng(seed)
     means = []
     for start in range(0, resamples, BOOTSTRAP_CHUNK):
         size = min(BOOTSTRAP_CHUNK, resamples - start)
         means.append(gains[rng.integers(0, n, size=(size, n))].mean(axis=1))
-    means_all = np.concatenate(means)
+    return np.concatenate(means)
+
+
+def paired_bootstrap(
+    gains: np.ndarray, seed: int, resamples: int = BOOTSTRAP_RESAMPLES, level: float = 0.95
+) -> PairedDelta:
+    """Mean of per-game ``gains`` with a seeded percentile bootstrap interval (chunked to bound memory)."""
+    n = len(gains)
+    means_all = bootstrap_means(gains, seed, resamples)
     tail = (1.0 - level) / 2.0 * 100.0
     low, high = np.percentile(means_all, [tail, 100.0 - tail])
     return PairedDelta(mean=float(gains.mean()), ci_low=float(low), ci_high=float(high), n=int(n))
@@ -543,19 +550,42 @@ def load_lab_data(session: Session) -> LabData:
     return prepare_lab_data(service.load_games(), labels)
 
 
-def champion_elo_params(session: Session) -> Tuple[ModelVersion, EloParams]:
+def lab_baseline(session: Session) -> Tuple[ModelVersion, EloParams, Optional[str]]:
+    """
+    The Elo model the lab measures candidates against, its parameters and, when it is not the champion, a note
+    saying so. The lab replays Elo, so an Elo champion is the baseline; when another family holds the title (for
+    example ``margin_features`` after a promotion) the best active Elo model (lowest ``brier_oos``) stands in and
+    the report says so: a candidate that passes the historical gate then beat that Elo model, not the champion,
+    and the live evaluation against the real champion still decides.
+    """
     champion = model_registry.get_champion(session)
     if champion is None:
         raise LabError("the registry has no champion")
-    if champion.name != model_registry.ELO_FAMILY_NAME:
-        raise LabError(f"the lab baseline must be an {model_registry.ELO_FAMILY_NAME} champion, not {champion.name}")
-    return champion, EloParams.from_dict(champion.params or {})
+    if champion.name == model_registry.ELO_FAMILY_NAME:
+        return champion, EloParams.from_dict(champion.params or {}), None
+    elo_models = [row for row in model_registry.list_active(session) if row.name == model_registry.ELO_FAMILY_NAME]
+    if not elo_models:
+        raise LabError(f"the champion is {champion.name} and no {model_registry.ELO_FAMILY_NAME} model is active to serve as the baseline")
+    baseline = min(elo_models, key=lambda row: (float(row.brier_oos) if row.brier_oos is not None else math.inf, row.id))
+    note = (
+        f"baseline: the champion is {champion.name} {champion.version}, which the lab cannot replay; candidates were "
+        f"compared with the best active Elo model {baseline.name} {baseline.version}"
+    )
+    return baseline, EloParams.from_dict(baseline.params or {}), note
+
+
+def champion_elo_params(session: Session) -> Tuple[ModelVersion, EloParams]:
+    baseline, params, _ = lab_baseline(session)
+    return baseline, params
 
 
 def run_lab_on_database(session: Session, **kwargs: Any) -> LabReport:
     """Read-only: loads the games and the registry, runs the lab, writes nothing."""
-    _, champion_params = champion_elo_params(session)
-    return run_lab(load_lab_data(session), champion_params, model_registry.list_active(session), **kwargs)
+    _, baseline_params, note = lab_baseline(session)
+    report = run_lab(load_lab_data(session), baseline_params, model_registry.list_active(session), **kwargs)
+    if note:
+        report.notes.append(note)
+    return report
 
 
 # ---------------------------------------------------------------------------------- registration
@@ -628,12 +658,17 @@ def _plan(report: LabReport, champion: ModelVersion, now: datetime) -> List[Plan
 
 
 def register_candidates(
-    session: Session, report: LabReport, *, dry_run: bool = False, confirm_database: Optional[str] = None
+    session: Session,
+    report: LabReport,
+    *,
+    dry_run: bool = False,
+    confirm_database: Optional[str] = None,
+    max_challengers: int = MAX_CHALLENGERS,
 ) -> RegistrationResult:
     """
     Insert the gate-passing candidates as challengers (parent = the champion) and, for Elo candidates, run the
     initial rating backfill so the first tick does not replay the whole history. ``dry_run`` only plans.
-    Raises ``RegistrationRefused`` on a guarded database or when 3 challengers are already active.
+    Raises ``RegistrationRefused`` on a guarded database or when ``max_challengers`` (default 3) are already active.
     """
     if not dry_run:
         check_registration_target(session.get_bind().url, confirm_database)
@@ -641,9 +676,9 @@ def register_candidates(
     if champion is None:
         raise RegistrationRefused("the registry has no champion to derive challengers from")
     active_challengers = [row for row in model_registry.list_active(session) if row.role == MODEL_ROLE_CHALLENGER]
-    free_slots = MAX_CHALLENGERS - len(active_challengers)
+    free_slots = max_challengers - len(active_challengers)
     if free_slots <= 0:
-        raise RegistrationRefused(f"{len(active_challengers)} challengers are already active (maximum {MAX_CHALLENGERS})")
+        raise RegistrationRefused(f"{len(active_challengers)} challengers are already active (maximum {max_challengers})")
 
     result = RegistrationResult(dry_run=dry_run)
     plan = _plan(report, champion, datetime.now(timezone.utc))

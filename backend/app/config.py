@@ -40,5 +40,19 @@ class Settings(BaseSettings):
     THE_ODDS_API_KEY: str = ""
     PROPS_SIMULATION_RUNS: int = 10000
 
+    # Model learning loop (app.services.model_evaluation / model_promotion). The defaults mirror the module
+    # constants in model_evaluation; LEARNING_AUTOPROMOTE is the kill switch (off = evaluate and report only).
+    LEARNING_MIN_GAMES: int = 150
+    LEARNING_MIN_DAYS_LIVE: int = 14
+    LEARNING_COOLDOWN_DAYS: int = 30
+    LEARNING_AUTOPROMOTE: bool = True
+    LEARNING_PROPOSAL_DAYS: int = 7
+    LEARNING_MAX_CHALLENGERS: int = 3
+    # Look budget: at most one decision-grade look per challenger every LOOK_INTERVAL_DAYS and MAX_LOOKS per pairing;
+    # a challenger whose budget is spent without a promotion leaves once older than MAX_AGE_DAYS (with >= 300 games).
+    LEARNING_LOOK_INTERVAL_DAYS: int = 7
+    LEARNING_MAX_LOOKS: int = 12
+    LEARNING_MAX_AGE_DAYS: int = 150
+
 
 settings = Settings()

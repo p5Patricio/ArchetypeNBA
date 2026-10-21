@@ -156,7 +156,7 @@ def test_opening_runs_once_per_local_day_and_again_on_the_next_one(world, fake_r
     first = FakeService(events)
     summary = _tick(world, first, tmp_path=tmp_path)
     assert first.calls == ["events", "game_lines", "events"]  # opening (events + paid), closing (events only)
-    assert _statuses(summary) == {"opening": "ok", "closing": "skipped", "results": "skipped", "record": "ok"}
+    assert _statuses(summary) == {"opening": "ok", "closing": "skipped", "results": "skipped", "learn": "skipped", "record": "ok"}
     assert 200 - first.requests_remaining == 3
 
     # 20:00 local, still Oct 21 there although the UTC date has already changed
@@ -201,7 +201,7 @@ def test_no_upcoming_events_means_no_paid_call(world, fake_recorder, tmp_path):
 
     assert "game_lines" not in service.calls and set(service.calls) == {"events"}
     assert service.requests_remaining == 200
-    assert _statuses(summary) == {"opening": "skipped", "closing": "skipped", "results": "skipped", "record": "ok"}
+    assert _statuses(summary) == {"opening": "skipped", "closing": "skipped", "results": "skipped", "learn": "skipped", "record": "ok"}
     assert summary.exit_code == 0
 
 
@@ -242,7 +242,7 @@ def test_record_runs_after_capture(world, fake_recorder, monkeypatch, order, tmp
     summary = _tick(world, FakeService([]), tmp_path=tmp_path)
 
     assert order == ["capture:opening", "capture:closing", "record"]
-    assert _statuses(summary) == {"opening": "skipped", "closing": "skipped", "results": "skipped", "record": "ok"}
+    assert _statuses(summary) == {"opening": "skipped", "closing": "skipped", "results": "skipped", "learn": "skipped", "record": "ok"}
 
 
 def test_record_still_runs_when_capture_raises(world, fake_recorder, monkeypatch, order, tmp_path):
@@ -251,7 +251,7 @@ def test_record_still_runs_when_capture_raises(world, fake_recorder, monkeypatch
     summary = _tick(world, FakeService([]), tmp_path=tmp_path)
 
     assert order == ["capture:opening", "capture:closing", "record"]  # closing and record were not blocked
-    assert _statuses(summary) == {"opening": "error", "closing": "skipped", "results": "skipped", "record": "ok"}
+    assert _statuses(summary) == {"opening": "error", "closing": "skipped", "results": "skipped", "learn": "skipped", "record": "ok"}
     assert "odds api exploded" in summary.steps[0].message
     assert summary.exit_code == 1
 
@@ -297,9 +297,9 @@ def test_steps_are_an_ordered_registry_that_accepts_new_entries(world, tmp_path)
 
     summary = _tick(world, FakeService([]), tmp_path=tmp_path, steps=[*default_steps(skip=["record", "opening"]), extra])
 
-    assert [step.name for step in summary.steps] == ["closing", "results", "extra"]
+    assert [step.name for step in summary.steps] == ["closing", "results", "learn", "extra"]
     assert seen == ["extra"]
-    assert [name for name, _ in default_steps()] == ["opening", "closing", "results", "record"]
+    assert [name for name, _ in default_steps()] == ["opening", "closing", "results", "learn", "record"]
     with pytest.raises(ValueError):
         default_steps(skip=["nope"])
 
@@ -309,7 +309,7 @@ def test_failed_paid_call_is_an_error_and_recording_still_runs(world, fake_recor
 
     summary = _tick(world, service, tmp_path=tmp_path)
 
-    assert _statuses(summary) == {"opening": "error", "closing": "error", "results": "skipped", "record": "ok"}
+    assert _statuses(summary) == {"opening": "error", "closing": "error", "results": "skipped", "learn": "skipped", "record": "ok"}
     assert summary.exit_code == 1
     assert order == ["record"]
 
@@ -321,7 +321,7 @@ def test_missing_api_key_fails_the_capture_steps_but_not_the_recording(world, fa
     summary = _tick(world, service, tmp_path=tmp_path)
 
     assert service.calls == []
-    assert _statuses(summary) == {"opening": "error", "closing": "error", "results": "skipped", "record": "ok"}
+    assert _statuses(summary) == {"opening": "error", "closing": "error", "results": "skipped", "learn": "skipped", "record": "ok"}
     assert order == ["record"]
 
 
@@ -331,7 +331,7 @@ def test_credit_guard_holds_the_capture_back_without_failing_the_tick(world, fak
     summary = _tick(world, service, tmp_path=tmp_path)
 
     assert "game_lines" not in service.calls
-    assert _statuses(summary) == {"opening": "skipped", "closing": "skipped", "results": "skipped", "record": "ok"}
+    assert _statuses(summary) == {"opening": "skipped", "closing": "skipped", "results": "skipped", "learn": "skipped", "record": "ok"}
     assert "aborted_low_credits" in summary.steps[1].message
     assert summary.exit_code == 0
 
@@ -341,7 +341,7 @@ def test_the_real_recorder_writes_predictions_through_the_tick(world, tmp_path):
 
     summary = _tick(world, FakeService([]), tmp_path=tmp_path, steps=default_steps(skip=["opening", "closing"]))
 
-    assert _statuses(summary) == {"results": "skipped", "record": "ok"}
+    assert _statuses(summary) == {"results": "skipped", "learn": "skipped", "record": "ok"}
     rows = world.exec(select(ModelPrediction)).all()
     assert len(rows) == 2 and {r.game_id for r in rows} == {game.id}
 
@@ -455,10 +455,10 @@ def test_dry_run_makes_no_http_call_no_db_write_and_takes_no_lock(world, monkeyp
     assert _row_counts(world) == before
     assert not world.new and not world.dirty
     assert not (tmp_path / "tick.lock").exists()
-    assert _statuses(summary) == {"opening": "ok", "closing": "ok", "results": "skipped", "record": "ok"}
+    assert _statuses(summary) == {"opening": "ok", "closing": "ok", "results": "skipped", "learn": "ok", "record": "ok"}  # learn: the weekly proposal is due
     assert summary.exit_code == 0
     assert sum(step.credits or 0 for step in summary.steps) == 3 + 4  # opening slate + closing lines + 1 props event
-    assert "would write 2 prediction(s)" in summary.steps[3].message
+    assert "would write 2 prediction(s)" in summary.steps[4].message
     text = str(summary)
     assert "dry run" in text and "worst-case credits: 7" in text
 

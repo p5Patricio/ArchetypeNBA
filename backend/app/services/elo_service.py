@@ -15,7 +15,7 @@ The Elo maths lives in ``app.analytics.elo``. This module owns the data side:
   incremental path produces exactly the numbers of a full rebuild.
 
 Each model version keeps its own rating line per team (``team_elo_rating.model_version_id``): a service is
-bound to one model, by default the champion (see ``app.services.model_registry``), and runs the Elo maths with
+bound to one model, by default the Elo reference (the champion while it is an Elo model; see ``app.services.model_registry``), and runs the Elo maths with
 that model's hyperparameters (``model_version.params``; missing keys fall back to the module defaults).
 
 Note: ``app.services.elo`` (older, per-team timeline helper) is unrelated and left untouched.
@@ -261,11 +261,14 @@ class EloRatingService:
 
     @property
     def model_version_id(self) -> Optional[int]:
-        """The model whose rating rows this service reads and writes: the one given, else the champion."""
+        """
+        The model whose rating rows this service reads and writes: the one given, else the Elo reference, which
+        is the champion while it is an Elo model and stays a stable Elo model once another family takes over.
+        """
         if self._model_version_id is None:
-            champion = model_registry.get_champion(self.session)
-            if champion is not None:
-                self._model_version_id = champion.id
+            reference = model_registry.get_elo_reference(self.session)
+            if reference is not None:
+                self._model_version_id = reference.id
         return self._model_version_id
 
     @property
@@ -283,7 +286,7 @@ class EloRatingService:
     def _model_id_for_write(self) -> int:
         """Like ``model_version_id``, registering the default model first when none exists yet."""
         if self.model_version_id is None:
-            self._model_version_id = model_registry.ensure_default_champion(self.session).id
+            self._model_version_id = model_registry.ensure_elo_reference(self.session).id
         return self._model_version_id
 
     # ------------------------------------------------------------------ games

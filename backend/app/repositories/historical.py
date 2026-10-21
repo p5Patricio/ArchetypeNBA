@@ -65,14 +65,14 @@ class HistoricalRepository:
         return self.session.exec(stmt).all()
 
     def list_team_elo(self, team_id: int, season_id: int) -> List[TeamEloRating]:
-        """The champion's rating timeline (every model keeps its own rows in team_elo_rating)."""
+        """The Elo reference model's rating timeline (every model keeps its own rows in team_elo_rating)."""
         stmt = select(TeamEloRating).where(
             TeamEloRating.team_id == team_id,
             TeamEloRating.season_id == season_id,
         )
-        champion = model_registry.get_champion(self.session)
-        if champion is not None:
-            stmt = stmt.where(TeamEloRating.model_version_id == champion.id)
+        reference = model_registry.get_elo_reference(self.session)
+        if reference is not None:
+            stmt = stmt.where(TeamEloRating.model_version_id == reference.id)
         return self.session.exec(stmt.order_by(TeamEloRating.game_date)).all()
 
     def save_advanced_stats(self, stats: PlayerAdvancedStats) -> PlayerAdvancedStats:
