@@ -339,7 +339,7 @@ def run_cli(cli, session, *argv):
 def test_status_prints_the_league_and_the_role_changes(cli, league, capsys):
     assert run_cli(cli, league.session, "status") == 0
     out = capsys.readouterr().out
-    assert "Model league" in out and "champion" in out and "lab-x" in out and "none yet" in out
+    assert "Model league" in out and "champion" in out and "lab-x" in out and "No promotion, rollback or retirement yet" in out
 
 
 def test_evaluate_defaults_to_a_dry_run_and_apply_promotes(cli, league, capsys):
@@ -358,7 +358,7 @@ def test_evaluate_defaults_to_a_dry_run_and_apply_promotes(cli, league, capsys):
 
     assert run_cli(cli, league.session, "status", *now) == 0
     status = capsys.readouterr().out
-    assert "promote" in status and "Role changes" in status
+    assert "promote" in status and "Promotion and retirement history" in status
 
 
 def test_manual_promote_and_retire_through_the_cli(cli, league, capsys):

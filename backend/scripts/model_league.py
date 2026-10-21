@@ -8,7 +8,8 @@ The model league: who is champion, how the challengers are doing, and the contro
     python scripts/model_league.py promote 3 --reason "..." [--force]
     python scripts/model_league.py retire 3 --reason "..."
 
-`status` and `evaluate` (without --apply) only read the database. Everything that writes (evaluate --apply,
+`status` (the registry table plus the same "Model league" section as the paper report) and `evaluate` without
+--apply only read the database. Everything that writes (evaluate --apply,
 propose without --dry-run, promote, retire) needs --confirm-database <name> on anything but SQLite, like the
 lab. promote/retire are MANUAL overrides: they skip the statistical gate but never the invariants (one champion,
 atomic swap) and always write an audit row whose reason starts with "manual:". `evaluate --apply` also respects
@@ -28,6 +29,7 @@ backend_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_dir))
 
 from app.services import model_promotion  # noqa: E402
+from app.services.league_report import build_league, format_league  # noqa: E402
 from app.services.model_lab import DEFAULT_CONFIGS, LabError, RegistrationRefused, check_registration_target  # noqa: E402
 
 DEFAULT_MAX_SECONDS = 240.0
@@ -80,13 +82,7 @@ def format_status(session, now: datetime) -> str:
             f"  {row.model_id:>3}  {row.label:<30}{row.role:<11}{'-' if row.parent_id is None else row.parent_id:>7}"
             f"{row.predictions:>7}{row.final_games:>7}  {last}"
         )
-    changes = model_promotion.role_changes(session, limit=10)
-    lines.append("")
-    lines.append("Role changes (newest first)")
-    if not changes:
-        lines.append("  none yet")
-    for change in changes:
-        lines.append(f"  {_when(change.evaluated_at)}  model {change.challenger_id}: {change.decision} - {change.reason}")
+    lines += ["", format_league(build_league(session, now))]
     return "\n".join(lines)
 
 

@@ -72,9 +72,9 @@ def test_results_run_between_capture_and_record_in_a_fixed_order(world, tmp_path
 
     summary = _tick(world, tmp_path, FakeProvider())
 
-    assert [name for name, _ in default_steps()] == ["opening", "closing", "results", "record"]
+    assert [name for name, _ in default_steps()] == ["opening", "closing", "results", "learn", "record"]
     assert order == ["sync_results", "settle_bets", "fill_clv", "record"]
-    assert _statuses(summary) == {"results": "skipped", "record": "ok"}
+    assert _statuses(summary) == {"results": "skipped", "learn": "skipped", "record": "ok"}
 
 
 def test_nothing_unresolved_means_no_provider_call_and_a_skipped_step(world, tmp_path):
@@ -85,7 +85,7 @@ def test_nothing_unresolved_means_no_provider_call_and_a_skipped_step(world, tmp
     summary = _tick(world, tmp_path, provider)
 
     assert provider.calls == []
-    assert _statuses(summary) == {"results": "skipped", "record": "ok"}
+    assert _statuses(summary) == {"results": "skipped", "learn": "skipped", "record": "ok"}
     assert "nothing to do" in summary.steps[0].message
 
 
@@ -95,7 +95,7 @@ def test_a_finished_game_is_finalized_settled_and_given_its_clv_in_one_tick(worl
 
     summary = _tick(world, tmp_path, provider)
 
-    assert _statuses(summary) == {"results": "ok", "record": "ok"}
+    assert _statuses(summary) == {"results": "ok", "learn": "skipped", "record": "ok"}
     assert summary.steps[0].message == "1 game(s) finalized, 1 bet(s) settled, CLV filled for 1 bet(s)"
     assert "Elo rating rows added: 2" in summary.steps[0].detail
     game, bet = reload(world, game), reload(world, bet)
@@ -115,7 +115,7 @@ def test_a_provider_failure_does_not_stop_settlement_of_final_games_or_the_recor
     with caplog.at_level(logging.ERROR, logger="app.services.tick"):
         summary = _tick(world, tmp_path, provider)
 
-    assert _statuses(summary) == {"results": "error", "record": "ok"}
+    assert _statuses(summary) == {"results": "error", "learn": "skipped", "record": "ok"}
     assert "sync: ResultsProviderError: nba_api is down" in summary.steps[0].detail
     assert "1 bet(s) settled" in summary.steps[0].message
     assert reload(world, bet).status == BetStatus.won
@@ -131,7 +131,7 @@ def test_unresolved_games_without_a_published_result_are_not_an_error(world, tmp
     summary = _tick(world, tmp_path, provider)
 
     assert len(provider.calls) == 1
-    assert _statuses(summary) == {"results": "ok", "record": "ok"}
+    assert _statuses(summary) == {"results": "ok", "learn": "skipped", "record": "ok"}
     assert "no result yet for 1 game(s): LAC @ BOS 2026-10-21" in summary.steps[0].detail
     assert reload(world, game).status == "scheduled" and summary.exit_code == 0
 
@@ -144,7 +144,7 @@ def test_a_second_tick_does_nothing_more(world, tmp_path):
     second = _tick(world, tmp_path, provider)
 
     assert len(provider.calls) == 1
-    assert _statuses(second) == {"results": "skipped", "record": "ok"}
+    assert _statuses(second) == {"results": "skipped", "learn": "skipped", "record": "ok"}
 
 
 def test_dry_run_reports_the_plan_without_network_or_writes(world, tmp_path):
@@ -173,7 +173,7 @@ def test_dry_run_with_nothing_pending_is_skipped(world, tmp_path):
 
     summary = _tick(world, tmp_path, ForbiddenProvider(), dry_run=True)
 
-    assert _statuses(summary) == {"results": "skipped", "record": "ok"}
+    assert _statuses(summary) == {"results": "skipped", "learn": "ok", "record": "ok"}  # learn: a proposal is due
 
 
 # --- CLI ----------------------------------------------------------------------------------------------------------

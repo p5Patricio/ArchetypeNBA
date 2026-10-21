@@ -1,9 +1,9 @@
 """
 Runs one tick: odds capture (opening once per local day, closing near tip-off), results sync with bet
-settlement and CLV, and prediction recording.
+settlement and CLV, the model learning loop (challenger evaluation and weekly proposals) and prediction recording.
 
     python scripts/run_tick.py [--dry-run] [--window-minutes 30] [--props-events 1] [--min-remaining 25]
-                               [--skip opening closing results record]
+                               [--skip opening closing results learn record]
 
 Scheduled by `NBA-Odds-Tick` (scripts/register_tick_task.ps1): it starts at user log on and repeats every
 15 minutes. Each run is stateless and decides from DB markers (see app/services/tick.py), so repeated or

@@ -12,6 +12,8 @@ Paper-trading report: how the strategies are doing and whether the model has any
   does not beat the close has no edge to bet.
 * Active models: the champion and every challenger with the predictions each has recorded (challengers only
   predict, they never bet) and how many final games those predictions cover.
+* Model league: each challenger's live paired evaluation against the champion, its promotion gate in words and the
+  promotion/retirement history (``app.services.league_report``).
 * Bankroll per strategy: ``START_BANKROLL`` plus settled P/L.
 """
 from collections import defaultdict
@@ -35,6 +37,7 @@ from app.models import (
     StakingStrategy,
 )
 from app.services import market_close, model_registry
+from app.services.league_report import League, build_league, format_league
 
 _SETTLED = (BetStatus.won, BetStatus.lost, BetStatus.push)
 
@@ -109,6 +112,7 @@ class PaperReport:
     clv: ClvCoverage = field(default_factory=ClvCoverage)
     skill: ModelSkill = field(default_factory=ModelSkill)
     models: List[ActiveModel] = field(default_factory=list)
+    league: Optional[League] = None
 
 
 def build_report(session: Session, now: Optional[datetime] = None) -> PaperReport:
@@ -119,6 +123,7 @@ def build_report(session: Session, now: Optional[datetime] = None) -> PaperRepor
         clv=_clv_coverage(session, now),
         skill=_model_skill(session),
         models=_active_models(session),
+        league=build_league(session, now),
     )
 
 
@@ -346,6 +351,10 @@ def format_report(report: PaperReport) -> str:
     else:
         lines.append("  No model registered.")
     lines.append("")
+
+    if report.league is not None:
+        lines.append(format_league(report.league))
+        lines.append("")
 
     lines.append("Bankroll (start + settled P/L)")
     for perf in report.strategies:
