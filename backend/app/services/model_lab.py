@@ -140,17 +140,24 @@ def compute_metrics(p: np.ndarray, mu: np.ndarray, sigma: np.ndarray, win: np.nd
     )
 
 
-def paired_bootstrap(
-    gains: np.ndarray, seed: int, resamples: int = BOOTSTRAP_RESAMPLES, level: float = 0.95
-) -> PairedDelta:
-    """Mean of per-game ``gains`` with a seeded percentile bootstrap interval (chunked to bound memory)."""
+def bootstrap_means(gains: np.ndarray, seed: int, resamples: int = BOOTSTRAP_RESAMPLES) -> np.ndarray:
+    """Means of ``resamples`` seeded resamples of ``gains`` (chunked to bound memory); the same seed and length
+    always draw the same indices, so two metrics resampled with one seed are resampled over the same games."""
     n = len(gains)
     rng = np.random.default_rng(seed)
     means = []
     for start in range(0, resamples, BOOTSTRAP_CHUNK):
         size = min(BOOTSTRAP_CHUNK, resamples - start)
         means.append(gains[rng.integers(0, n, size=(size, n))].mean(axis=1))
-    means_all = np.concatenate(means)
+    return np.concatenate(means)
+
+
+def paired_bootstrap(
+    gains: np.ndarray, seed: int, resamples: int = BOOTSTRAP_RESAMPLES, level: float = 0.95
+) -> PairedDelta:
+    """Mean of per-game ``gains`` with a seeded percentile bootstrap interval (chunked to bound memory)."""
+    n = len(gains)
+    means_all = bootstrap_means(gains, seed, resamples)
     tail = (1.0 - level) / 2.0 * 100.0
     low, high = np.percentile(means_all, [tail, 100.0 - tail])
     return PairedDelta(mean=float(gains.mean()), ci_low=float(low), ci_high=float(high), n=int(n))

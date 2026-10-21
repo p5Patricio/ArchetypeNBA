@@ -40,5 +40,14 @@ class Settings(BaseSettings):
     THE_ODDS_API_KEY: str = ""
     PROPS_SIMULATION_RUNS: int = 10000
 
+    # Model learning loop (app.services.model_evaluation / model_promotion). The defaults mirror the module
+    # constants in model_evaluation; LEARNING_AUTOPROMOTE is the kill switch (off = evaluate and report only).
+    LEARNING_MIN_GAMES: int = 150
+    LEARNING_MIN_DAYS_LIVE: int = 14
+    LEARNING_COOLDOWN_DAYS: int = 30
+    LEARNING_AUTOPROMOTE: bool = True
+    LEARNING_PROPOSAL_DAYS: int = 7
+    LEARNING_MAX_CHALLENGERS: int = 3
+
 
 settings = Settings()
