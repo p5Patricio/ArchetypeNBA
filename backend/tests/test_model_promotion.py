@@ -12,7 +12,7 @@ from app.services import model_promotion as promo
 from tests.test_model_evaluation import NOW, SIGMA, League, _p_from_mu, simulate
 
 UTC = timezone.utc
-CONFIG = ev.EvaluationConfig(resamples=500)
+CONFIG = ev.EvaluationConfig(resamples=500, decision_resamples=500)
 
 
 @pytest.fixture
@@ -107,14 +107,17 @@ def test_at_most_one_promotion_per_pass_and_the_best_evidence_wins(league):
     outcome = run_pass(league)
 
     assert [e.action for e in outcome.entries].count(promo.ACTION_PROMOTED) == 1
+    qualified = [e for e in outcome.entries if e.result.decision == "promote"]
+    assert {e.model_id for e in qualified} == {first_id, second.id}  # both pass the gate
+    best = max(qualified, key=lambda e: e.result.log_loss_gain.bound_low)  # the rule: the largest lower bound wins
     session.expire_all()
     (champion,) = champions(session)
-    assert champion.id == first_id
-    loser = next(e for e in outcome.entries if e.model_id == second.id)
+    assert champion.id == best.model_id
+    loser = next(e for e in outcome.entries if e.model_id != best.model_id)
     assert loser.action == promo.ACTION_RECORDED and loser.decision == "keep"
     assert "another challenger" in loser.note
     assert sorted(r.decision for r in audit(session)) == ["keep", "promote"]
-    assert session.get(ModelVersion, second.id).role == "challenger"
+    assert session.get(ModelVersion, loser.model_id).role == "challenger"
 
 
 def test_a_failure_in_the_middle_of_a_swap_leaves_exactly_the_old_champion(league, monkeypatch):
@@ -175,7 +178,7 @@ def test_nothing_is_promoted_below_the_sample_gates(league):
 # ---------------------------------------------------------------------------------- retire and rollback
 
 def test_a_significantly_worse_challenger_is_retired(league):
-    win, margin, mu_champion, mu_challenger = simulate(130, 8, 1.0, 14.0)
+    win, margin, mu_champion, mu_challenger = simulate(130, 8, 1.0, 25.0)
     league.populate(win, margin, mu_champion, mu_challenger, days=20)
 
     outcome = run_pass(league)
@@ -218,7 +221,7 @@ def test_a_rollback_candidate_faces_the_same_cooldown(league):
     league.champion.promoted_at = NOW - timedelta(days=45)
     league.session.commit()
 
-    run_pass(league, config=ev.EvaluationConfig(resamples=500, cooldown_days=60))  # 45 days since the promotion < 60
+    run_pass(league, config=ev.EvaluationConfig(resamples=500, decision_resamples=500, cooldown_days=60))  # 45 days since the promotion < 60
 
     league.session.expire_all()
     assert champions(league.session)[0].id == league.champion.id
@@ -269,7 +272,7 @@ def test_with_autopromote_off_the_decision_is_recorded_and_nothing_changes(leagu
 
 
 def test_with_autopromote_off_a_retirement_is_not_applied_either(league):
-    win, margin, mu_champion, mu_challenger = simulate(130, 8, 1.0, 14.0)
+    win, margin, mu_champion, mu_challenger = simulate(130, 8, 1.0, 25.0)
     league.populate(win, margin, mu_champion, mu_challenger, days=20)
 
     run_pass(league, autopromote=False)
@@ -436,3 +439,79 @@ def test_the_league_rows_and_role_changes_describe_the_registry(league):
     assert rows[0].model_id == league.challenger.id and rows[0].predictions == 200 and rows[0].final_games == 200
     assert promo.league_rows(league.session)[1].last_decision is None
     assert [c.decision for c in promo.role_changes(league.session)] == ["promote"]
+
+
+# ------------------------------------------------------------------------------------------ look budget
+
+def equal_league(league, n=120, days=20, seed=5):
+    """Both models predict identically: no gain, no loss, so only the look rules decide what a row is."""
+    win, margin, mu_champion, _ = simulate(n, seed, 5.0, 5.0)
+    league.populate(win, margin, mu_champion, mu_champion, days)
+
+
+def add_equal_games(league, count, start_hours):
+    """New final games (after the existing ones) that both models predicted identically before tip-off."""
+    for i in range(count):
+        game = league.game(-(start_hours + i))
+        league.predict(league.champion, game, 0.6, 3.0)
+        league.predict(league.challenger, game, 0.6, 3.0)
+
+
+def test_the_engine_spends_a_look_at_most_once_a_week_and_never_beyond_the_budget(league):
+    equal_league(league)
+    config = ev.EvaluationConfig(resamples=300, decision_resamples=300, max_looks=2)
+    session = league.session
+    steps = [(0, "look"), (1, "monitor"), (7, "look"), (8, "monitor"), (14, "spent")]
+    for index, (day, kind) in enumerate(steps):
+        if index:
+            add_equal_games(league, 6, 24.0 * day)
+        run_pass(league, now=NOW + timedelta(days=day), config=config)
+        row = audit(session)[-1]
+        if kind == "look":
+            assert row.metrics["decision_grade"] is True and row.metrics["look_spent"] is True
+            assert not row.reason.startswith("monitor:")
+        else:
+            assert row.metrics["decision_grade"] is False and row.metrics["look_spent"] is False
+            assert row.decision in ("keep", "insufficient_data") and row.reason.startswith("monitor:")
+
+    rows = audit(session)
+    assert [r.metrics["look_number"] for r in rows] == [1, 1, 2, 2, 2]  # a monitor row carries the looks already spent
+    assert [r.metrics["look_spent"] for r in rows] == [True, False, True, False, False]
+    assert all(r.metrics["look_budget"] == 2 for r in rows)
+    assert rows[0].metrics["confidence"] == pytest.approx(1 - 0.05 / (1 * 2))
+    assert "spent (2 of 2)" in rows[-1].reason
+    assert ev.look_history(session, league.champion, league.challenger.id)[0] == 2
+
+
+def test_a_monitoring_row_cannot_promote_even_a_clearly_better_challenger(league):
+    better_league(league)
+    session = league.session
+    session.add(  # a look was spent yesterday: today is inside the week
+        ModelEvaluation(
+            evaluated_at=NOW - timedelta(days=1), champion_id=league.champion.id, challenger_id=league.challenger.id,
+            n_games=10, metrics={"look_spent": True}, decision="keep", reason="earlier look",
+        )
+    )
+    session.commit()
+
+    outcome = run_pass(league)
+
+    session.expire_all()
+    assert champions(session)[0].id == league.champion.id
+    row = audit(session)[-1]
+    assert row.decision == "keep" and row.reason.startswith("monitor: would promote")
+    assert outcome.entries[0].action == promo.ACTION_RECORDED and not outcome.promoted
+
+    # a week after that look the very same evidence is a decision-grade look and promotes
+    add_equal_games(league, 6, 24.0 * 8)  # new paired games, so the pass evaluates again
+    run_pass(league, now=NOW + timedelta(days=7))
+    session.expire_all()
+    assert champions(session)[0].id == league.challenger.id
+
+
+def test_with_autopromote_off_no_look_is_spent(league):
+    better_league(league)
+    run_pass(league, autopromote=False)
+    row = audit(league.session)[-1]
+    assert row.decision == "dry_run" and row.metrics["decision_grade"] is True and row.metrics["look_spent"] is False
+    assert ev.look_history(league.session, league.champion, league.challenger.id)[0] == 0

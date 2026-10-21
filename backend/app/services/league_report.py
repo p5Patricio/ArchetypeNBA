@@ -138,13 +138,17 @@ def format_league(league: League) -> str:
             else:
                 lines.append(
                     f"      vs market   Brier gap champion {result.market.gap_champion:+.4f} | challenger "
-                    f"{result.market.gap_challenger:+.4f} | difference {result.market.gap_difference:+.4f} over {result.market.n} game(s)"
+                    f"{result.market.gap_challenger:+.4f} | challenger minus champion {result.market.market_gap_vs_champion:+.4f} over {result.market.n} game(s)"
                     + ("" if result.market.n >= result.thresholds["market_min_games"] else f" (guard applies from {result.thresholds['market_min_games']})")
                 )
             if result.n_games < 2 or result.log_loss_gain.ci_low is None:
                 lines.append("      too few games for a confidence interval.")
         late = f", {result.n_late_excluded} late prediction(s) excluded" if result.n_late_excluded else ""
         lines.append(f"      gate        {result.gate_text}{late}")
+        if result.decision_grade:
+            lines.append(f"      looks       decision-grade look {result.look_number} of {result.look_budget} is due")
+        else:
+            lines.append(f"      looks       monitoring only: {result.look_note}")
         last = "no evaluation recorded yet" if entry.last_decision is None else f"{entry.last_decision} on {_date(entry.last_evaluated_at)}"
         lines.append(f"      last audit  {last}; live verdict: {result.decision}")
 

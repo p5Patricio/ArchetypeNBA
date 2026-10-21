@@ -53,6 +53,7 @@ def test_a_young_challenger_shows_how_much_evidence_is_missing(league):
     assert "log loss    champion" in out and "gain " in out and "(95% CI" in out
     assert "vs market   no game with a Pinnacle closing pair yet" in out
     assert "last audit  no evaluation recorded yet; live verdict: insufficient_data" in out
+    assert "looks       monitoring only: 12 of 100 paired games needed for a decision-grade look" in out
 
 
 def test_one_paired_game_has_no_interval(league):
@@ -69,6 +70,7 @@ def test_a_strong_challenger_shows_a_passed_gate_and_then_the_cooldown_after_a_p
     before = text(league)
     assert "paired n=400/150" in before and "gate        gate passed" in before
     assert "live verdict: promote" in before
+    assert "looks       decision-grade look 1 of 12 is due" in before
 
     league.champion.promoted_at = NOW - timedelta(days=5)
     league.session.commit()
@@ -77,7 +79,7 @@ def test_a_strong_challenger_shows_a_passed_gate_and_then_the_cooldown_after_a_p
 
     league.champion.promoted_at = NOW - timedelta(days=60)
     league.session.commit()
-    promo.run_evaluation_pass(league.session, NOW, autopromote=True, config=EvaluationConfig(resamples=300))
+    promo.run_evaluation_pass(league.session, NOW, autopromote=True, config=EvaluationConfig(resamples=300, decision_resamples=300))
     after = text(league)
     assert "champion    elo_538 lab-x" in after  # the promoted model leads the table
     assert "promote  elo_538 lab-x:" in after and "log-loss gain" in after

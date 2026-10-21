@@ -13,9 +13,18 @@ is better. Where a game also has a sharp-book (Pinnacle) closing pair captured a
 each model is compared with the Brier of the de-vigged market on those games (``market_close``).
 
 Uncertainty. A seeded percentile bootstrap over games (``model_lab.bootstrap_means``; the same indices serve every
-metric, so the pairing is preserved). With k active challengers the one-sided bounds use confidence 1 - 0.05 / k
-(Bonferroni: k challengers are each tested against the same champion), and the plain two-sided 95% interval is
-kept for the report.
+metric, so the pairing is preserved). The one-sided bounds use confidence ``1 - ALPHA / (k * MAX_LOOKS)``: Bonferroni
+over the k active challengers (each is tested against the same champion) AND over the looks a challenger may get (see
+below). The plain two-sided 95% interval is kept for the report.
+
+Look budget. Re-testing the same challenger at every new batch of games inflates the false-promotion rate (simulated
+with equal-skill models and 8 games a day: one look 4%, weekly looks 15%, daily looks 17.7%; the same holds for
+retiring a model that is "significantly worse"). So only DECISION-GRADE looks may promote, roll back or retire: at most
+one per challenger every LOOK_INTERVAL_DAYS (7) days and at most MAX_LOOKS (12) per challenger-vs-champion pairing
+(the counter restarts under a new champion). They use at least DECISION_RESAMPLES (5,000) bootstrap resamples, enough
+for the 0.4% tail of the corrected confidence. Every other evaluation is a MONITORING row: same numbers, ``keep`` or
+``insufficient_data`` only, reason prefixed ``monitor:``, so the league report stays current but nothing can act on it.
+Once the budget is spent the age rule below is the only way out.
 
 Decision, in this order (``evaluate_paired``):
 
@@ -24,9 +33,13 @@ Decision, in this order (``evaluate_paired``):
                 purpose: RETIRE_MIN_GAMES is below MIN_GAMES, so evaluating it after ``insufficient_data`` would
                 make the 100-game rule unreachable.
 2. ``insufficient_data``  fewer than MIN_GAMES (150) paired games or fewer than MIN_DAYS_LIVE (14) days live.
-3. ``retire``   older than RETIRE_AGE_DAYS (90) with at least RETIRE_AGE_MIN_GAMES (300) paired games and the
+3. ``retire``   older than RETIRE_AGE_DAYS (150) with at least RETIRE_AGE_MIN_GAMES (300) paired games and the
                 statistical promotion gate not met. "Age" is the time since the first recorded prediction, or
-                since the demotion for the previous champion (which has been predicting for much longer).
+                since the demotion for the previous champion (which has been predicting for much longer). The
+                thresholds are high on purpose: a gain of the size this lab finds (a few thousandths of a nat per
+                game) is invisible below several hundred games, so a short deadline would retire almost every
+                candidate before the data could say anything. When the look budget is spent the rule applies
+                whether or not the gate would pass now (a pass outside a look is not evidence).
 4. ``promote``  ALL of: lower bound of the log-loss gain > 0; lower bound of the margin-NLL gain > -0.02; when at
                 least MARKET_MIN_GAMES (50) games have a market probability, the challenger's Brier gap to the
                 market is not worse than the champion's by more than 0.005; at least COOLDOWN_DAYS (30) days
@@ -48,21 +61,24 @@ import numpy as np
 from sqlalchemy import func, select
 from sqlmodel import Session
 
-from app.models import MODEL_ROLE_CHALLENGER, BetSide, Game, MarketType, ModelPrediction, ModelVersion
+from app.models import MODEL_ROLE_CHALLENGER, BetSide, Game, MarketType, ModelEvaluation, ModelPrediction, ModelVersion
 from app.services import market_close, model_registry
 from app.services.elo_service import DEFAULT_SIGMA
-from app.services.model_lab import BOOTSTRAP_RESAMPLES, bootstrap_means
+from app.services.model_lab import BOOTSTRAP_CHUNK, BOOTSTRAP_RESAMPLES
 
 MIN_GAMES = 150
 MIN_DAYS_LIVE = 14
 COOLDOWN_DAYS = 30
 RETIRE_MIN_GAMES = 100
-RETIRE_AGE_DAYS = 90
+RETIRE_AGE_DAYS = 150
 RETIRE_AGE_MIN_GAMES = 300
 MARKET_MIN_GAMES = 50
 MARKET_MAX_WORSE = 0.005  # challenger Brier gap to the market minus the champion's
 MARGIN_NLL_FLOOR = -0.02  # nats per game: the margin NLL may be this much worse (lower bound of the gain)
-ALPHA = 0.05  # family-wise error rate; each of k challengers is tested at ALPHA / k
+ALPHA = 0.05  # family-wise error rate; each of k challengers and each of its MAX_LOOKS looks is tested at ALPHA / (k * MAX_LOOKS)
+LOOK_INTERVAL_DAYS = 7  # at most one decision-grade look per challenger in this many days
+MAX_LOOKS = 12  # decision-grade looks per challenger-vs-champion pairing
+DECISION_RESAMPLES = 5000  # bootstrap resamples of a decision-grade look (the 0.4% tail needs them)
 SEED = 42
 PROB_CLIP = 1e-6
 
@@ -87,7 +103,10 @@ class EvaluationConfig:
     market_max_worse: float = MARKET_MAX_WORSE
     margin_nll_floor: float = MARGIN_NLL_FLOOR
     alpha: float = ALPHA
-    resamples: int = BOOTSTRAP_RESAMPLES
+    resamples: int = BOOTSTRAP_RESAMPLES  # monitoring evaluations
+    decision_resamples: int = DECISION_RESAMPLES  # decision-grade looks
+    max_looks: int = MAX_LOOKS
+    look_interval_days: float = LOOK_INTERVAL_DAYS
     seed: int = SEED
     n_challengers: Optional[int] = None  # k; None = count the active challengers in the registry
 
@@ -102,6 +121,9 @@ class EvaluationConfig:
             "min_games": int(getattr(settings, "LEARNING_MIN_GAMES", MIN_GAMES)),
             "min_days_live": float(getattr(settings, "LEARNING_MIN_DAYS_LIVE", MIN_DAYS_LIVE)),
             "cooldown_days": float(getattr(settings, "LEARNING_COOLDOWN_DAYS", COOLDOWN_DAYS)),
+            "retire_age_days": float(getattr(settings, "LEARNING_MAX_AGE_DAYS", RETIRE_AGE_DAYS)),
+            "max_looks": max(1, int(getattr(settings, "LEARNING_MAX_LOOKS", MAX_LOOKS))),
+            "look_interval_days": float(getattr(settings, "LEARNING_LOOK_INTERVAL_DAYS", LOOK_INTERVAL_DAYS)),
         }
         return cls(**{**values, **overrides})
 
@@ -296,17 +318,36 @@ class Gain:
     bound_high: Optional[float] = None
 
 
+def paired_gains(arrays: Dict[str, np.ndarray], seed: int, resamples: int, tail_fraction: float) -> Dict[str, Gain]:
+    """
+    Mean of each per-game array with bootstrap intervals. All arrays must have the same length: one set of resample
+    indices (the stream of ``model_lab.bootstrap_means``) serves every metric, which keeps the pairing and costs one
+    index draw instead of one per metric. ``tail_fraction`` is the one-sided error of the bounds (``alpha / (k * looks)``).
+    The bounds stay None below two games (nothing to resample).
+    """
+    names = list(arrays)
+    n = len(arrays[names[0]]) if names else 0
+    means = {name: (float(arrays[name].mean()) if n else 0.0) for name in names}
+    if n < 2:
+        return {name: Gain(mean=means[name]) for name in names}
+    rng = np.random.default_rng(seed)
+    parts: Dict[str, List[np.ndarray]] = {name: [] for name in names}
+    for start in range(0, resamples, BOOTSTRAP_CHUNK):
+        size = min(BOOTSTRAP_CHUNK, resamples - start)
+        indices = rng.integers(0, n, size=(size, n))
+        for name in names:
+            parts[name].append(arrays[name][indices].mean(axis=1))
+    tail = 100.0 * tail_fraction
+    gains = {}
+    for name in names:
+        ci_low, ci_high, bound_low, bound_high = np.percentile(np.concatenate(parts[name]), [2.5, 97.5, tail, 100.0 - tail])
+        gains[name] = Gain(means[name], float(ci_low), float(ci_high), float(bound_low), float(bound_high))
+    return gains
+
+
 def paired_gain(values: np.ndarray, seed: int, resamples: int, k: int, alpha: float = ALPHA) -> Gain:
-    """Mean of ``values`` with bootstrap intervals; the bounds stay None below two games (nothing to resample)."""
-    if len(values) == 0:
-        return Gain(mean=0.0)
-    mean = float(values.mean())
-    if len(values) < 2:
-        return Gain(mean=mean)
-    means = bootstrap_means(values, seed, resamples)
-    tail = 100.0 * alpha / max(1, k)
-    ci_low, ci_high, bound_low, bound_high = np.percentile(means, [2.5, 97.5, tail, 100.0 - tail])
-    return Gain(mean, float(ci_low), float(ci_high), float(bound_low), float(bound_high))
+    """One metric of ``paired_gains`` with the one-sided error ``alpha / k``."""
+    return paired_gains({"gain": values}, seed, resamples, alpha / max(1, k))["gain"]
 
 
 @dataclass(frozen=True)
@@ -319,8 +360,72 @@ class MarketComparison:
     brier_challenger: float
     gap_champion: float  # Brier(champion) - Brier(market); negative = beats the market
     gap_challenger: float
-    gap_difference: float  # gap_challenger - gap_champion; positive = the challenger is further from the market
+    # Brier(challenger) - Brier(champion) on the games with a market close. The market term cancels out of
+    # gap_challenger - gap_champion, so this is simply how much worse (positive) the challenger scored on those games.
+    market_gap_vs_champion: float
     brier_gain: Gain  # champion minus challenger Brier on these games
+
+
+# --------------------------------------------------------------------------------------------- look budget
+
+@dataclass(frozen=True)
+class LookPlan:
+    """Whether an evaluation is a decision-grade look (may act) or a monitoring row (cannot), and where the budget stands."""
+
+    decision_grade: bool
+    number: int  # the ordinal of this look when decision-grade, else the number of looks already spent
+    budget: int
+    exhausted: bool  # every look of the budget is spent
+    next_look_at: Optional[datetime] = None  # earliest instant of the next decision-grade look (None = no wait)
+    note: str = ""  # why it is not a decision-grade look
+
+
+def plan_look(
+    config: EvaluationConfig, *, looks_taken: int, last_look_at: Optional[datetime], now: datetime, n_games: int
+) -> LookPlan:
+    """
+    The look rule. A look is decision-grade when the budget has a look left, the last one was at least
+    ``look_interval_days`` ago and there are enough paired games for ANY decision (the smaller of the promotion and the
+    retirement sample gates: below it nothing could be decided, so no look is spent).
+    """
+    budget = max(1, int(config.max_looks))
+    if looks_taken >= budget:
+        return LookPlan(False, looks_taken, budget, True, None, f"the look budget is spent ({looks_taken} of {budget})")
+    next_at = None if last_look_at is None else _aware_utc(last_look_at) + timedelta(days=config.look_interval_days)
+    needed = min(config.min_games, config.retire_min_games)
+    if n_games < needed:
+        return LookPlan(False, looks_taken, budget, False, next_at, f"{n_games} of {needed} paired games needed for a decision-grade look")
+    if next_at is not None and _aware_utc(now) < next_at:
+        return LookPlan(
+            False, looks_taken, budget, False, next_at,
+            f"look {looks_taken + 1} of {budget} is not due before {next_at.date().isoformat()} ({config.look_interval_days:g} days between looks)",
+        )
+    return LookPlan(True, looks_taken + 1, budget, False)
+
+
+def look_history(session: Session, champion: ModelVersion, challenger_id: int) -> tuple:
+    """
+    (looks spent, instant of the last one) for the pairing of ``challenger_id`` with the current champion: the audit rows
+    written under this champion since it was promoted whose metrics say ``look_spent``. A new champion starts a new
+    pairing, so the counter restarts with it.
+    """
+    rows = session.execute(
+        select(ModelEvaluation).where(
+            ModelEvaluation.champion_id == champion.id, ModelEvaluation.challenger_id == challenger_id
+        )
+    ).scalars()
+    since = None if champion.promoted_at is None else _aware_utc(champion.promoted_at)
+    count, last = 0, None
+    for row in rows:
+        if not isinstance(row.metrics, dict) or row.metrics.get("look_spent") is not True or row.evaluated_at is None:
+            continue
+        at = _aware_utc(row.evaluated_at)
+        if since is not None and at < since:
+            continue
+        count += 1
+        if last is None or at > last:
+            last = at
+    return count, last
 
 
 # ------------------------------------------------------------------------------------------------ result
@@ -339,7 +444,12 @@ class EvaluationResult:
     days_since_promotion: Optional[float]
     cooldown_until: Optional[datetime]
     k: int
-    confidence: float  # of the one-sided bounds: 1 - alpha / k
+    confidence: float  # of the one-sided bounds: 1 - alpha / (k * max_looks)
+    decision_grade: bool  # True = a look that may promote, roll back or retire; False = a monitoring row
+    look_number: int  # this look's ordinal (decision-grade), else the number of looks already spent
+    look_budget: int
+    next_look_at: Optional[datetime]
+    look_note: str  # why this is not a decision-grade look ("" when it is)
     seed: int
     resamples: int
     thresholds: Dict[str, Any]
@@ -385,7 +495,7 @@ def _signed(value: Optional[float]) -> str:
     return "n/a" if value is None else f"{value:+.4f}"
 
 
-def _market_comparison(data: PairedData, seed: int, resamples: int, k: int, alpha: float) -> Optional[MarketComparison]:
+def _market_comparison(data: PairedData, seed: int, resamples: int, tail_fraction: float) -> Optional[MarketComparison]:
     rows = ~np.isnan(data.market_p)
     if not rows.any():
         return None
@@ -393,7 +503,9 @@ def _market_comparison(data: PairedData, seed: int, resamples: int, k: int, alph
     brier_market = float(brier_each(market, win).mean())
     brier_champion = float(brier_each(data.p_champion[rows], win).mean())
     brier_challenger = float(brier_each(data.p_challenger[rows], win).mean())
-    gain = paired_gain(brier_each(data.p_champion[rows], win) - brier_each(data.p_challenger[rows], win), seed, resamples, k, alpha)
+    gain = paired_gains(
+        {"gain": brier_each(data.p_champion[rows], win) - brier_each(data.p_challenger[rows], win)}, seed, resamples, tail_fraction
+    )["gain"]
     return MarketComparison(
         n=int(rows.sum()),
         brier_market=brier_market,
@@ -401,7 +513,7 @@ def _market_comparison(data: PairedData, seed: int, resamples: int, k: int, alph
         brier_challenger=brier_challenger,
         gap_champion=brier_champion - brier_market,
         gap_challenger=brier_challenger - brier_market,
-        gap_difference=brier_challenger - brier_champion,
+        market_gap_vs_champion=brier_challenger - brier_champion,
         brier_gain=gain,
     )
 
@@ -416,11 +528,20 @@ def evaluate_paired(
     k: int,
     config: EvaluationConfig,
     previous_champion: bool = False,
+    look: Optional[LookPlan] = None,
 ) -> EvaluationResult:
-    """The statistics and the decision for already collected paired data (no database access)."""
+    """
+    The statistics and the decision for already collected paired data (no database access). ``look`` says whether this
+    is a decision-grade look or a monitoring row (see the module docstring); without it the call is look 1 of the
+    budget, i.e. a decision-grade look.
+    """
     k = max(1, int(k))
     n = data.n
-    seed, resamples = config.seed, config.resamples
+    if look is None:
+        look = LookPlan(True, 1, max(1, int(config.max_looks)), False)
+    seed = config.seed
+    resamples = config.decision_resamples if look.decision_grade else config.resamples
+    tail_fraction = config.alpha / (k * look.budget)  # one-sided error per bound: Bonferroni over challengers and looks
 
     scores_champion = scores_challenger = None
     if n:
@@ -434,18 +555,17 @@ def evaluate_paired(
             float(brier_each(data.p_challenger, data.win).mean()),
             float(margin_nll_each(data.mu_challenger, data.margin, data.sigma_challenger).mean()),
         )
-    log_loss_gain = paired_gain(
-        log_loss_each(data.p_champion, data.win) - log_loss_each(data.p_challenger, data.win), seed, resamples, k, config.alpha
+    gains = paired_gains(
+        {
+            "log_loss": log_loss_each(data.p_champion, data.win) - log_loss_each(data.p_challenger, data.win),
+            "brier": brier_each(data.p_champion, data.win) - brier_each(data.p_challenger, data.win),
+            "margin_nll": margin_nll_each(data.mu_champion, data.margin, data.sigma_champion)
+            - margin_nll_each(data.mu_challenger, data.margin, data.sigma_challenger),
+        },
+        seed, resamples, tail_fraction,
     )
-    brier_gain = paired_gain(
-        brier_each(data.p_champion, data.win) - brier_each(data.p_challenger, data.win), seed, resamples, k, config.alpha
-    )
-    nll_gain = paired_gain(
-        margin_nll_each(data.mu_champion, data.margin, data.sigma_champion)
-        - margin_nll_each(data.mu_challenger, data.margin, data.sigma_challenger),
-        seed, resamples, k, config.alpha,
-    )
-    market = _market_comparison(data, seed, resamples, k, config.alpha)
+    log_loss_gain, brier_gain, nll_gain = gains["log_loss"], gains["brier"], gains["margin_nll"]
+    market = _market_comparison(data, seed, resamples, tail_fraction)
 
     # ---- gates (None = not judgeable yet)
     gates: Dict[str, Optional[bool]] = {
@@ -456,7 +576,7 @@ def evaluate_paired(
         "market": None,
     }
     if market is not None and market.n >= config.market_min_games:
-        gates["market"] = market.gap_difference <= config.market_max_worse
+        gates["market"] = market.market_gap_vs_champion <= config.market_max_worse
     cooldown_ok = days_since_promotion is None or days_since_promotion >= config.cooldown_days
     gates["cooldown"] = cooldown_ok
     cooldown_until = None
@@ -465,14 +585,15 @@ def evaluate_paired(
 
     statistical_ok = gates["log_loss"] is True and gates["margin_nll"] is True and gates["market"] is not False
 
-    confidence = 1.0 - config.alpha / k
-    pct = f"{confidence * 100:.1f}%"
+    confidence = 1.0 - tail_fraction
+    pct = f"{confidence * 100:.2f}%"
     significantly_worse = (
         n >= config.retire_min_games
         and log_loss_gain.mean < 0.0
         and log_loss_gain.bound_high is not None
         and log_loss_gain.bound_high < 0.0
     )
+    stale = age_days > config.retire_age_days and n >= config.retire_age_min_games
 
     if significantly_worse:
         decision = DECISION_RETIRE
@@ -488,7 +609,7 @@ def evaluate_paired(
         if not gates["days"]:
             parts.append(f"{days_live:.1f} of {config.min_days_live:g} days live")
         reason = "not enough evidence yet: " + ", ".join(parts)
-    elif age_days > config.retire_age_days and n >= config.retire_age_min_games and not statistical_ok:
+    elif stale and not statistical_ok:
         decision = DECISION_RETIRE
         reason = (
             f"older than {config.retire_age_days:g} days ({age_days:.0f}) with {n} paired games and the promotion "
@@ -497,14 +618,14 @@ def evaluate_paired(
     elif statistical_ok and cooldown_ok:
         decision = DECISION_ROLLBACK if previous_champion else DECISION_PROMOTE
         market_text = (
-            f"; market Brier gap difference {market.gap_difference:+.4f} within {config.market_max_worse:+.4f}"
+            f"; market Brier gap vs the champion {market.market_gap_vs_champion:+.4f} within {config.market_max_worse:+.4f}"
             if gates["market"] is True
             else ""
         )
         reason = (
             f"log-loss gain {_signed(log_loss_gain.mean)} with lower bound {_signed(log_loss_gain.bound_low)} > 0 at "
-            f"{pct} confidence over {n} paired games; margin NLL gain lower bound {_signed(nll_gain.bound_low)} > "
-            f"{config.margin_nll_floor:+.2f}{market_text}"
+            f"{pct} confidence over {n} paired games (look {look.number} of {look.budget}); margin NLL gain lower bound "
+            f"{_signed(nll_gain.bound_low)} > {config.margin_nll_floor:+.2f}{market_text}"
         )
     else:
         decision = DECISION_KEEP
@@ -517,11 +638,25 @@ def evaluate_paired(
             )
         if gates["market"] is False:
             failing.append(
-                f"market Brier gap is {market.gap_difference:+.4f} worse than the champion's (limit {config.market_max_worse:+.4f})"
+                f"market Brier gap is {market.market_gap_vs_champion:+.4f} worse than the champion's (limit {config.market_max_worse:+.4f})"
             )
         if statistical_ok and not cooldown_ok:
             failing.append(f"cooldown until {cooldown_until.date().isoformat()} ({config.cooldown_days:g} days between promotions)")
         reason = "; ".join(failing)
+
+    if not look.decision_grade:
+        if look.exhausted and stale:
+            # the administrative rule: the budget is spent without a promotion, so the candidate leaves
+            decision = DECISION_RETIRE
+            reason = (
+                f"{look.note} and the challenger is older than {config.retire_age_days:g} days ({age_days:.0f}) with {n} paired "
+                f"games without a promotion (log-loss gain {_signed(log_loss_gain.mean)}, lower bound {_signed(log_loss_gain.bound_low)})"
+            )
+        else:
+            # a monitoring row never acts: what the numbers would have decided stays in the text
+            would = f"would {decision}: " if decision in (DECISION_PROMOTE, DECISION_ROLLBACK, DECISION_RETIRE) else ""
+            decision = DECISION_INSUFFICIENT if decision == DECISION_INSUFFICIENT else DECISION_KEEP
+            reason = f"monitor: {would}{reason}; not a decision-grade look ({look.note})"
 
     return EvaluationResult(
         champion_id=data.champion_id,
@@ -537,10 +672,17 @@ def evaluate_paired(
         cooldown_until=cooldown_until,
         k=k,
         confidence=confidence,
+        decision_grade=look.decision_grade,
+        look_number=look.number,
+        look_budget=look.budget,
+        next_look_at=look.next_look_at,
+        look_note=look.note,
         seed=seed,
         resamples=resamples,
         thresholds={
-            key: value for key, value in asdict(config).items() if key not in ("seed", "resamples", "n_challengers")
+            key: value
+            for key, value in asdict(config).items()
+            if key not in ("seed", "resamples", "decision_resamples", "n_challengers")
         },
         previous_champion=previous_champion,
         evidence_since=data.since,
@@ -610,11 +752,14 @@ def evaluate_challenger(
     config: Optional[EvaluationConfig] = None,
     *,
     data: Optional[PairedData] = None,
+    look: Optional[LookPlan] = None,
 ) -> EvaluationResult:
     """
     Evaluate ``challenger`` against ``champion`` as of ``now`` (read-only). ``data`` lets a caller that already
     collected the paired games avoid a second query. A challenger that is the champion's parent is the previous
-    champion: it is judged by the same rules and its success is a ``rollback``.
+    champion: it is judged by the same rules and its success is a ``rollback``. Whether the evaluation is a
+    decision-grade look or a monitoring row comes from the audit trail of this pairing (``look_history`` and
+    ``plan_look``) unless ``look`` is given.
     """
     config = config or default_config()
     now = _aware_utc(now)
@@ -633,6 +778,10 @@ def evaluate_challenger(
     if champion.promoted_at is not None:
         days_since_promotion = max(0.0, (now - _aware_utc(champion.promoted_at)).total_seconds() / _SECONDS_PER_DAY)
 
+    if look is None:
+        looks_taken, last_look_at = look_history(session, champion, challenger.id)
+        look = plan_look(config, looks_taken=looks_taken, last_look_at=last_look_at, now=now, n_games=data.n)
+
     return evaluate_paired(
         data,
         now=now,
@@ -642,4 +791,5 @@ def evaluate_challenger(
         k=k,
         config=config,
         previous_champion=previous_champion,
+        look=look,
     )

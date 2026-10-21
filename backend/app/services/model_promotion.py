@@ -278,7 +278,13 @@ def _apply_plan(
     now: datetime,
 ) -> None:
     result = plan.result
-    extra = {"proposed_decision": result.decision, "evaluation_reason": result.reason, "autopromote": autopromote}
+    extra = {
+        "proposed_decision": result.decision,
+        "evaluation_reason": result.reason,
+        "autopromote": autopromote,
+        # the look is spent only when the engine could have acted on it (autopromote on); the counter reads this flag
+        "look_spent": bool(result.decision_grade and autopromote),
+    }
     actionable = result.decision in (ev.DECISION_PROMOTE, ev.DECISION_ROLLBACK, ev.DECISION_RETIRE)
 
     if actionable and not autopromote:

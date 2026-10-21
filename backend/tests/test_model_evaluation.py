@@ -67,7 +67,7 @@ def paired_data(win, margin, mu_champion, mu_challenger, market_p=None, first_pr
     )
 
 
-def judge(data, *, k=1, days_live=40.0, age_days=40.0, days_since_promotion=None, resamples=600, previous_champion=False, **config):
+def judge(data, *, k=1, days_live=40.0, age_days=40.0, days_since_promotion=None, resamples=600, previous_champion=False, look=None, **config):
     return ev.evaluate_paired(
         data,
         now=NOW,
@@ -75,8 +75,9 @@ def judge(data, *, k=1, days_live=40.0, age_days=40.0, days_since_promotion=None
         age_days=age_days,
         days_since_promotion=days_since_promotion,
         k=k,
-        config=ev.EvaluationConfig(resamples=resamples, **config),
+        config=ev.EvaluationConfig(resamples=resamples, decision_resamples=resamples, **config),
         previous_champion=previous_champion,
+        look=look,
     )
 
 
@@ -150,7 +151,7 @@ def league(db_session):
 
 def _evaluate(league, config=None):
     return ev.evaluate_challenger(
-        league.session, league.challenger, league.champion, NOW, config or ev.EvaluationConfig(resamples=600, n_challengers=1)
+        league.session, league.challenger, league.champion, NOW, config or ev.EvaluationConfig(resamples=600, decision_resamples=600, n_challengers=1)
     )
 
 
@@ -272,7 +273,7 @@ def test_market_comparison_reports_each_models_gap_to_the_market():
     rows = ~np.isnan(market)
     assert result.market.brier_market == pytest.approx(((0.5 - win[rows]) ** 2).mean())
     assert result.market.gap_champion == pytest.approx(result.market.brier_champion - result.market.brier_market)
-    assert result.market.gap_difference == pytest.approx(result.market.gap_challenger - result.market.gap_champion)
+    assert result.market.market_gap_vs_champion == pytest.approx(result.market.gap_challenger - result.market.gap_champion)
 
 
 def test_the_bootstrap_interval_agrees_with_the_analytic_one():
@@ -284,7 +285,7 @@ def test_the_bootstrap_interval_agrees_with_the_analytic_one():
     assert result.log_loss_gain.mean == pytest.approx(gains.mean())
     assert result.log_loss_gain.ci_low == pytest.approx(gains.mean() - half, abs=0.15 * half)
     assert result.log_loss_gain.ci_high == pytest.approx(gains.mean() + half, abs=0.15 * half)
-    assert result.log_loss_gain.ci_low < result.log_loss_gain.bound_low < result.log_loss_gain.mean  # one-sided 95% > two-sided 95%
+    assert result.log_loss_gain.bound_low < result.log_loss_gain.ci_low < result.log_loss_gain.mean  # one-sided 99.58% is wider than two-sided 95%
 
 
 def test_the_result_is_deterministic_for_a_seed_and_changes_with_it():
@@ -301,7 +302,7 @@ def test_the_metrics_payload_is_json_safe_and_carries_the_seed_thresholds_and_k(
     payload = result.to_metrics()
     assert json.loads(json.dumps(payload)) == payload
     assert payload["seed"] == ev.SEED and payload["k"] == 3 and payload["resamples"] == 600
-    assert payload["confidence"] == pytest.approx(1 - 0.05 / 3)
+    assert payload["confidence"] == pytest.approx(1 - 0.05 / (3 * 12))
     assert payload["thresholds"]["min_games"] == 150 and payload["thresholds"]["cooldown_days"] == 30
     assert payload["decision"] == result.decision and payload["market"] is None
 
@@ -319,7 +320,7 @@ def test_an_empty_evidence_set_evaluates_without_crashing():
 def test_a_clearly_better_challenger_is_promoted_only_once_games_and_days_are_enough(league):
     win, margin, mu_c, mu_h = simulate(400, 21, 7.0, 1.0)
     league.populate(win, margin, mu_c, mu_h, days=40)
-    config = ev.EvaluationConfig(resamples=600, n_challengers=1)
+    config = ev.EvaluationConfig(resamples=600, decision_resamples=600, n_challengers=1)
 
     promoted = _evaluate(league, config)
     assert promoted.decision == ev.DECISION_PROMOTE and promoted.n_games == 400
@@ -353,23 +354,23 @@ def test_the_promotion_cooldown_keeps_the_champion_and_says_until_when():
 
 
 def test_a_significantly_worse_challenger_is_retired_from_100_games():
-    data = paired_data(*simulate(110, 8, 1.0, 9.0))
+    data = paired_data(*simulate(110, 8, 1.0, 14.0))
     result = judge(data, days_live=3.0)  # even before the promotion gate could open
     assert result.decision == ev.DECISION_RETIRE and "significantly worse" in result.reason
     assert result.log_loss_gain.bound_high < 0
 
-    fewer = paired_data(*simulate(90, 8, 1.0, 9.0))
+    fewer = paired_data(*simulate(90, 8, 1.0, 14.0))
     assert judge(fewer).decision == ev.DECISION_INSUFFICIENT  # not at 90 games
 
 
-def test_an_old_challenger_without_a_pass_is_retired_after_90_days_and_300_games():
+def test_an_old_challenger_without_a_pass_is_retired_after_150_days_and_300_games():
     data = paired_data(*simulate(320, 31, 5.0, 5.0))  # equal quality: no significant gain, not significantly worse
-    assert judge(data, age_days=60.0).decision == ev.DECISION_KEEP
-    old = judge(data, age_days=95.0)
+    assert judge(data, age_days=100.0).decision == ev.DECISION_KEEP  # past the old 90-day limit, inside the new 150
+    old = judge(data, age_days=155.0)
     assert old.decision == ev.DECISION_RETIRE and "promotion gate not met" in old.reason
-    assert judge(paired_data(*simulate(250, 31, 5.0, 5.0)), age_days=95.0).decision == ev.DECISION_KEEP  # < 300 games
+    assert judge(paired_data(*simulate(250, 31, 5.0, 5.0)), age_days=155.0).decision == ev.DECISION_KEEP  # < 300 games
     good = paired_data(*simulate(400, 21, 7.0, 1.0))
-    assert judge(good, age_days=95.0, days_since_promotion=5.0).decision == ev.DECISION_KEEP  # gate met, only the cooldown blocks
+    assert judge(good, age_days=155.0, days_since_promotion=5.0).decision == ev.DECISION_KEEP  # gate met, only the cooldown blocks
 
 
 def test_the_previous_champion_returning_is_a_rollback():
@@ -387,7 +388,7 @@ def test_the_margin_guard_blocks_a_challenger_whose_margin_is_much_worse():
 
 
 def test_the_market_guard_blocks_a_challenger_that_drifts_from_the_market():
-    win, margin, mu_c, mu_h = simulate(400, 21, 7.0, 1.0)
+    win, margin, mu_c, mu_h = simulate(800, 21, 7.0, 1.0)  # long enough for the rest to clear the corrected bound
     data = paired_data(win, margin, mu_c, mu_h)
     # the first 80 games have a market probability that tracks the champion; there the challenger just says 50/50
     data.p_champion[:80] = np.where(win[:80] == 1.0, 0.62, 0.38)
@@ -395,7 +396,7 @@ def test_the_market_guard_blocks_a_challenger_that_drifts_from_the_market():
     data.p_challenger[:80] = 0.5
     result = judge(data)
     assert result.n_market_games == 80
-    assert result.market.gap_difference > 0.005
+    assert result.market.market_gap_vs_champion > 0.005
     assert result.log_loss_gain.bound_low > 0  # the rest of the evidence is overwhelming
     assert result.decision == ev.DECISION_KEEP and "market Brier gap" in result.reason
     assert result.gate_text == "gate not passed: worse than the champion against the market"
@@ -409,7 +410,7 @@ def test_bonferroni_makes_the_bound_stricter_with_more_challengers():
     data = paired_data(*simulate(300, 17, 6.0, 4.5))
     one, three = judge(data, k=1), judge(data, k=3)
     assert three.log_loss_gain.bound_low < one.log_loss_gain.bound_low
-    assert three.confidence == pytest.approx(1 - 0.05 / 3) and one.confidence == pytest.approx(0.95)
+    assert three.confidence == pytest.approx(1 - 0.05 / (3 * 12)) and one.confidence == pytest.approx(1 - 0.05 / 12)
 
     # a marginal improvement that passes alone but not as one of three
     for seed in range(300):
@@ -460,7 +461,7 @@ def test_the_settings_defaults_mirror_the_module_constants():
 
 
 def test_the_number_of_challengers_is_counted_from_the_registry(league):
-    config = ev.EvaluationConfig(resamples=200)
+    config = ev.EvaluationConfig(resamples=200, decision_resamples=200)
     assert ev.count_active_challengers(league.session) == 1
     league.session.add(ModelVersion(name="elo_538", version="c2", role="challenger", params={"sigma": SIGMA}))
     league.session.add(ModelVersion(name="elo_538", version="c3", role="retired", params={"sigma": SIGMA}))
@@ -479,7 +480,7 @@ def test_the_previous_champion_is_judged_on_games_since_its_demotion(league):
     league.champion.parent_id = league.challenger.id
     league.champion.promoted_at = NOW - timedelta(days=10)  # demoted the challenger 10 days ago
     session.commit()
-    config = ev.EvaluationConfig(resamples=300, n_challengers=1)
+    config = ev.EvaluationConfig(resamples=300, decision_resamples=300, n_challengers=1)
 
     result = ev.evaluate_challenger(session, league.challenger, league.champion, NOW, config)
 
@@ -497,5 +498,122 @@ def test_a_challenger_that_is_not_the_previous_champion_uses_every_game(league):
     league.populate(win, margin, mu_champion, mu_challenger, days=20)
     league.champion.promoted_at = NOW - timedelta(days=5)
     league.session.commit()
-    result = ev.evaluate_challenger(league.session, league.challenger, league.champion, NOW, ev.EvaluationConfig(resamples=200, n_challengers=1))
+    result = ev.evaluate_challenger(league.session, league.challenger, league.champion, NOW, ev.EvaluationConfig(resamples=200, decision_resamples=200, n_challengers=1))
     assert result.previous_champion is False and result.n_games == 100 and result.evidence_since is None
+
+
+# ------------------------------------------------------------------------------------------- look budget
+
+def test_the_settings_defaults_of_the_look_budget_mirror_the_module_constants():
+    from app.config import Settings
+
+    fields = Settings.model_fields
+    assert fields["LEARNING_LOOK_INTERVAL_DAYS"].default == ev.LOOK_INTERVAL_DAYS == 7
+    assert fields["LEARNING_MAX_LOOKS"].default == ev.MAX_LOOKS == 12
+    assert fields["LEARNING_MAX_AGE_DAYS"].default == ev.RETIRE_AGE_DAYS == 150
+    config = ev.EvaluationConfig.from_settings(SimpleNamespace(LEARNING_MAX_LOOKS=4, LEARNING_LOOK_INTERVAL_DAYS=3, LEARNING_MAX_AGE_DAYS=200))
+    assert (config.max_looks, config.look_interval_days, config.retire_age_days) == (4, 3.0, 200.0)
+    assert config.decision_resamples >= 5000  # enough for the 0.4% tail of the corrected confidence
+
+
+def test_a_look_needs_games_for_some_decision_and_a_week_since_the_last_one():
+    config = ev.EvaluationConfig()
+    first = ev.plan_look(config, looks_taken=0, last_look_at=None, now=NOW, n_games=100)
+    assert first.decision_grade and first.number == 1 and first.budget == 12 and not first.exhausted
+
+    too_few = ev.plan_look(config, looks_taken=0, last_look_at=None, now=NOW, n_games=99)
+    assert not too_few.decision_grade and too_few.number == 0 and "99 of 100 paired games" in too_few.note
+
+    last = NOW - timedelta(days=3)
+    waiting = ev.plan_look(config, looks_taken=2, last_look_at=last, now=NOW, n_games=300)
+    assert not waiting.decision_grade and waiting.number == 2
+    assert waiting.next_look_at == last + timedelta(days=7) and "look 3 of 12" in waiting.note
+
+    due = ev.plan_look(config, looks_taken=2, last_look_at=NOW - timedelta(days=7), now=NOW, n_games=300)
+    assert due.decision_grade and due.number == 3
+
+
+def test_a_spent_budget_is_exhausted_and_never_a_look_again():
+    config = ev.EvaluationConfig(max_looks=3)
+    spent = ev.plan_look(config, looks_taken=3, last_look_at=NOW - timedelta(days=30), now=NOW, n_games=500)
+    assert spent.exhausted and not spent.decision_grade and "spent (3 of 3)" in spent.note
+
+
+def test_a_monitoring_evaluation_never_acts_whatever_the_numbers_say():
+    data = paired_data(*simulate(400, 21, 7.0, 1.0))
+    acting = judge(data)
+    assert acting.decision == ev.DECISION_PROMOTE and acting.decision_grade and acting.look_number == 1
+
+    monitor = judge(data, look=ev.LookPlan(False, 2, 12, False, NOW + timedelta(days=5), "next look in 5 days"))
+    assert monitor.decision == ev.DECISION_KEEP and not monitor.decision_grade
+    assert monitor.reason.startswith("monitor: would promote: ") and "not a decision-grade look" in monitor.reason
+    assert monitor.log_loss_gain.mean == acting.log_loss_gain.mean  # same numbers, only the right to act differs
+
+    worse = judge(paired_data(*simulate(130, 8, 1.0, 25.0)), look=ev.LookPlan(False, 2, 12, False, None, "wait"))
+    assert worse.decision == ev.DECISION_KEEP and worse.reason.startswith("monitor: would retire: ")
+
+    young = judge(paired_data(*simulate(60, 4, 8.0, 0.5)), look=ev.LookPlan(False, 0, 12, False, None, "wait"))
+    assert young.decision == ev.DECISION_INSUFFICIENT and young.reason.startswith("monitor: not enough evidence")
+
+
+def test_the_confidence_and_the_look_are_stored_in_the_metrics():
+    result = judge(paired_data(*simulate(200, 3, 6.0, 4.0)), k=2, look=ev.LookPlan(True, 5, 12, False))
+    payload = result.to_metrics()
+    assert payload["decision_grade"] is True and payload["look_number"] == 5 and payload["look_budget"] == 12
+    assert payload["confidence"] == pytest.approx(1 - 0.05 / (2 * 12)) and payload["k"] == 2
+    assert payload["thresholds"]["max_looks"] == 12 and payload["thresholds"]["look_interval_days"] == 7
+
+
+def test_decision_grade_looks_use_more_resamples_than_monitoring_ones():
+    data = paired_data(*simulate(200, 3, 6.0, 4.0))
+    config = ev.EvaluationConfig(resamples=300, decision_resamples=900)
+    acting = ev.evaluate_paired(data, now=NOW, days_live=40.0, age_days=40.0, days_since_promotion=None, k=1, config=config)
+    watching = ev.evaluate_paired(
+        data, now=NOW, days_live=40.0, age_days=40.0, days_since_promotion=None, k=1, config=config,
+        look=ev.LookPlan(False, 1, 12, False, None, "wait"),
+    )
+    assert (acting.resamples, watching.resamples) == (900, 300)
+    assert ev.EvaluationConfig().decision_resamples >= 5000 and ev.EvaluationConfig().resamples == 2000
+
+
+def test_once_the_budget_is_spent_the_age_rule_retires_with_or_without_a_passing_gate():
+    spent = ev.LookPlan(False, 12, 12, True, None, "the look budget is spent (12 of 12)")
+    good = paired_data(*simulate(400, 21, 7.0, 1.0))  # would pass the gate: a pass outside a look is not evidence
+    young = judge(good, age_days=100.0, look=spent)
+    assert young.decision == ev.DECISION_KEEP and young.reason.startswith("monitor:")
+    stale = judge(good, age_days=155.0, look=spent)
+    assert stale.decision == ev.DECISION_RETIRE and "budget is spent" in stale.reason
+    few = judge(paired_data(*simulate(250, 31, 5.0, 5.0)), age_days=155.0, look=spent)
+    assert few.decision == ev.DECISION_KEEP  # fewer than 300 games
+
+
+def test_the_look_history_counts_spent_looks_of_this_pairing_since_the_champion_was_promoted(league):
+    from app.models import ModelEvaluation
+
+    session = league.session
+    league.champion.promoted_at = NOW - timedelta(days=20)
+    other = ModelVersion(name="elo_538", version="other", role="challenger", params={"sigma": SIGMA})
+    session.add(other)
+    session.commit()
+
+    def row(days_ago, spent, challenger=None):
+        session.add(
+            ModelEvaluation(
+                evaluated_at=NOW - timedelta(days=days_ago), champion_id=league.champion.id,
+                challenger_id=(challenger or league.challenger).id, n_games=1, metrics={"look_spent": spent},
+                decision="keep", reason="x",
+            )
+        )
+
+    row(30, True)  # before the champion's tenure: another pairing
+    row(15, True)
+    row(8, False)  # a monitoring row
+    row(5, True)
+    row(2, True, challenger=other)  # another challenger
+    session.commit()
+
+    count, last = ev.look_history(session, league.champion, league.challenger.id)
+
+    assert count == 2 and last == NOW - timedelta(days=5)
+    assert ev.look_history(session, league.champion, other.id)[0] == 1
+

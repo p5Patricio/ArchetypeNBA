@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     LEARNING_AUTOPROMOTE: bool = True
     LEARNING_PROPOSAL_DAYS: int = 7
     LEARNING_MAX_CHALLENGERS: int = 3
+    # Look budget: at most one decision-grade look per challenger every LOOK_INTERVAL_DAYS and MAX_LOOKS per pairing;
+    # a challenger whose budget is spent without a promotion leaves once older than MAX_AGE_DAYS (with >= 300 games).
+    LEARNING_LOOK_INTERVAL_DAYS: int = 7
+    LEARNING_MAX_LOOKS: int = 12
+    LEARNING_MAX_AGE_DAYS: int = 150
 
 
 settings = Settings()
