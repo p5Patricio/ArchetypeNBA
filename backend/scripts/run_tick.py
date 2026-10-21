@@ -90,7 +90,9 @@ def configure_logging(log_file: Optional[Path]) -> None:
         sys.stdout.reconfigure(errors="replace")
     except (AttributeError, ValueError, OSError):
         pass
-    handlers: List[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    handlers: List[logging.Handler] = []
+    if sys.stdout is not None:  # pythonw.exe (the scheduled task) has no stdout
+        handlers.append(logging.StreamHandler(sys.stdout))
     if log_file is not None:
         log_file.parent.mkdir(parents=True, exist_ok=True)
         handlers.append(RotatingFileHandler(log_file, maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8"))

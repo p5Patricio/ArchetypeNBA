@@ -72,10 +72,12 @@ def test_what_if_action_runs_the_tick_script_from_the_backend_directory():
 
     action = root.find("t:Actions/t:Exec", NS)
     arguments = action.findtext("t:Arguments", namespaces=NS)
-    assert action.findtext("t:Command", namespaces=NS) == "powershell.exe"
-    assert "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command" in arguments
-    assert sys.executable in arguments and "run_tick.py" in arguments
-    assert arguments.endswith("exit $LASTEXITCODE\"")
+    # no console is ever created: the action is the GUI-subsystem interpreter, never powershell/cmd/python.exe
+    command = action.findtext("t:Command", namespaces=NS)
+    assert Path(command).name.lower() == "pythonw.exe"
+    assert "powershell" not in command.lower() and "powershell" not in arguments.lower()
+    assert "WindowStyle" not in arguments  # hiding after creation still flashes a window
+    assert "run_tick.py" in arguments
     assert ">>" not in arguments and "Out-File" not in arguments  # the tick writes its own rotating log
     assert Path(action.findtext("t:WorkingDirectory", namespaces=NS)).name == "backend"
 
