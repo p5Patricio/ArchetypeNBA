@@ -61,6 +61,8 @@ logger = logging.getLogger(__name__)
 MANUAL_PREFIX = "manual:"
 DECISION_PROPOSAL = "proposal"
 DECISION_DRY_RUN = "dry_run"
+PROPOSAL_ERROR_PREFIX = "error:"  # a proposal row with this reason is an error marker, not a lab run
+PROPOSAL_ERROR_HOLD_DAYS = 1.0  # a failed lab is not retried before this many days (a successful one waits LEARNING_PROPOSAL_DAYS)
 
 ACTION_SKIPPED = "skipped"  # nothing written
 ACTION_RECORDED = "recorded"  # audit row only
@@ -592,6 +594,35 @@ def _plan_registration(session: Session, report: model_lab.LabReport, max_challe
         result = model_lab.RegistrationResult(dry_run=True)
         result.skipped.append(str(exc))
         return result
+
+
+def is_proposal_error(row: ModelEvaluation) -> bool:
+    return (row.reason or "").startswith(PROPOSAL_ERROR_PREFIX)
+
+
+def record_proposal_error(session: Session, now: datetime, exc: BaseException) -> Optional[ModelEvaluation]:
+    """
+    Marks a lab run that failed with an unexpected error: a ``proposal`` audit row whose reason starts with ``error:``.
+    It holds the weekly cadence for PROPOSAL_ERROR_HOLD_DAYS (the caller decides), so a broken lab is not re-run on
+    every 15-minute tick. Returns None when there is no champion to attach the row to.
+    """
+    champion = model_registry.get_champion(session)
+    if champion is None:
+        return None
+    text = f"{type(exc).__name__}: {exc}"[:500]
+    row = ModelEvaluation(
+        evaluated_at=_aware_utc(now),
+        champion_id=champion.id,
+        challenger_id=champion.id,
+        n_games=0,
+        n_market_games=0,
+        metrics={"error": text, "hold_days": PROPOSAL_ERROR_HOLD_DAYS},
+        decision=DECISION_PROPOSAL,
+        reason=f"{PROPOSAL_ERROR_PREFIX} {text}",
+    )
+    session.add(row)
+    session.commit()
+    return row
 
 
 def last_proposal(session: Session) -> Optional[ModelEvaluation]:

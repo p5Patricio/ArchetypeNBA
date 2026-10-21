@@ -16,7 +16,8 @@ Steps run in order, each isolated (one failing step never prevents the others):
                 other: a nba_api outage does not stop settlement of games that are already final.
 4. ``learn``    the model learning loop (``app.services.model_promotion``): evaluates every challenger against the
                 champion when new final games arrived (promoting, retiring or rolling back under the evidence
-                gates) and, at most every ``LEARNING_PROPOSAL_DAYS`` days, runs the historical candidate lab and
+                gates) and, at most every ``LEARNING_PROPOSAL_DAYS`` days (a day after a lab error), runs the
+                historical candidate lab and
                 registers gate-passing challengers. DB only, a 4 minute budget (the lab gets a deadline and
                 returns a partial result) and isolated like every other step. It sits before ``record`` so a
                 promotion takes effect for that tick's predictions. ``LEARNING_AUTOPROMOTE`` off = it only
@@ -471,8 +472,11 @@ def _learn_proposal(
         errors.append(f"proposal marker: {type(exc).__name__}: {exc}")
         return False
     age = None if last is None or last.evaluated_at is None else ctx.now - _aware_utc(last.evaluated_at)
-    if age is not None and age < timedelta(days=settings.LEARNING_PROPOSAL_DAYS):
-        messages.append(f"proposal not due (last one {_days(age)} ago)")
+    failed_last = last is not None and model_promotion.is_proposal_error(last)
+    hold = timedelta(days=model_promotion.PROPOSAL_ERROR_HOLD_DAYS if failed_last else settings.LEARNING_PROPOSAL_DAYS)
+    if age is not None and age < hold:
+        after = " and it failed" if failed_last else ""
+        messages.append(f"proposal not due (last one {_days(age)} ago{after})")
         return False
     since = "" if age is None else f" (last proposal {_days(age)} ago)"
     if ctx.dry_run:
@@ -507,6 +511,16 @@ def _learn_proposal(
         except Exception:
             logger.exception("tick: rollback after a failed learn proposal also failed")
         errors.append(f"proposal: {type(exc).__name__}: {exc}")
+        try:
+            # an error marker holds the cadence for a day, so a failing lab is not re-run (up to the whole learn
+            # budget) on every 15-minute tick
+            model_promotion.record_proposal_error(ctx.session, ctx.now, exc)
+        except Exception:
+            logger.exception("tick: could not record the learn proposal error marker")
+            try:
+                ctx.session.rollback()
+            except Exception:
+                logger.exception("tick: rollback after a failed error marker also failed")
         return False
     messages.append("proposal: " + proposal.summary)
     for candidate in proposal.report.candidates:

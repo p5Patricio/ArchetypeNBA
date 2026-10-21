@@ -261,3 +261,49 @@ def test_the_real_proposal_runs_once_and_holds_the_weekly_cadence(lab_world):  #
     again = tick.learn_step(make_ctx(lab_world, now=NOW + timedelta(hours=1)))
     assert again.status == "skipped" and "proposal not due" in again.message
     assert len([r for r in lab_world.exec(select(ModelEvaluation)).all() if r.decision == "proposal"]) == 1
+
+
+# ------------------------------------------------------------------------------------ a failing lab
+
+@pytest.fixture
+def failing_lab(monkeypatch):
+    """A proposal that raises an unexpected error (not a LabError), recording each call."""
+    calls = []
+
+    def boom(session, now, **kwargs):
+        calls.append(now)
+        raise RuntimeError("lab exploded")
+
+    monkeypatch.setattr(model_promotion, "run_proposal", boom)
+    return calls
+
+
+def test_a_lab_error_writes_a_marker_and_holds_the_cadence_for_a_day(league, failing_lab):
+    first = tick.learn_step(make_ctx(league.session))
+
+    assert first.status == "error" and "lab exploded" in first.detail
+    (marker,) = [r for r in audit(league.session) if r.decision == "proposal"]
+    assert marker.reason.startswith("error: RuntimeError: lab exploded") and marker.metrics["error"]
+    assert model_promotion.is_proposal_error(marker) and marker.champion_id == league.champion.id
+
+    # the next ticks do not re-run the lab (it used to be re-run, up to the whole budget, on every tick)
+    for minutes in (15, 30, 600):
+        again = tick.learn_step(make_ctx(league.session, now=NOW + timedelta(minutes=minutes)))
+        assert again.status == "skipped" and "proposal not due" in again.message and "it failed" in again.message
+    assert len(failing_lab) == 1
+
+    # a day later it tries again, and keeps failing quietly instead of hammering the lab
+    tick.learn_step(make_ctx(league.session, now=NOW + timedelta(hours=25)))
+    assert len(failing_lab) == 2
+
+
+def test_a_failed_error_marker_does_not_break_the_step(league, failing_lab, monkeypatch):
+    def cannot_write(*args, **kwargs):
+        raise RuntimeError("database is read-only")
+
+    monkeypatch.setattr(model_promotion, "record_proposal_error", cannot_write)
+
+    result = tick.learn_step(make_ctx(league.session))
+
+    assert result.status == "error" and "lab exploded" in result.detail
+    assert [r for r in audit(league.session) if r.decision == "proposal"] == []
