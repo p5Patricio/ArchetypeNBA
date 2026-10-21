@@ -9,7 +9,7 @@ from sqlmodel import select
 from app.models import ModelEvaluation, ModelVersion
 from app.services import model_evaluation as ev
 from app.services import model_promotion as promo
-from tests.test_model_evaluation import LONG_AGO, NOW, SIGMA, League, _p_from_mu, simulate
+from tests.test_model_evaluation import NOW, SIGMA, League, _p_from_mu, simulate
 
 UTC = timezone.utc
 CONFIG = ev.EvaluationConfig(resamples=500)
@@ -215,14 +215,41 @@ def test_the_previous_champion_returns_through_a_rollback(league):
 def test_a_rollback_candidate_faces_the_same_cooldown(league):
     better_league(league)
     league.champion.parent_id = league.challenger.id
-    league.champion.promoted_at = NOW - timedelta(days=5)
+    league.champion.promoted_at = NOW - timedelta(days=45)
     league.session.commit()
 
-    run_pass(league)
+    run_pass(league, config=ev.EvaluationConfig(resamples=500, cooldown_days=60))  # 45 days since the promotion < 60
 
     league.session.expire_all()
     assert champions(league.session)[0].id == league.champion.id
-    assert audit(league.session)[0].decision == "keep"
+    (row,) = audit(league.session)
+    assert row.decision == "keep" and "cooldown until" in row.reason
+
+
+def test_the_ex_champion_is_judged_on_games_since_its_demotion_and_is_not_retired_the_next_day(league):
+    better_league(league)
+    session = league.session
+    old_id = league.champion.id
+    run_pass(league)  # promotes the challenger; the ex-champion is far worse on the games that dethroned it
+    session.expire_all()
+    assert champions(session)[0].id == league.challenger.id
+
+    next_day = run_pass(league, now=NOW + timedelta(days=1))
+
+    (entry,) = next_day.entries
+    assert entry.model_id == old_id and entry.action == promo.ACTION_SKIPPED
+    assert "no new paired games" in entry.note  # nothing since the demotion yet: the old evidence does not count
+    assert session.get(ModelVersion, old_id).role == "challenger"
+
+    # fresh games after the demotion where the ex-champion is clearly worse: now it is retired
+    win, margin, mu_a, mu_b = simulate(130, 99, 14.0, 1.0)  # a = ex-champion (worse), b = new champion
+    for i in range(130):
+        game = league.game(-(30.0 + i), home_score=110 if win[i] else 100, away_score=100 if win[i] else 110)
+        league.predict(session.get(ModelVersion, old_id), game, _p_from_mu(mu_a[i]), mu_a[i], at=NOW)
+        league.predict(session.get(ModelVersion, league.challenger.id), game, _p_from_mu(mu_b[i]), mu_b[i], at=NOW)
+    later = run_pass(league, now=NOW + timedelta(days=200))
+    assert [e.action for e in later.entries] == [promo.ACTION_RETIRED]
+    assert later.entries[0].result.evidence_since is not None and later.entries[0].result.n_games == 130
 
 
 # ----------------------------------------------------------------------------------- kill switch / dry
@@ -307,13 +334,18 @@ def test_a_new_champion_means_a_fresh_evaluation_even_without_new_games(league):
     session = league.session
     win, margin, mu_champion, mu_challenger = simulate(60, 5, 6.0, 5.0)
     league.populate(win, margin, mu_champion, mu_challenger, days=20)
-    run_pass(league, now=datetime(2026, 12, 1, 9, 0, tzinfo=UTC))
-    promo.manual_promote(session, league.challenger.id, "swap for the test", NOW, force=True)
+    bystander = add_model(league, "lab-3", mu_challenger)
+    first = run_pass(league, now=datetime(2026, 12, 1, 9, 0, tzinfo=UTC))
+    assert first.rows_written == 2
 
-    # the old champion is a challenger of the new one: its last row compared it with another champion
+    promo.manual_promote(session, league.challenger.id, "swap for the test", NOW, force=True)
     outcome = run_pass(league, now=NOW + timedelta(days=2))
 
-    assert outcome.entries[0].model_id == league.champion.id and outcome.entries[0].action == promo.ACTION_RECORDED
+    by_model = {e.model_id: e for e in outcome.entries}
+    # the bystander's last row compared it with the old champion: it is evaluated again against the new one
+    assert by_model[bystander.id].action == promo.ACTION_RECORDED
+    # the ex-champion has no game since its demotion
+    assert by_model[league.champion.id].action == promo.ACTION_SKIPPED
 
 
 def test_with_no_champion_or_no_challengers_a_pass_is_a_harmless_no_op(db_session):

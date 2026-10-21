@@ -34,6 +34,9 @@ Decision, in this order (``evaluate_paired``):
                 cooldown in the reason. The previous champion returning is labelled ``rollback`` instead.
 5. ``keep``     otherwise.
 
+The previous champion (the model a promotion replaced) is judged on the games since its demotion only, and its
+days live and age count from the demotion: the games that dethroned it must not retire it a day later.
+
 The thresholds are module constants, overridable through ``Settings`` (``EvaluationConfig.from_settings``).
 """
 import math
@@ -133,6 +136,7 @@ class PairedData:
     n_late_excluded: int = 0  # both models have a prediction but one was recorded at or after tip-off
     n_unpaired: int = 0  # final games predicted by only one of the two models
     first_prediction_at: Optional[datetime] = None  # the challenger's first recorded h2h home prediction
+    since: Optional[datetime] = None  # only games that tipped off at or after this instant are evidence
 
     @property
     def n(self) -> int:
@@ -155,8 +159,10 @@ def first_prediction_time(session: Session, model_id: int) -> Optional[datetime]
     return None if value is None else _aware_utc(value)
 
 
-def collect_paired_games(session: Session, champion_id: int, challenger_id: int) -> PairedData:
-    """The paired evidence of a champion/challenger couple (see the module docstring)."""
+def collect_paired_games(
+    session: Session, champion_id: int, challenger_id: int, since: Optional[datetime] = None
+) -> PairedData:
+    """The paired evidence of a champion/challenger couple (see the module docstring), optionally from ``since`` on."""
     if champion_id == challenger_id:
         raise ValueError("a model cannot be paired with itself")
     champion = session.get(ModelVersion, champion_id)
@@ -189,8 +195,11 @@ def collect_paired_games(session: Session, champion_id: int, challenger_id: int)
     ).all()
 
     # game id -> {"game": (commence, home, away), model id -> earliest usable (predicted_at, p, mu) | None}
+    since = None if since is None else _aware_utc(since)
     games: Dict[int, Dict[Any, Any]] = {}
     for game_id, model_id, prob, projection, predicted_at, commence, home_score, away_score in rows:
+        if since is not None and _aware_utc(commence) < since:
+            continue
         entry = games.setdefault(game_id, {"game": (_aware_utc(commence), int(home_score), int(away_score))})
         entry.setdefault(model_id, None)  # a row exists, whether or not it is usable
         if predicted_at is None or projection is None or _aware_utc(predicted_at) >= entry["game"][0]:
@@ -233,7 +242,24 @@ def collect_paired_games(session: Session, champion_id: int, challenger_id: int)
         n_late_excluded=late,
         n_unpaired=unpaired,
         first_prediction_at=first_prediction_time(session, challenger_id),
+        since=since,
     )
+
+
+def is_previous_champion(champion: ModelVersion, challenger: ModelVersion) -> bool:
+    """True when ``challenger`` is the model ``champion`` replaced (a promotion sets ``parent_id`` to the old champion)."""
+    return champion.parent_id is not None and champion.parent_id == challenger.id
+
+
+def collect_for(session: Session, champion: ModelVersion, challenger: ModelVersion) -> PairedData:
+    """
+    The evidence the engine judges ``challenger`` on. Normally every paired game; for the previous champion only the
+    games since it was demoted. Its earlier games are the very evidence that dethroned it: counting them again would
+    make it "significantly worse" the day after the promotion and retire it, so the rollback watch could never
+    work. After a demotion it has to earn its way back (or be retired) on fresh games.
+    """
+    since = champion.promoted_at if is_previous_champion(champion, challenger) else None
+    return collect_paired_games(session, champion.id, challenger.id, since=since)
 
 
 # --------------------------------------------------------------------------------------------- metrics
@@ -318,6 +344,7 @@ class EvaluationResult:
     resamples: int
     thresholds: Dict[str, Any]
     previous_champion: bool
+    evidence_since: Optional[datetime]  # set for the previous champion: only games since its demotion count
     champion: Optional[Scores]
     challenger: Optional[Scores]
     log_loss_gain: Gain
@@ -516,6 +543,7 @@ def evaluate_paired(
             key: value for key, value in asdict(config).items() if key not in ("seed", "resamples", "n_challengers")
         },
         previous_champion=previous_champion,
+        evidence_since=data.since,
         champion=scores_champion,
         challenger=scores_challenger,
         log_loss_gain=log_loss_gain,
@@ -590,16 +618,17 @@ def evaluate_challenger(
     """
     config = config or default_config()
     now = _aware_utc(now)
-    data = data if data is not None else collect_paired_games(session, champion.id, challenger.id)
+    data = data if data is not None else collect_for(session, champion, challenger)
     k = config.n_challengers if config.n_challengers is not None else count_active_challengers(session)
 
     days_live = 0.0
     if data.first_prediction_at is not None:
         days_live = max(0.0, (now - data.first_prediction_at).total_seconds() / _SECONDS_PER_DAY)
-    previous_champion = champion.parent_id is not None and champion.parent_id == challenger.id
-    age_days = days_live
+    previous_champion = is_previous_champion(champion, challenger)
     if previous_champion and champion.promoted_at is not None:
-        age_days = max(0.0, (now - _aware_utc(champion.promoted_at)).total_seconds() / _SECONDS_PER_DAY)
+        # live as a challenger since the demotion, which is also the age that retirement counts
+        days_live = max(0.0, (now - _aware_utc(champion.promoted_at)).total_seconds() / _SECONDS_PER_DAY)
+    age_days = days_live
     days_since_promotion = None
     if champion.promoted_at is not None:
         days_since_promotion = max(0.0, (now - _aware_utc(champion.promoted_at)).total_seconds() / _SECONDS_PER_DAY)

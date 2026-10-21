@@ -240,7 +240,7 @@ def run_evaluation_pass(
 
     plans: List[PassEntry] = []
     for challenger in challengers:
-        data = ev.collect_paired_games(session, champion.id, challenger.id)
+        data = ev.collect_for(session, champion, challenger)
         skip = _skip_reason(last_evaluation(session, challenger.id), champion.id, data.n, today, local_tz)
         if skip is not None and apply:
             outcome.entries.append(PassEntry(challenger.id, label(challenger), None, False, ACTION_SKIPPED, note=skip))

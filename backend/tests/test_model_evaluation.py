@@ -468,3 +468,34 @@ def test_the_number_of_challengers_is_counted_from_the_registry(league):
     assert ev.count_active_challengers(league.session) == 2
     result = ev.evaluate_challenger(league.session, league.challenger, league.champion, NOW, config)
     assert result.k == 2
+
+
+# --------------------------------------------------------------------------- the previous champion
+
+def test_the_previous_champion_is_judged_on_games_since_its_demotion(league):
+    session = league.session
+    win, margin, mu_champion, mu_challenger = simulate(300, 21, 1.0, 9.0)
+    league.populate(win, margin, mu_champion, mu_challenger, days=30)  # a model that the other beat clearly
+    league.champion.parent_id = league.challenger.id
+    league.champion.promoted_at = NOW - timedelta(days=10)  # demoted the challenger 10 days ago
+    session.commit()
+    config = ev.EvaluationConfig(resamples=300, n_challengers=1)
+
+    result = ev.evaluate_challenger(session, league.challenger, league.champion, NOW, config)
+
+    assert result.previous_champion is True
+    assert 90 <= result.n_games <= 110  # about 10 days of the 10 games a day
+    assert result.evidence_since is not None
+    assert result.days_live == pytest.approx(10.0, abs=0.01) and result.age_days == pytest.approx(10.0, abs=0.01)
+    whole = ev.collect_paired_games(session, league.champion.id, league.challenger.id)
+    assert whole.n == 300  # the complete history is still available
+    assert ev.collect_paired_games(session, league.champion.id, league.challenger.id, since=NOW - timedelta(days=10)).n == result.n_games
+
+
+def test_a_challenger_that_is_not_the_previous_champion_uses_every_game(league):
+    win, margin, mu_champion, mu_challenger = simulate(100, 21, 6.0, 5.0)
+    league.populate(win, margin, mu_champion, mu_challenger, days=20)
+    league.champion.promoted_at = NOW - timedelta(days=5)
+    league.session.commit()
+    result = ev.evaluate_challenger(league.session, league.challenger, league.champion, NOW, ev.EvaluationConfig(resamples=200, n_challengers=1))
+    assert result.previous_champion is False and result.n_games == 100 and result.evidence_since is None
