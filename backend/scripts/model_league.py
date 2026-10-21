@@ -6,7 +6,7 @@ The model league: who is champion, how the challengers are doing, and the contro
     python scripts/model_league.py evaluate --apply          # writes audit rows and applies the decisions
     python scripts/model_league.py propose [--dry-run]       # run the historical lab and register challengers
     python scripts/model_league.py promote 3 --reason "..." [--force]
-    python scripts/model_league.py retire 3 --reason "..."
+    python scripts/model_league.py retire 3 --reason "..." [--force]
 
 `status` (the registry table plus the same "Model league" section as the paper report) and `evaluate` without
 --apply only read the database. Everything that writes (evaluate --apply,
@@ -63,6 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     retire = commands.add_parser("retire", parents=[common], help="MANUAL: retire a challenger")
     retire.add_argument("model_id", type=int)
     retire.add_argument("--reason", required=True)
+    retire.add_argument("--force", action="store_true", help="also the last active Elo model or the Elo reference (stalls ratings and the lab)")
     return parser
 
 
@@ -141,7 +142,7 @@ def main(argv: Optional[List[str]] = None, session_factory=None) -> int:
                 print(f"model {args.model_id} is now the champion (audit row {row.id}: {row.reason})")
             elif args.command == "retire":
                 _guard(session, args)
-                row = model_promotion.manual_retire(session, args.model_id, args.reason, now)
+                row = model_promotion.manual_retire(session, args.model_id, args.reason, now, force=args.force)
                 print(f"model {args.model_id} retired (audit row {row.id}: {row.reason})")
         except (RegistrationRefused, model_promotion.ManualOverrideRefused) as exc:
             print(f"refused: {exc}", file=sys.stderr)

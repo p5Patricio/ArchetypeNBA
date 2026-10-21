@@ -205,9 +205,11 @@ def test_promoting_margin_features_keeps_the_whole_pipeline_working(e2e):
     assert lab.champion_elo_params(session)[0].id == e2e.elo.id
 
 
-def test_the_lab_needs_some_active_elo_model_when_the_champion_is_not_one(e2e):
+def test_the_lab_needs_some_active_elo_model_when_the_champion_is_not_one_and_a_force_retirement_removes_it(e2e):
     promo.manual_promote(e2e.session, e2e.mf.id, "switch", NOW, force=True)
-    promo.manual_retire(e2e.session, e2e.elo.id, "retire the Elo", NOW)
+    with pytest.raises(promo.ManualOverrideRefused, match="last Elo model is protected"):
+        promo.manual_retire(e2e.session, e2e.elo.id, "retire the Elo", NOW)  # the guard: not without --force
+    promo.manual_retire(e2e.session, e2e.elo.id, "retire the Elo", NOW, force=True)
     with pytest.raises(lab.LabError, match="no elo_538 model is active"):
         lab.lab_baseline(e2e.session)
     # the retired Elo row is still the last-resort reference for rating queries
@@ -399,3 +401,39 @@ def test_the_cli_propose_reports_a_lab_that_cannot_run(cli, db_session, capsys):
     db_session.commit()
     assert run_cli(cli, db_session, "propose", "--dry-run") == 1
     assert "the lab cannot run" in capsys.readouterr().err
+
+
+# ------------------------------------------------------------------------------- the stable Elo reference
+
+def test_the_elo_reference_is_the_lowest_id_active_elo_whatever_the_champion_family(db_session):
+    mf = ModelVersion(name="margin_features", version="x", role="champion", params={})
+    elo_old = ModelVersion(name="elo_538", version="1.1", role="challenger", params={"sigma": 14.0})
+    elo_new = ModelVersion(name="elo_538", version="lab-new", role="challenger", params={"sigma": 14.0})
+    db_session.add_all([mf, elo_old, elo_new])
+    db_session.commit()
+
+    assert model_registry.get_elo_reference(db_session).id == elo_old.id  # not the most recent one
+    assert model_registry.elo_protection(db_session, elo_old) is not None  # the reference cannot be retired
+    assert model_registry.elo_protection(db_session, elo_new) is None  # another Elo model can
+    assert model_registry.elo_protection(db_session, mf) is None  # protection is about Elo models only
+
+    elo_old.role = "retired"
+    db_session.commit()
+    assert model_registry.get_elo_reference(db_session).id == elo_new.id
+    assert model_registry.elo_protection(db_session, elo_new).startswith("last Elo model is protected")
+
+    elo_new.role = "retired"
+    db_session.commit()
+    assert model_registry.get_elo_reference(db_session).id == elo_old.id  # last resort: the LOWEST id of any role
+
+
+def test_the_cli_retire_refuses_the_last_elo_model_unless_forced(cli, league, capsys):
+    league.champion.name = "margin_features"
+    league.session.commit()
+    now = ["--now", NOW.isoformat()]
+
+    assert run_cli(cli, league.session, "retire", str(league.challenger.id), "--reason", "tidy up", *now) == 2
+    assert "last Elo model is protected" in capsys.readouterr().err and _count(league.session, ModelEvaluation) == 0
+
+    assert run_cli(cli, league.session, "retire", str(league.challenger.id), "--reason", "tidy up", "--force", *now) == 0
+    assert "retired" in capsys.readouterr().out

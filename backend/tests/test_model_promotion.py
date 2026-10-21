@@ -515,3 +515,124 @@ def test_with_autopromote_off_no_look_is_spent(league):
     row = audit(league.session)[-1]
     assert row.decision == "dry_run" and row.metrics["decision_grade"] is True and row.metrics["look_spent"] is False
     assert ev.look_history(league.session, league.champion, league.challenger.id)[0] == 0
+
+
+# --------------------------------------------------------------------- a failed swap leaves truthful rows
+
+def two_qualified(league):
+    win, margin, mu_champion, mu_challenger = better_league(league)
+    add_model(league, "lab-2", (mu_champion + mu_challenger) / 2)
+    return league.challenger.id
+
+
+def test_a_failed_swap_leaves_no_row_that_claims_a_promotion(league, monkeypatch):
+    two_qualified(league)
+    session = league.session
+    old_id = league.champion.id
+    monkeypatch.setattr(promo, "_promote_row", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("disk on fire")))
+
+    outcome = run_pass(league)
+
+    session.expire_all()
+    assert champions(session)[0].id == old_id
+    rows = audit(session)
+    assert len(rows) == 1  # the failure is recorded once
+    (row,) = rows
+    assert row.decision == "keep" and row.metrics["failed"] is True and row.metrics["applied"] is False
+    assert "failed and was rolled back" in row.reason and "roles unchanged" in row.reason and "disk on fire" in row.reason
+    assert not any("was promoted" in (r.reason or "") for r in rows)
+    actions = sorted(e.action for e in outcome.entries)
+    assert actions == [promo.ACTION_FAILED, promo.ACTION_SKIPPED]  # the other qualified challenger is simply not recorded
+    assert not outcome.promoted
+
+
+def test_the_rows_of_the_other_challengers_are_written_after_the_swap_committed(league, monkeypatch):
+    two_qualified(league)
+    session = league.session
+    seen = []
+    original = promo.swap_champion
+
+    def spy(session_, new, old, now, note):
+        original(session_, new, old, now, note)
+        seen.append(len(audit(session_)))  # inside the swap transaction: rows already committed by this pass
+
+    monkeypatch.setattr(promo, "swap_champion", spy)
+
+    run_pass(league)
+
+    rows = audit(session)
+    assert seen == [1]  # only the winner's own audit row existed when the swap ran: nothing else was written before
+    winner_row = next(r for r in rows if r.decision == "promote")
+    loser_row = next(r for r in rows if r.decision == "keep")
+    assert winner_row.id < loser_row.id and "was promoted in this pass" in loser_row.reason
+
+
+def test_a_promotion_ends_the_pass_and_other_decisions_are_not_applied(league):
+    win, margin, mu_champion, mu_challenger = better_league(league)
+    rng = np.random.default_rng(9)
+    bad = add_model(league, "lab-bad", list(rng.normal(0, 25, len(mu_champion))))  # significantly worse than the champion
+    session = league.session
+    first = run_pass(league)  # no prior look rows: everything is a decision-grade look
+
+    by_model = {e.model_id: e for e in first.entries}
+    assert by_model[bad.id].result.decision == ev.DECISION_RETIRE  # decided against the OLD champion
+    assert by_model[league.challenger.id].action == promo.ACTION_PROMOTED
+    session.expire_all()
+    assert session.get(ModelVersion, bad.id).role == "challenger"  # not retired: the champion changed under it
+    bad_row = next(r for r in audit(session) if r.challenger_id == bad.id)
+    assert bad_row.decision == "keep" and "was promoted in this pass" in bad_row.reason and bad_row.metrics["proposed_decision"] == "retire"
+
+
+# ------------------------------------------------------------------------ the last Elo model is protected
+
+def non_elo_champion(league):
+    league.champion.name = "margin_features"
+    league.session.commit()
+
+
+def test_the_last_elo_model_is_never_retired_automatically(league):
+    non_elo_champion(league)
+    win, margin, mu_champion, mu_challenger = simulate(130, 8, 1.0, 25.0)
+    league.populate(win, margin, mu_champion, mu_challenger, days=20)
+
+    outcome = run_pass(league)
+
+    assert outcome.entries[0].result.decision == ev.DECISION_RETIRE and not outcome.retired
+    league.session.expire_all()
+    assert league.session.get(ModelVersion, league.challenger.id).role == "challenger"
+    (row,) = audit(league.session)
+    assert row.decision == "keep" and row.reason.startswith("last Elo model is protected")
+    assert row.metrics["protected"] is True and row.metrics["proposed_decision"] == "retire"
+    # also with the kill switch off: the row says keep, not "would retire"
+    add_equal_games(league, 6, 24.0 * 9)  # new paired games, so the next pass evaluates again
+    run_pass(league, autopromote=False, now=NOW + timedelta(days=8))  # a week after the first look: decision-grade again
+    assert audit(league.session)[-1].reason.startswith("last Elo model is protected")
+
+
+def test_the_elo_reference_is_protected_but_another_elo_model_may_be_retired(league):
+    non_elo_champion(league)
+    win, margin, mu_champion, mu_challenger = simulate(130, 8, 1.0, 25.0)
+    league.populate(win, margin, mu_champion, mu_challenger, days=20)
+    second = add_model(league, "lab-second", mu_challenger)  # a second Elo, also far worse
+
+    outcome = run_pass(league)
+
+    by_model = {e.model_id: e for e in outcome.entries}
+    league.session.expire_all()
+    assert league.session.get(ModelVersion, league.challenger.id).role == "challenger"  # lowest id: the reference
+    assert by_model[league.challenger.id].decision == "keep"
+    assert league.session.get(ModelVersion, second.id).role == "retired"
+    assert by_model[second.id].action == promo.ACTION_RETIRED
+
+
+def test_a_manual_retirement_of_the_last_elo_model_needs_force(league):
+    non_elo_champion(league)
+    session = league.session
+    with pytest.raises(promo.ManualOverrideRefused, match="last Elo model is protected"):
+        promo.manual_retire(session, league.challenger.id, "x", NOW)
+    session.expire_all()
+    assert session.get(ModelVersion, league.challenger.id).role == "challenger" and audit(session) == []
+
+    row = promo.manual_retire(session, league.challenger.id, "x", NOW, force=True)
+    session.expire_all()
+    assert session.get(ModelVersion, league.challenger.id).role == "retired" and row.metrics["force"] is True

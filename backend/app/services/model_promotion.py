@@ -8,10 +8,19 @@ asked to apply and ``LEARNING_AUTOPROMOTE`` is on, acts on the decisions:
   stays registered, which is what makes a rollback possible). The swap is ONE transaction that also holds the
   audit row: the old champion is demoted first (the single-champion unique index allows one champion only), then
   the new one is promoted (``promoted_at``, ``parent_id`` = the old champion, a ``notes`` entry). Any failure in
-  between rolls everything back, leaving exactly the old champion, and a ``keep`` audit row says what happened.
-  At most ONE promotion per pass: when several challengers qualify the one with the largest lower bound of the
-  log-loss gain wins, the others are recorded as ``keep`` and are judged against the new champion later.
-* ``retire``: role ``retired`` and ``retired_at``.
+  between rolls everything back, leaving exactly the old champion, and ONE ``keep`` audit row says the swap failed
+  and roles are unchanged. At most ONE promotion per pass: when several challengers qualify the one with the largest
+  lower bound of the log-loss gain wins and goes FIRST. If its swap commits the champion changed, so the pass ends:
+  the other qualified challengers (and any retirement decided against the old champion) get a ``keep`` row saying
+  they were not acted on and are judged against the new champion next time; those rows are written only after the
+  swap committed, so no row ever claims a promotion that did not happen. If the swap fails nothing changed and the
+  other challengers are handled normally (the qualified ones simply wait for the next pass).
+* ``retire``: role ``retired`` and ``retired_at``. The current Elo reference and the last active Elo model are never
+  retired automatically (``keep``, reason "last Elo model is protected"): the rating updates and the lab baseline
+  need one.
+
+Only decision-grade looks (``model_evaluation`` look budget) can produce those actions; every other evaluation is a
+``monitor:`` row. A row counts as a spent look when its metrics say ``look_spent`` (decision-grade and autopromote on).
 
 With autopromote off the decision is recorded as ``dry_run`` ("autopromote disabled (would promote)") and nothing
 changes. With ``apply=False`` nothing is written at all.
@@ -154,10 +163,16 @@ def swap_champion(
     session.flush()
 
 
-def retire_model(session: Session, model: ModelVersion, now: datetime, note: Dict[str, Any]) -> None:
-    """Retire a non-champion model inside the caller's transaction (flushes, never commits)."""
+def retire_model(session: Session, model: ModelVersion, now: datetime, note: Dict[str, Any], *, force: bool = False) -> None:
+    """
+    Retire a non-champion model inside the caller's transaction (flushes, never commits). The current Elo reference
+    and the last active Elo model are protected (the system needs one): only ``force`` retires them.
+    """
     if model.role == MODEL_ROLE_CHAMPION:
         raise ManualOverrideRefused(f"{label(model)} is the champion; promote another model before retiring it")
+    protection = None if force else model_registry.elo_protection(session, model)
+    if protection is not None:
+        raise ManualOverrideRefused(f"{label(model)}: {protection}; use --force to retire it anyway")
     model.role = MODEL_ROLE_RETIRED
     model.retired_at = now
     model.notes = _merged_notes(model, "retirement", note)
@@ -261,10 +276,17 @@ def run_evaluation_pass(
         if qualified:
             winner = max(qualified, key=lambda p: (p.result.log_loss_gain.bound_low, -p.model_id))
     models = {row.id: row for row in challengers}
+    outcome.entries.extend(plans)
 
+    # The winner goes first. When its swap commits the champion changed, so every other decision of this pass was taken
+    # against a champion that no longer exists: the pass ends there (no further role change), and the audit rows of the
+    # other challengers only say what happened. When the swap fails nothing changed and the pass carries on normally.
+    swapped = False
+    if winner is not None:
+        swapped = _apply_plan(session, winner, models[winner.model_id], champion, now, autopromote, winner, False)
     for plan in plans:
-        outcome.entries.append(plan)
-        _apply_plan(session, plan, models[plan.model_id], champion, winner, autopromote, now)
+        if plan is not winner:
+            _apply_plan(session, plan, models[plan.model_id], champion, now, autopromote, winner, swapped)
     return outcome
 
 
@@ -273,10 +295,12 @@ def _apply_plan(
     plan: PassEntry,
     model: ModelVersion,
     champion: ModelVersion,
-    winner: Optional[PassEntry],
-    autopromote: bool,
     now: datetime,
-) -> None:
+    autopromote: bool,
+    winner: Optional[PassEntry],
+    swapped: bool,
+) -> bool:
+    """Record (and, for actionable decisions, apply) one plan; True when it changed the champion."""
     result = plan.result
     extra = {
         "proposed_decision": result.decision,
@@ -285,19 +309,35 @@ def _apply_plan(
         # the look is spent only when the engine could have acted on it (autopromote on); the counter reads this flag
         "look_spent": bool(result.decision_grade and autopromote),
     }
-    actionable = result.decision in (ev.DECISION_PROMOTE, ev.DECISION_ROLLBACK, ev.DECISION_RETIRE)
+    qualified = result.decision in (ev.DECISION_PROMOTE, ev.DECISION_ROLLBACK)
+    actionable = qualified or result.decision == ev.DECISION_RETIRE
 
+    if swapped and actionable:
+        reason = (
+            f"another challenger ({winner.model}) was promoted in this pass; this {result.decision} decision was taken "
+            "against the old champion and is judged against the new one next time"
+        )
+        _record_only(session, plan, _evaluation_row(result, ev.DECISION_KEEP, reason, now, {**extra, "applied": False}))
+        return False
+    if result.decision == ev.DECISION_RETIRE:
+        protection = model_registry.elo_protection(session, model)
+        if protection is not None:
+            reason = f"{protection}; kept instead of retired ({result.reason})"
+            _record_only(session, plan, _evaluation_row(result, ev.DECISION_KEEP, reason, now, {**extra, "applied": False, "protected": True}))
+            return False
     if actionable and not autopromote:
         row = _evaluation_row(result, DECISION_DRY_RUN, f"autopromote disabled (would {result.decision})", now, {**extra, "applied": False})
         _record_only(session, plan, row)
-        return
-    if result.decision in (ev.DECISION_PROMOTE, ev.DECISION_ROLLBACK) and plan is not winner:
-        reason = f"another challenger ({winner.model}) was promoted in this pass; judged against the new champion next time"
-        _record_only(session, plan, _evaluation_row(result, ev.DECISION_KEEP, reason, now, {**extra, "applied": False}))
-        return
+        return False
+    if qualified and plan is not winner:
+        # Only reachable when the winner's swap failed: nothing was promoted, so no row may say so. The plan is
+        # not recorded; the next pass evaluates it again.
+        plan.action = ACTION_SKIPPED
+        plan.note = f"qualified, but the swap of the better-ranked challenger ({winner.model}) failed; roles unchanged, evaluated again next pass"
+        return False
     if not actionable:
         _record_only(session, plan, _evaluation_row(result, result.decision, result.reason, now, {**extra, "applied": False}))
-        return
+        return False
 
     row = _evaluation_row(result, result.decision, result.reason, now, {**extra, "applied": True})
     note = {"at": now.isoformat(), "decision": result.decision, "reason": result.reason, "champion_id": champion.id}
@@ -313,12 +353,14 @@ def _apply_plan(
     except Exception as exc:  # the audit row and the role change are one transaction: neither survives a failure
         session.rollback()
         logger.exception(f"learning: applying {result.decision} for {plan.model} failed and was rolled back")
+        what = "the champion swap" if qualified else "the retirement"
         failed = _evaluation_row(
-            result, ev.DECISION_KEEP, f"{result.decision} failed and was rolled back: {exc!r}", now, {**extra, "applied": False, "failed": True}
+            result, ev.DECISION_KEEP, f"{result.decision} failed and was rolled back ({what} raised {exc!r}); roles unchanged", now,
+            {**extra, "applied": False, "failed": True},
         )
         plan.action, plan.note = ACTION_FAILED, f"{result.decision} failed: {exc!r}"
         _record_only(session, plan, failed, action=ACTION_FAILED)
-        return
+        return False
     plan.decision = result.decision
     plan.evaluation_id = row.id
     plan.action = {
@@ -327,6 +369,7 @@ def _apply_plan(
         ev.DECISION_PROMOTE: ACTION_PROMOTED,
     }[result.decision]
     plan.note = result.reason
+    return qualified
 
 
 def _record_only(session: Session, plan: PassEntry, row: ModelEvaluation, action: str = ACTION_RECORDED) -> None:
@@ -404,8 +447,11 @@ def manual_promote(
     return row
 
 
-def manual_retire(session: Session, model_id: int, reason: str, now: datetime) -> ModelEvaluation:
-    """Retire a challenger by hand; the champion cannot be retired (promote another model first)."""
+def manual_retire(session: Session, model_id: int, reason: str, now: datetime, *, force: bool = False) -> ModelEvaluation:
+    """
+    Retire a challenger by hand; the champion cannot be retired (promote another model first). The current Elo reference
+    and the last active Elo model are refused unless ``force`` (retiring them stalls the rating updates and the lab).
+    """
     if not reason or not reason.strip():
         raise ManualOverrideRefused("a reason is required")
     now = _aware_utc(now)
@@ -420,11 +466,12 @@ def manual_retire(session: Session, model_id: int, reason: str, now: datetime) -
     try:
         row = _manual_row(
             session, ev.DECISION_RETIRE, reason.strip(), champion.id if champion is not None else target.id, target.id, now,
-            {"previous_role": target.role},
+            {"previous_role": target.role, "force": force},
         )
         retire_model(
             session, target, now,
             {"at": now.isoformat(), "decision": "retire", "manual": True, "reason": reason.strip(), "evaluation_id": row.id},
+            force=force,
         )
         session.commit()
     except Exception:

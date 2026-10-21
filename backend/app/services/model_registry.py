@@ -81,18 +81,37 @@ def list_active(session: Session) -> List[ModelVersion]:
 def get_elo_reference(session: Session) -> Optional[ModelVersion]:
     """
     The Elo model that stays the default for rating queries, whatever family the champion is: the champion
-    itself when it is an Elo model, else the most recent active ``elo_538`` row (the previous champion usually
-    stays registered as a challenger), else, as a last resort, the most recent ``elo_538`` row of any role.
+    itself when it is an Elo model, else the LOWEST-id active ``elo_538`` row (stable: the oldest Elo model keeps
+    its rating timeline whichever Elo challengers come and go), else, as a last resort, the lowest-id ``elo_538``
+    row of any role.
     """
     champion = get_champion(session)
     if champion is not None and champion.name == ELO_FAMILY_NAME:
         return champion
     active = [row for row in list_active(session) if row.name == ELO_FAMILY_NAME]
     if active:
-        return max(active, key=lambda row: row.id)
+        return min(active, key=lambda row: row.id)
     return session.execute(
-        select(ModelVersion).where(ModelVersion.name == ELO_FAMILY_NAME).order_by(ModelVersion.id.desc()).limit(1)
+        select(ModelVersion).where(ModelVersion.name == ELO_FAMILY_NAME).order_by(ModelVersion.id.asc()).limit(1)
     ).scalar_one_or_none()
+
+
+def elo_protection(session: Session, model: ModelVersion) -> Optional[str]:
+    """
+    Why ``model`` must not be retired, or None when it may. The system always needs an active Elo model: the ratings
+    keep updating for it (``get_elo_reference``) and the lab replays it as the baseline. So the current Elo reference
+    model and the last active Elo-family model are protected from automatic retirement (a manual retirement needs
+    ``--force``).
+    """
+    if model.name != ELO_FAMILY_NAME:
+        return None
+    reference = get_elo_reference(session)
+    if reference is not None and reference.id == model.id:
+        return "last Elo model is protected: it is the current Elo reference (ratings and the lab baseline depend on it)"
+    others = [row for row in list_active(session) if row.name == ELO_FAMILY_NAME and row.id != model.id]
+    if not others:
+        return "last Elo model is protected: it is the only active Elo model"
+    return None
 
 
 def ensure_elo_reference(session: Session) -> ModelVersion:
