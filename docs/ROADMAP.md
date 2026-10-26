@@ -166,13 +166,13 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 ## 9. CI that runs the test suite
 
-**Why.** There is no CI; every pull request relies on someone running `pytest` by hand and saying so. The suite is offline and deterministic (633 tests, about 2 minutes), so it fits a hosted runner.
+**Why.** There is no CI; every pull request relies on someone running `pytest` by hand and saying so. The suite is offline and deterministic (757 tests, about 2 minutes), so it fits a hosted runner.
 
 **Acceptance criteria.**
 
 - [ ] A GitHub Actions workflow on pull requests and pushes to `main`: Python 3.12, install `backend/requirements.txt`, `cd backend && python -m pytest -q`.
 - [ ] Optionally `npx tsc --noEmit` in `frontend/`.
-- [ ] Decide the runner: on Linux the four PowerShell tests skip; on `windows-latest` all 633 run.
+- [ ] Decide the runner: on Linux the four PowerShell tests skip; on `windows-latest` all 757 run.
 
 **Risks.** Dependency drift (the requirements pin only lower bounds); minutes.
 

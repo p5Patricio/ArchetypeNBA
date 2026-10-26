@@ -276,7 +276,7 @@ Platform services (not documented here): `cache`, `clustering`, `data_update`, `
 
 ### Tests
 
-`backend/tests` (offline, deterministic, seeded). `tests/synthetic_league.py` generates fake leagues for the lab and the leak checks; tests marked `simulation` are Monte Carlo checks of the statistical rules (seconds, not milliseconds). 633 tests passed on 2026-10-26.
+`backend/tests` (offline, deterministic, seeded). `tests/synthetic_league.py` generates fake leagues for the lab and the leak checks; tests marked `simulation` are Monte Carlo checks of the statistical rules (seconds, not milliseconds). 757 tests passed on 2026-10-26.
 
 ## 5. API surface touching the quant parts
 

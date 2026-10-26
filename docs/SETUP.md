@@ -127,7 +127,7 @@ cd backend
 python -m pytest -q
 ```
 
-Expected: **633 passed, 1 warning in about 2 minutes** (2026-10-26, Windows, Python 3.12.10). The suite is offline and deterministic (in-memory SQLite, seeded randomness); it never needs PostgreSQL or the network. Four tests in `tests/test_tick_task_registration.py` are skipped when neither `powershell` nor `pwsh` is installed, so expect a slightly lower pass count on a bare Linux machine. Run it from `backend/` (`pytest.ini` sets `pythonpath = .`).
+Expected: **757 passed, 1 warning in about 2 minutes** (2026-10-26, Windows, Python 3.12.10). The suite is offline and deterministic (in-memory SQLite, seeded randomness); it never needs PostgreSQL or the network. Four tests in `tests/test_tick_task_registration.py` are skipped when neither `powershell` nor `pwsh` is installed, so expect a slightly lower pass count on a bare Linux machine. Run it from `backend/` (`pytest.ini` sets `pythonpath = .`).
 
 ## 8. Check the system without spending anything
 
@@ -173,7 +173,7 @@ The first command only previews the task XML and prints the interpreter it chose
 
 ## 11. First-day verification checklist
 
-- [ ] `python -m pytest -q` passes (633 on 2026-10-26).
+- [ ] `python -m pytest -q` passes (757 on 2026-10-26).
 - [ ] `python -m alembic current` prints `d7a2f5b81c39`.
 - [ ] `python scripts/backfill_elo.py --evaluate --register` ran (or the dump restored the champion), and `python scripts/model_league.py status` lists `elo_538 1.1` as `champion`.
 - [ ] `python scripts/run_tick.py --dry-run` exits 0 and lists `opening`, `closing`, `results`, `learn`, `record`.
