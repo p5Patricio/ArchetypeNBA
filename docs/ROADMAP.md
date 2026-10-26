@@ -221,7 +221,7 @@ Small items found while documenting (2026-10-26). Each is a few lines.
 |------|--------|-------|
 | On-demand props spend credits outside the guard | `POST /props/run-analysis` and `GET /props/today?refresh=true` call The Odds API for up to 2 events x 3 markets (6 credits) plus Gemini | `backend/app/api/v1/props.py`, `backend/app/services/odds_api_service.py` |
 | Props cache has no freshness check | The on-disk slate cache is served whatever its date | `backend/app/api/v1/props.py` |
-| Hardcoded interpreter path | `run_backend.bat` and `run_pipeline.bat` embed a Windows Python path, and `register_tick_task.ps1` reads its default interpreter from `run_pipeline.bat` | `scripts/` |
+| Hardcoded interpreter path | `run_backend.bat` and `run_pipeline.bat` embed the old PC's Windows Python path (the tick registration no longer depends on it, see below) | `scripts/` |
 | Dumps are not git-ignored yet | `*.dump` and `*.manifest.json` are not in `.gitignore` on this branch (the database-transfer work adds them: pending merge) | `.gitignore` |
 | Unused setting | `ETL_BATCH_SIZE` is defined and never read | `backend/app/config.py` |
 | Production API address | The frontend inlines `NEXT_PUBLIC_API_BASE` at build time (default port 8000), the scripts use 38921, and no repository file sets it | `frontend/src/lib/api.ts` |
@@ -232,6 +232,7 @@ Small items found while documenting (2026-10-26). Each is a few lines.
 | Item | Outcome |
 |------|---------|
 | Missing driver in the dependency list | PR #18: `backend/requirements.txt` and `backend/pyproject.toml` declare `psycopg[binary]>=3.1`; a clean virtualenv installs and passes the suite |
+| Tick registration needed a hardcoded interpreter | PR #18: `register_tick_task.ps1` discovers Python (`-PythonExe`, `backend/.venv`, the `run_pipeline.bat` path only if it exists, then `PATH` ignoring the WindowsApps stub) and stops with a clear error otherwise |
 
 ## Next step
 

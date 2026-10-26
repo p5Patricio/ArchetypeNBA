@@ -160,14 +160,14 @@ Whether the original PC sets `NEXT_PUBLIC_API_BASE` this way is **unverified**; 
 
 ## 10. Register the scheduled tick
 
-Windows (the production setup). On a new machine always pass the interpreter, because the register script otherwise reads a hardcoded path from `scripts/run_pipeline.bat`:
+Windows (the production setup). The register script finds the interpreter by itself, in this order: `-PythonExe`, the virtualenv at `backend\.venv`, the path written inside `scripts/run_pipeline.bat` (only if that path exists on this machine), then the first `python.exe` on `PATH` (the empty Microsoft Store alias in `WindowsApps` is ignored). It stops with an error if none is found. With the virtualenv of [section 3](#3-python-environment) no flag is needed:
 
 ```
-powershell -ExecutionPolicy Bypass -File .\scripts\register_tick_task.ps1 -WhatIf -PythonExe <repo>\backend\.venv\Scripts\python.exe
-powershell -ExecutionPolicy Bypass -File .\scripts\register_tick_task.ps1 -PythonExe <repo>\backend\.venv\Scripts\python.exe -StartNow
+powershell -ExecutionPolicy Bypass -File .\scripts\register_tick_task.ps1 -WhatIf
+powershell -ExecutionPolicy Bypass -File .\scripts\register_tick_task.ps1 -StartNow
 ```
 
-It swaps `python.exe` for `pythonw.exe` (no console window). The first command only previews the task XML. Linux and macOS: use cron or a systemd timer ([`OPERATIONS.md`](OPERATIONS.md), section 7).
+The first command only previews the task XML and prints the interpreter it chose; pass `-PythonExe <path to python.exe>` to override it. The script swaps `python.exe` for `pythonw.exe` (no console window). `scripts/run_backend.bat` and `scripts/run_pipeline.bat` still hardcode the old PC's Python path: edit them if you use `start_services.ps1` ([section 9](#9-start-the-web-services)). Linux and macOS: use cron or a systemd timer ([`OPERATIONS.md`](OPERATIONS.md), section 7).
 
 **Never register the tick on two machines at once**: both would spend the same 500-credit quota and fork the data. Moving machines: pause and unregister the old tick first.
 

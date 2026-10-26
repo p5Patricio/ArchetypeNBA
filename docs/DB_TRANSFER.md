@@ -186,7 +186,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\register_tick_task.ps1 -WhatI
 powershell -ExecutionPolicy Bypass -File .\scripts\register_tick_task.ps1 -StartNow      # register and run one tick now
 ```
 
-Without `-PythonExe` the script reuses the interpreter path hardcoded in `scripts/run_pipeline.bat`, which is a path from the old PC; on the new PC pass `-PythonExe <path to the venv's python.exe>` (the `-WhatIf` preview prints the interpreter it will use, and the script stops with an error if it does not exist). Check with `Get-ScheduledTask -TaskName NBA-Odds-Tick` and read `logs\tick.log` (the tick writes its own rotating log).
+The script finds Python by itself, in this order: `-PythonExe`, the virtual environment at `backend\.venv`, the path inside `scripts/run_pipeline.bat` (only if that path exists on this PC), then the first `python.exe` on `PATH` (the empty Microsoft Store alias is ignored). It stops with an error if none is found. The `-WhatIf` preview prints the interpreter it will use; pass `-PythonExe <path to python.exe>` to override it. `scripts/run_backend.bat` and `scripts/run_pipeline.bat` still hardcode the old PC's Python path: edit them if you use `scripts/start_services.ps1` on the new PC. Check with `Get-ScheduledTask -TaskName NBA-Odds-Tick` and read `logs\tick.log` (the tick writes its own rotating log).
 
 **Linux** (cron, every 15 minutes; the tick logs to `<repo>/logs/tick.log` by itself):
 

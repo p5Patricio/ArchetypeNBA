@@ -35,7 +35,7 @@ Running `python.exe` (or `powershell -WindowStyle Hidden`) creates a console win
 | Preview the task XML, change nothing | `powershell -ExecutionPolicy Bypass -File .\scripts\register_tick_task.ps1 -WhatIf` |
 | Register (also removes the legacy `NBA-Odds-Opening` and `NBA-Odds-Closing` tasks) | `powershell -ExecutionPolicy Bypass -File .\scripts\register_tick_task.ps1` |
 | Register and run one tick now | add `-StartNow` |
-| Use a specific interpreter (for example a virtualenv) | add `-PythonExe <path to python.exe>` |
+| Override the interpreter | add `-PythonExe <path to python.exe>`. Without it the script uses `backend\.venv`, then the path in `scripts/run_pipeline.bat` if it exists, then the first `python.exe` on `PATH` (the Microsoft Store alias is ignored) |
 | Change the interval (1 to 59 minutes, default 15) | add `-IntervalMinutes <n>`. The window and the quota arithmetic below assume 15 |
 | Unregister | `powershell -ExecutionPolicy Bypass -File .\scripts\register_tick_task.ps1 -Unregister` |
 | Pause | `Disable-ScheduledTask -TaskName NBA-Odds-Tick` |
