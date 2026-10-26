@@ -20,7 +20,7 @@ Everything written about ArchetypeNBA, in one place, with the order to read it i
 | [`OPERATIONS.md`](OPERATIONS.md) | Runbook: the scheduled task, credit budget, daily and weekly checks, schema deploys, manual controls, web services, Linux and macOS schedulers, troubleshooting |
 | [`SETUP.md`](SETUP.md) | Install and configure from scratch on any OS, fill the database, run the tests, first-day checklist |
 | [`DB_TRANSFER.md`](DB_TRANSFER.md) | Move the database to another PC and take periodic backups: the `db_transfer.py` export, verify and import procedure, cutover order, rollback, troubleshooting |
-| [`DECISIONS.md`](DECISIONS.md) | Decision log (47 entries): what was decided, why, what was rejected, what followed |
+| [`DECISIONS.md`](DECISIONS.md) | Decision log (54 entries): what was decided, why, what was rejected, what followed |
 | [`ROADMAP.md`](ROADMAP.md) | Prioritized backlog with acceptance criteria, risks and a first step; item 1 is the next task |
 | [`../odd/README.md`](../odd/README.md) | Index of the feature plans in `odd/tasks/` (the decision history) and what ODD is |
 | [`../README.md`](../README.md) | The product description and quick start |

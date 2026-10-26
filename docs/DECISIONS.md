@@ -1,6 +1,6 @@
 # Decision log
 
-The decisions that shaped the system, in the order the project made them, with the reason, what was rejected and what followed. Every entry is reconstructed from the feature plans in [`odd/`](../odd/README.md) (the project's decision history, written while the work was done) and from [`AGENTS.md`](../AGENTS.md); nothing here is new. Where a plan recorded no alternative, the entry says "Not recorded" instead of guessing. Dates are those of the plan section or the merge (PRs #1 to #12 merged on 2026-10-17, #13 to #17 on 2026-10-20).
+The decisions that shaped the system, in the order the project made them, with the reason, what was rejected and what followed. Every entry is reconstructed from the feature plans in [`odd/`](../odd/README.md) (the project's decision history, written while the work was done) and from [`AGENTS.md`](../AGENTS.md); nothing here is new. Where a plan recorded no alternative, the entry says "Not recorded" instead of guessing. Dates are those of the plan section or the merge (PRs #1 to #12 merged on 2026-10-17, #13 to #17 on 2026-10-20, #18 and #19 on 2026-10-26).
 
 ## Quick path
 
@@ -61,6 +61,13 @@ Entries are grouped by area below; the IDs follow the index. To change a decisio
 | [D-45](#d-45-pull-request-conventions) | 2026-10-17 | Pull request conventions | Workflow |
 | [D-46](#d-46-independent-verification-for-money-like-logic) | 2026-10-20 | Independent verification for money-like logic | Workflow |
 | [D-47](#d-47-ask-before-automating-downloads-from-the-nba-injury-report) | 2026-10-26 | Ask before automating downloads from the NBA injury report | Data |
+| [D-48](#d-48-declare-the-psycopg-3-driver-in-the-dependency-files) | 2026-10-26 | Declare the psycopg 3 driver in the dependency files | Storage |
+| [D-49](#d-49-discover-python-portably-when-registering-the-tick) | 2026-10-26 | Discover Python portably when registering the tick | Operations |
+| [D-50](#d-50-a-cross-platform-transfer-tool-over-pg_dump-and-pg_restore) | 2026-10-26 | A cross-platform transfer tool over `pg_dump` and `pg_restore` | Operations |
+| [D-51](#d-51-snapshot-consistent-export) | 2026-10-26 | Snapshot-consistent export | Operations |
+| [D-52](#d-52-a-manifest-with-exact-row-counts-checked-on-both-ends) | 2026-10-26 | A manifest with exact row counts, checked on both ends | Operations |
+| [D-53](#d-53-dumps-and-secrets-never-in-git) | 2026-10-26 | Dumps and secrets never in git | Security |
+| [D-54](#d-54-one-pc-captures-at-a-time-in-a-fixed-cutover-order) | 2026-10-26 | One PC captures at a time, in a fixed cutover order | Operations |
 
 ## Data and scope
 
@@ -439,7 +446,7 @@ Entries are grouped by area below; the IDs follow the index. To change a decisio
 - **Decision**: Branch from `origin/main`; Conventional Commits; one cohesive pull request per work unit with a Chain Context section; pull requests over 400 changed lines are marked `size:exception` with the reason; merge commits, not squash; each pull request is merged before the next starts.
 - **Context**: Stacked history must stay clean; the user gave a standing authorization to open pull requests and merge for this work (re-confirm each session).
 - **Alternatives rejected**: Squash merges. CI was never configured, so `pytest` is run by hand and said so in the pull request.
-- **Consequences**: Seventeen pull requests merged by 2026-10-20 ([`odd/README.md`](../odd/README.md)).
+- **Consequences**: Nineteen pull requests merged by 2026-10-26 ([`odd/README.md`](../odd/README.md)).
 - **Source**: [`AGENTS.md`](../AGENTS.md) section 7; [`quant-paper-trading.md`](../odd/tasks/quant-paper-trading.md) (Delivery, T9).
 
 ### D-46 Independent verification for money-like logic
@@ -449,6 +456,66 @@ Entries are grouped by area below; the IDs follow the index. To change a decisio
 - **Alternatives rejected**: Writer self-verification only.
 - **Consequences**: Each of those defects led to a fix recorded above (D-36, D-38, D-40).
 - **Source**: [`AGENTS.md`](../AGENTS.md) section 7; [`model-learning-loop.md`](../odd/tasks/model-learning-loop.md).
+
+## Portability and machine transfer
+
+Added after the first version of this log: decisions of PR #18 (portable install) and PR #19 (database transfer tool), both merged on 2026-10-26.
+
+### D-48 Declare the psycopg 3 driver in the dependency files
+- **Date**: 2026-10-26
+- **Decision**: `backend/requirements.txt` and `backend/pyproject.toml` list `psycopg[binary]>=3.1` instead of `psycopg2-binary`.
+- **Context**: The code connects with `postgresql+psycopg://` (`backend/app/deps.py`, `backend/alembic/env.py`), which is the psycopg 3 driver, so a clean install that followed the requirements could not connect. It was found while checking this documentation against the code; the first version of the docs worked around it with an extra `pip install` step.
+- **Alternatives rejected**: Documenting the extra install step (removed once the files were fixed). Changing the code back to psycopg 2 is not recorded as considered.
+- **Consequences**: A clean virtual environment installs and passes the suite (verified in PR #18). An old checkout or a stale virtual environment fails with `No module named 'psycopg'`: re-run `pip install -r backend/requirements.txt`.
+- **Source**: [`AGENTS.md`](../AGENTS.md) section 8 (Dependencies); commit `a81ecdf` (PR #18).
+
+### D-49 Discover Python portably when registering the tick
+- **Date**: 2026-10-26
+- **Decision**: `scripts/register_tick_task.ps1` picks the interpreter in this order: `-PythonExe`, `backend/.venv`, the path inside `scripts/run_pipeline.bat` only if it exists on this machine, then the first `python.exe` on `PATH` (the empty Microsoft Store alias in `WindowsApps` is ignored). It stops with an error when none is found, and still swaps `python.exe` for `pythonw.exe` (D-43).
+- **Context**: The script used to read the old PC's Python path out of `run_pipeline.bat`, or fall back to a bare `python`, which breaks on a new PC and can flash a console window.
+- **Alternatives rejected**: The silent fallback to a bare `python`.
+- **Consequences**: A new PC with `backend/.venv` needs no flag. `scripts/run_backend.bat` and `scripts/run_pipeline.bat` still hardcode the old path and need editing by hand.
+- **Source**: `scripts/register_tick_task.ps1`; [`AGENTS.md`](../AGENTS.md) section 8; commit `a81ecdf` (PR #18).
+
+### D-50 A cross-platform transfer tool over `pg_dump` and `pg_restore`
+- **Date**: 2026-10-26
+- **Decision**: A Python CLI (`backend/scripts/db_transfer.py`, logic in `backend/app/services/db_transfer.py`) wraps `pg_dump -Fc` and `pg_restore` with `export`, `verify`, `import` and `manifest` commands. It finds the PostgreSQL tools on `PATH`, through `--pg-bin` or in the usual install folders, and picks one whose major version is at least the server's.
+- **Context**: The next agent will work on a different PC, which may not be Windows. The database holds irreplaceable data (odds captured every few minutes since 2026-10-06; closing lines cannot be backfilled) and there was no tool, no manifest and no `.env.example`.
+- **Alternatives rejected**: Not recorded.
+- **Consequences**: The logic is unit-testable with a fake process runner (124 new tests, 757 in total). A restore needs a server of the same major version as the source or newer.
+- **Source**: [`db-transfer.md`](../odd/tasks/db-transfer.md) (design decisions 1 and 5, D1); [`DB_TRANSFER.md`](DB_TRANSFER.md).
+
+### D-51 Snapshot-consistent export
+- **Date**: 2026-10-26
+- **Decision**: `export` takes one consistent snapshot of the whole database (`pg_export_snapshot` with `pg_dump --snapshot`), so the exact row counts and the dump come from the same instant. Files are written as `.part` and renamed when complete, and the default folder is outside the repository.
+- **Context**: The tick writes to the database every 15 minutes; counts and dump must agree for the restore check to mean anything.
+- **Alternatives rejected**: Not recorded.
+- **Consequences**: An export is safe while the tick runs (smoke-tested while 88,000 rows were being inserted), but only a paused tick guarantees that the dump holds everything captured so far, hence the pause in the cutover.
+- **Source**: [`db-transfer.md`](../odd/tasks/db-transfer.md) (design decision 2, D1); [`DB_TRANSFER.md`](DB_TRANSFER.md) step 1.
+
+### D-52 A manifest with exact row counts, checked on both ends
+- **Date**: 2026-10-26
+- **Decision**: Each export writes `<name>.manifest.json` with the exact row count of every table, the Alembic revision (in the database and in the code), the server and `pg_dump` versions, the database time zone, the size, the sha256 and the git commit. `verify` checks the sha256 and that `pg_restore` can read the archive. `import` verifies first, requires an empty target (or `--replace --confirm-database NAME`), restores in a single transaction (all or nothing, `--exit-on-error`), runs `ANALYZE`, then compares the exact count of every table and the Alembic revision, exiting non-zero on any mismatch.
+- **Context**: A restore that silently loses rows would lose data nobody can recapture.
+- **Alternatives rejected**: Not recorded.
+- **Consequences**: Validated on 2026-10-26 against the live database: 21 tables, 831,058 rows, a 17.3 MB dump (from 229 MB); the restored scratch copy matched every table, and `alembic current`, `paper_report.py`, `model_league.py status` and `run_tick.py --dry-run` reproduced the live results.
+- **Source**: [`db-transfer.md`](../odd/tasks/db-transfer.md) (design decisions 2 to 4, D1, D3); [`DB_TRANSFER.md`](DB_TRANSFER.md).
+
+### D-53 Dumps and secrets never in git
+- **Date**: 2026-10-26
+- **Decision**: Dumps and manifests travel by USB, private cloud storage or `scp`, never through git: `.gitignore` blocks `*.dump`, `*.manifest.json` and `backups/`, and `export` refuses to write inside the working tree. The database password travels only in the subprocess environment (`PGPASSWORD`), never in arguments, logs or the manifest. `backend/.env` travels separately through a secure channel.
+- **Context**: The dump holds odds-provider data and private paper-trading records, and is large.
+- **Alternatives rejected**: Committing dumps (size, odds-provider terms).
+- **Consequences**: Machine-level environment variables that feed `Settings` (on the original PC, `GEMINI_API_KEY` and `TELEGRAM_BOT_TOKEN`) are not in the dump or necessarily in `.env`; the runbook tells the reader to list their names, never their values, and recreate them.
+- **Source**: [`db-transfer.md`](../odd/tasks/db-transfer.md) (design decisions 6 and 7, Notes); [`AGENTS.md`](../AGENTS.md) rule 5.
+
+### D-54 One PC captures at a time, in a fixed cutover order
+- **Date**: 2026-10-26
+- **Decision**: Moving machines follows one order: pause the tick on the old PC, take the final export, verify it, copy both files and check the hash, restore on the new PC, set `backend/.env`, register the tick there, and unregister it on the old PC only after a healthy tick on the new one.
+- **Context**: Two PCs running the tick would spend the same Odds API key quota and write diverging databases that cannot be merged.
+- **Alternatives rejected**: Running both PCs in parallel during the move.
+- **Consequences**: There is a gap in which nothing is captured; closing lines of games that tip off in it are lost for good, so the cutover is done in the morning, before the first tip-off. The old database stays untouched for a few days as a fallback.
+- **Source**: [`db-transfer.md`](../odd/tasks/db-transfer.md) (design decision 8); [`DB_TRANSFER.md`](DB_TRANSFER.md) sections 2, 4 and 5.
 
 ## Next step
 
