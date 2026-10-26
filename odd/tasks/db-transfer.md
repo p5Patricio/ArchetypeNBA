@@ -18,10 +18,10 @@ Move the complete PostgreSQL database (229 MB on 2026-10-26) to a different PC w
 8. Only one PC may run the capture tick at a time (same Odds API key quota, diverging databases): documented cutover order.
 
 ## Tasks
-- [ ] D1 `db_transfer` service + CLI + unit tests — route: delegated writer
-- [ ] D2 `docs/DB_TRANSFER.md` runbook and `backend/.env.example` — route: delegated writer (same writer, separate commit)
-- [ ] D3 Real validation: export the real database, import it into a scratch database on the same server, compare every table — route: inline
-- [ ] D4 PR and merge — route: inline
+- [x] D1 `db_transfer` service + CLI + unit tests — route: delegated writer. Commit 0434775: snapshot-consistent export (`pg_export_snapshot` + `pg_dump --snapshot`), atomic `.part` writes, manifest with exact row counts, verify (sha256 + `pg_restore --list`), import (empty-target rule, `--replace --confirm-database`, `--create-db` with the manifest's encoding, single-transaction restore, ANALYZE, exact count comparison). 124 new tests (757 total). Smoke-tested by the writer against a throwaway cluster (including an export while 88k rows were being inserted).
+- [x] D2 `docs/DB_TRANSFER.md` runbook and `backend/.env.example` — route: delegated writer (same writer, separate commit). Commit 0007d18.
+- [x] D3 Real validation (2026-10-26) — route: inline. Export of the live database: 21 tables, 831,058 rows, dump 17.3 MB, sha256 recorded; import into a scratch database on the same server: every table count OK and Alembic revision d7a2f5b81c39 OK; `alembic current`, `paper_report.py` (56/44 bets, P/L -5.28 u / -13.34 u, Brier 0.2495 vs 0.2013, paired 41/150), `model_league.py status` and `run_tick.py --dry-run` all reproduce the live results on the restored copy; the scratch database was dropped.
+- [x] D4 PR and merge — route: inline
 
 ## Constraints
 - Free tools only (PostgreSQL client tools). The real database is read only for D1/D2; D3 writes only to a scratch database that is dropped afterwards.
@@ -30,5 +30,9 @@ Move the complete PostgreSQL database (229 MB on 2026-10-26) to a different PC w
 ## TDD
 - Mode: off. Runner: `python -m pytest -q` from `backend/`.
 
+## Notes
+- Machine-level environment variables (for example `GEMINI_API_KEY`, `TELEGRAM_BOT_TOKEN` on the original PC) also feed Settings; `backend/.env` overrides them. The new PC needs its own values (list variable NAMES, never values).
+- A dump taken now is a point-in-time copy: take a fresh export right before switching PCs.
+
 ## Next step
-Run D1 and D2.
+None. Re-export before the actual cutover.
