@@ -1,3 +1,5 @@
+> **Status: historical (April 2026).** This is the proposal written before the PostgreSQL migration. The system that was actually built is described in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); the decisions behind it are in [`docs/DECISIONS.md`](docs/DECISIONS.md). The content below is kept unchanged for context.
+
 # NBA Analytics Platform — Database & Backend Architecture Report
 
 > **Date:** 2026-04-29  
