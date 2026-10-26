@@ -7,7 +7,7 @@ Context for any AI coding agent (or human) picking this project up. **Snapshot d
 | Item | Value |
 |------|-------|
 | What | Two products in one repo: (a) **ArchetypeNBA analytics platform** (FastAPI + Next.js: archetypes, shot zones, matchups, props, etc.); (b) a **quantitative betting research system** that predicts NBA games, *paper-trades* them (no real money, ever) and is built to **improve itself with evidence**. |
-| Goal of (b) | A closed loop: capture odds → predict → paper-bet → settle → measure against Pinnacle's closing line (CLV) and outcomes → compare candidate models in shadow → promote only when statistics say so. |
+| Goal of (b) | A closed loop: capture odds → predict → paper-bet → settle → measure (CLV = price taken vs the **same book's** closing quote; model skill = Brier vs **Pinnacle's de-vigged close**) → compare candidate models in shadow → promote only when statistics say so. |
 | Stack | Python 3.12, FastAPI, SQLModel/SQLAlchemy 2, Alembic, PostgreSQL 18 (tests: in-memory SQLite), NumPy/pandas/scikit-learn, `nba_api`, The Odds API; Next.js 16 / React 19 / Tailwind 4 frontend. |
 | Repo | `github.com/p5Patricio/ArchetypeNBA` (`main` is the only long-lived branch; PRs #1–#17+ merged). |
 | Production | One Windows 11 PC runs a scheduled task every 15 minutes (`NBA-Odds-Tick`). **That PC executes the `main` checkout**, so unmerged code must never live there. |
@@ -17,7 +17,7 @@ Context for any AI coding agent (or human) picking this project up. **Snapshot d
 First five commands on a fresh machine (details in [`docs/SETUP.md`](docs/SETUP.md)):
 
 ```bash
-cd backend && python -m pytest -q                         # ~633+ tests, all offline, ~3 min
+cd backend && python -m pytest -q                         # 633+ tests, all offline, ~2 min
 python scripts/run_tick.py --dry-run                      # what the scheduled tick would do (no network, no writes)
 python scripts/paper_report.py                            # performance, CLV, model skill, model league
 python scripts/model_league.py status                     # champion/challenger table
@@ -66,7 +66,7 @@ docs/                  # architecture, quant methodology, operations, setup, DB 
 logs/                  # git-ignored runtime logs (tick.log rotating 2 MB x3, tick.lock)
 ```
 
-Legacy at the repo root (`api.py`, `nba_data_processor.py`, `nba_player_analyzer.py`, tracked `.xlsx` files, `backend/app/etl/pipeline.py` Excel ETL) predates the Postgres platform. A cleanup was proposed but **not executed**; `backend/app/services/report.py` still imports `nba_player_analyzer`, so do not delete it blindly.
+Legacy at the repo root (`api.py`, `nba_data_processor.py`, `nba_player_analyzer.py`, tracked `.xlsx` files, `backend/app/etl/pipeline.py` Excel ETL) predates the Postgres platform. A cleanup was proposed but **not executed and is riskier than it looks**: `backend/app/services/report.py` imports `nba_player_analyzer`, `backend/app/etl/pipeline.py` is used by `services/data_update.py` (not only `seed_database.py`), and copies of the legacy modules live both at the root and in `backend/`. Map the importers before deleting anything.
 
 ## 5. How the quant system works
 
@@ -93,7 +93,7 @@ Each step is isolated (a failure never blocks `record`); a lock file prevents ov
 | Promotion | `services/model_promotion.py`, `scripts/model_league.py` | Gates in §6. Audit trail in `model_evaluation`. Kill switch `LEARNING_AUTOPROMOTE`. |
 | Candidate lab | `services/model_lab.py`, `scripts/model_lab.py` | Time-split: select on seasons [T-9, T-2], hold-out [T-1, T]; Elo random search (40 configs, seed) + `margin_features`; historical gate: hold-out log-loss gain ≥ 0.0005 and materially different. |
 
-Database (21 tables; PostgreSQL): platform tables (`season`, `team`, `player`, `player_season_stats`, `team_season_stats`, `player_game_log`, `player_shot`, `player_advanced_stats`, `player_similarity`, `player_contract`, `player_matchup_stats`) and quant tables (`sportsbook`, `game`, `odds_history`, `odds_snapshot_capture`, `team_elo_rating` (per model), `model_version`, `model_prediction`, `simulated_bet`, `model_evaluation`) plus views `v_closing_odds`, `v_paper_performance`.
+Database (20 model tables + `alembic_version`; PostgreSQL): platform tables (`season`, `team`, `player`, `player_season_stats`, `team_season_stats`, `player_game_log`, `player_shot`, `player_advanced_stats`, `player_similarity`, `player_contract`, `player_matchup_stats`) and quant tables (`sportsbook`, `game`, `odds_history`, `odds_snapshot_capture`, `team_elo_rating` (per model), `model_version`, `model_prediction`, `simulated_bet`, `model_evaluation`) plus views `v_closing_odds`, `v_paper_performance`.
 
 ## 6. Decisions that shaped the system (why, not just what)
 
@@ -137,7 +137,11 @@ Rejected/not done: paid odds feeds (OpticOdds ~$5k/mo), scraping ESPN/OddsPortal
 - Git on Windows prints LF→CRLF warnings (`core.autocrlf=true`); they are noise.
 - `nba_api` can be slow or block datacenter IPs; calls use 30–45 s timeouts. An empty `season_type` returns all game types in a window.
 - `scripts/start_services.ps1` starts the backend on **38921** and the frontend on **38920** (not 8000/3000). The backend process must be restarted to pick up code changes.
-- `injury_scraper.py` is broken and fabricates data (see §10).
+- **Known fabrication / rule-3 violations still in the code**: `services/injury_scraper.py` (invented fallback injuries, see §10) and `analytics/props_engine.py::load_baselines_from_db` (opens a SQLite file that does not exist and falls back to hardcoded star baselines; its season weights key on the non-chronological `season.id`). The props page and `daily_runner.py` still use them.
+- **Credit guard gap**: `POST /api/v1/props/run-analysis` and `GET /api/v1/props/today?refresh=true` call The Odds API (up to 6 credits: 2 events × 3 markets) plus Gemini, *outside* the tick's `--min-remaining` guard. The props cache file is served without checking its age.
+- **Hardcoded interpreter paths**: `scripts/run_backend.bat` and `scripts/run_pipeline.bat` contain this PC's Python path. `scripts/register_tick_task.ps1` now discovers Python (`-PythonExe`, `backend/.venv`, `run_pipeline.bat` if the path exists, then PATH), but the `.bat` files still need editing on a new machine.
+- **Dependencies**: the code uses psycopg 3 (`postgresql+psycopg://`); `requirements.txt`/`pyproject.toml` were fixed to list `psycopg[binary]` (earlier they listed only `psycopg2-binary`, which would break a clean install). `ETL_BATCH_SIZE` in `config.py` is defined but unused. The README links a `LICENSE` file that does not exist; the licence holder is the owner's call.
+- **Feature sets are frozen per model**: `MarginFeaturesModel` raises if the stored `feature_names` differ from the code's `FEATURE_NAMES`, so adding features in place would make challenger id 2 unloadable. Version the feature set in code (keep the old list loadable) before adding any.
 
 ## 9. State of the system (as of 2026-10-26)
 
@@ -167,7 +171,7 @@ Modelling caveats the next agent must handle:
 
 1. **Train/serve skew.** History can be reconstructed from `player_game_log` (who actually played/DNP, minutes), which is *post-game* knowledge; at serving time only the pre-game *status* (Out/Doubtful/Questionable/Probable) exists. Train on features that exist at prediction time, e.g. availability probability by status, or the star-minutes-lost proxy, and verify historical PDFs if obtainable.
 2. **Leakage.** Every feature must be computable strictly before tip-off; use the same builder for training and prediction (`FeatureState` pattern in `analytics/features.py`).
-3. **Evaluation.** Register the new feature set as a *new `margin_features` version*, run `scripts/model_lab.py` for the historical gate, then let it run in shadow; promotion is decided by `learn`, not by hand.
+3. **Evaluation.** First make the feature set versionable in code (see §8, "Feature sets are frozen per model"), then register the new set as a *new `margin_features` version*, run `scripts/model_lab.py` for the historical gate, and let it run in shadow; promotion is decided by `learn`, not by hand. Expect the historical gain to be small: a +0.0026 gain needs thousands of paired games to be detectable.
 4. Keep tests offline: store a few real PDFs/text fixtures, never fetch in tests.
 
 Other backlog (see [`docs/ROADMAP.md`](docs/ROADMAP.md)): totals and props models through the same registry; settle totals/props bets; frontend league page; promotion notifications; shutdown-endpoint hardening; second odds feed (SportsGameOdds free tier); CI; legacy cleanup.
