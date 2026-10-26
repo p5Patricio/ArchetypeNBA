@@ -53,19 +53,32 @@ if ($Unregister) {
     exit 0
 }
 
-# Python: el mismo interprete que usa run_pipeline.bat (si no se indica -PythonExe)
+# Interprete de Python, en orden: -PythonExe, el venv del backend, el de run_pipeline.bat (solo si existe en esta PC),
+# y por ultimo el primer python.exe del PATH (ignorando el alias vacio de la Microsoft Store).
+if (-not $PythonExe) {
+    $venvPython = Join-Path $BackendDir ".venv\Scripts\python.exe"
+    if (Test-Path $venvPython) { $PythonExe = $venvPython }
+}
 if (-not $PythonExe -and (Test-Path $PipelineBat)) {
     $match = Select-String -Path $PipelineBat -Pattern '"([^"]*python[^"]*\.exe)"' | Select-Object -First 1
-    if ($match) { $PythonExe = $match.Matches[0].Groups[1].Value }
+    if ($match -and (Test-Path $match.Matches[0].Groups[1].Value)) { $PythonExe = $match.Matches[0].Groups[1].Value }
 }
-if (-not $PythonExe) { $PythonExe = "python" }
+if (-not $PythonExe) {
+    $onPath = Get-Command python.exe -All -ErrorAction SilentlyContinue |
+        Where-Object { $_.Source -and ($_.Source -notmatch 'WindowsApps') } | Select-Object -First 1
+    if ($onPath) { $PythonExe = $onPath.Source }
+}
+if (-not $PythonExe) {
+    Write-Host "[ERROR] No se encontro Python (ni venv en backend\.venv, ni run_pipeline.bat, ni PATH). Usa -PythonExe." -ForegroundColor Red
+    exit 1
+}
 # pythonw.exe (subsistema GUI) no crea consola: es lo unico que evita el parpadeo de ventana que roba el foco.
 # "powershell -WindowStyle Hidden" oculta la ventana DESPUES de crearla, y ese instante basta para sacarte de un juego o una reunion.
 if ($PythonExe -match '(?i)python\.exe$') {
     $candidate = $PythonExe -replace '(?i)python\.exe$', 'pythonw.exe'
     if (Test-Path $candidate) { $PythonExe = $candidate }
 }
-if (($PythonExe -ne "python") -and -not (Test-Path $PythonExe)) {
+if (-not (Test-Path $PythonExe)) {
     Write-Host "[ERROR] No se encontro Python en: $PythonExe (usa -PythonExe)" -ForegroundColor Red
     exit 1
 }
