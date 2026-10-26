@@ -171,9 +171,8 @@ python -m venv .venv
 # On Linux/macOS:
 source .venv/bin/activate
 
-# Install dependencies (the code uses the psycopg 3 driver, which requirements.txt does not list yet)
+# Install dependencies
 pip install -r requirements.txt
-pip install "psycopg[binary]"
 
 # Configure environment variables (.env in backend/)
 DATABASE_URL=postgresql://user:password@localhost:5432/nba_platform

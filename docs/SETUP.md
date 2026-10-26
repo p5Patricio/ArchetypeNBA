@@ -5,7 +5,7 @@ How to get ArchetypeNBA running on a new machine, on any operating system: prere
 ## Quick path
 
 1. Install Python 3.12, PostgreSQL (18 recommended, 15 minimum), Git; Node 20.9 or newer only if you want the web UI.
-2. `git clone`, create a virtualenv, `pip install -r backend/requirements.txt`, then `pip install "psycopg[binary]"` (see the note in [section 3](#3-python-environment)).
+2. `git clone`, create a virtualenv, `pip install -r backend/requirements.txt`.
 3. Create the database and `backend/.env`.
 4. `cd backend && python -m alembic upgrade head`.
 5. Fill the database: restore a dump ([`DB_TRANSFER.md`](DB_TRANSFER.md), pending merge) **or** ingest history and register the champion ([section 6](#6-fill-the-database)).
@@ -46,7 +46,6 @@ cd backend
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pip install "psycopg[binary]"
 ```
 
 Windows PowerShell:
@@ -56,10 +55,7 @@ cd backend
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-pip install "psycopg[binary]"
 ```
-
-**Why the extra `psycopg` install.** `backend/app/deps.py` and `backend/alembic/env.py` rewrite `postgresql://` to `postgresql+psycopg://`, which is the psycopg 3 driver, while `backend/requirements.txt` and `pyproject.toml` list only `psycopg2-binary`. On a clean virtualenv the app and Alembic are therefore expected to fail with `No module named 'psycopg'` until psycopg 3 is installed (derived from reading the code and the installed packages; not reproduced in a clean virtualenv). This is a known gap in the dependency list ([`ROADMAP.md`](ROADMAP.md), hygiene table); once `requirements.txt` declares it, the second `pip install` is redundant but harmless.
 
 Versions the test suite last passed with (2026-10-26, Windows, Python 3.12.10): fastapi 0.139.2, sqlmodel 0.0.39, SQLAlchemy 2.0.51, alembic 1.19.0, psycopg 3.3.4, numpy 2.5.1, pandas 3.0.3, scikit-learn 1.9.0, nba_api 1.11.4, httpx 0.28.1, pydantic 2.13.4, pytest 9.1.1. `requirements.txt` pins only lower bounds, so a fresh install may resolve newer versions.
 

@@ -38,10 +38,7 @@ On the **new** PC:
    python -m venv .venv
    source .venv/bin/activate          # Windows PowerShell: .\.venv\Scripts\Activate.ps1
    pip install -r requirements.txt
-   pip install "psycopg[binary]"      # see the note below
    ```
-
-   > `requirements.txt` lists `psycopg2-binary`, but the application connects with the psycopg 3 driver (`postgresql+psycopg://`, see `backend/app/deps.py`). On a fresh virtual environment you must install `psycopg[binary]` yourself, otherwise every script fails with `No module named 'psycopg'`.
 
 3. Install PostgreSQL, its command line tools (`pg_dump`, `pg_restore`, `psql`) and create the role as described in section 4, step 4 (the database itself can wait). The tool finds the tools on `PATH` or in the usual install folders; if it cannot, pass `--pg-bin <folder>`.
 4. **Rehearse the import** with an older export, so that cutover day holds no surprises:
@@ -315,7 +312,7 @@ It is safe while the tick runs (consistent snapshot). To automate it: on Linux/m
 | `password authentication failed` | Wrong password, or special characters not percent-encoded in the URL (`@` is `%40`), or `pg_hba.conf` does not allow the connection. |
 | Collation or locale error when creating the database | Create it from `template0` with an explicit encoding; the tool does this for `--create-db`. On Linux, `encoding UTF8 does not match locale` means you must pass a UTF-8 locale, for example `CREATE DATABASE nba_platform OWNER nba ENCODING 'UTF8' LOCALE 'C.UTF-8' TEMPLATE template0;`. Indexes are rebuilt during the restore with the target's collation, so only the sort order of text can differ. |
 | `character with byte sequence ... has no equivalent in encoding "WIN1252"` | The target database is not UTF-8 (player names such as Doncic or Jokic need UTF-8). Recreate it with `ENCODING 'UTF8'`. The import warns when the encodings differ. |
-| `No module named 'psycopg'` | `pip install "psycopg[binary]"` in the virtual environment (step 3 of the preparation). |
+| `No module named 'psycopg'` | An old checkout or a stale virtual environment: run `pip install -r backend/requirements.txt` in it (step 2 of the preparation). |
 | `RESULT: MISMATCH` | A table has a different row count, a table is missing or extra, or the Alembic revision differs. Do not use that database. Re-run the import into a fresh database; if it repeats, keep the output of the comparison table and the manifest and investigate before touching the old PC. |
 | `Refusing to write inside the repository working tree` | `export --out-dir` pointed inside the repo. Choose a folder outside it. |
 | A `*.dump.part` file in the backups folder | A previous export was interrupted. Delete it. |
