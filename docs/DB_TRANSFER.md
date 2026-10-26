@@ -321,6 +321,17 @@ It is safe while the tick runs (consistent snapshot). To automate it: on Linux/m
 | A `*.dump.part` file in the backups folder | A previous export was interrupted. Delete it. |
 | Warning: target timezone differs | The database `timezone` setting is not copied; stored timestamps are not affected. What matters is the operating system timezone for the tick (step 8). |
 
+### Known limitations
+
+Found by the native multi-lens review (approved, non-blocking) and by the author; they do not affect the standard local procedure above.
+
+| Limitation | What to do |
+|------------|------------|
+| Query parameters of the database URL (for example `?sslmode=require`) are not forwarded to `pg_dump` / `pg_restore`. | For a remote or TLS server set the libpq environment variables instead (`PGSSLMODE`, `PGSSLROOTCERT`, ...). |
+| `--replace` only drops and recreates the `public` schema, and the wipe is not atomic with the restore: if the restore fails afterwards, the database is left empty. | Keep the previous dump; use a fresh database (`--create-db`) whenever you can. Objects living in other schemas are not removed. |
+| There is no process timeout and no lock: a hung `pg_dump` or `pg_restore` must be interrupted by hand. | Pause the tick before the final export (step 1) so nothing writes meanwhile. |
+| The exit-code contract has two non-zero values (1 = operation failed or counts mismatch, 2 = refused before changing anything). | Trust the exit code and the final `RESULT:` line, not the wording of intermediate messages. |
+
 ## 10. Reference
 
 ```text

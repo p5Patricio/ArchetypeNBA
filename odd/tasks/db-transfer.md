@@ -30,6 +30,9 @@ Move the complete PostgreSQL database (229 MB on 2026-10-26) to a different PC w
 ## TDD
 - Mode: off. Runner: `python -m pytest -q` from `backend/`.
 
+## Review
+- Native multi-lens review (risk, resilience, readability, reliability) of PR 'feat/db-transfer': **approved**, authority acknowledged and burned. Nine advisory findings, none blocking: duplicated Alembic check in the CLI, `.env.example` Gemini model unexplained, misleading exit-code docstring, dead return in a size formatter, libpq query params not forwarded, `--replace` resets only `public` and is not atomic with the restore, snapshot-count test coverage, no process timeout/lock. The user-visible ones are listed in `docs/DB_TRANSFER.md` (Known limitations).
+
 ## Notes
 - Machine-level environment variables (for example `GEMINI_API_KEY`, `TELEGRAM_BOT_TOKEN` on the original PC) also feed Settings; `backend/.env` overrides them. The new PC needs its own values (list variable NAMES, never values).
 - A dump taken now is a point-in-time copy: take a fresh export right before switching PCs.
