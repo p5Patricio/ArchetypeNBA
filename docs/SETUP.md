@@ -103,7 +103,7 @@ python -m alembic current
 
 ### Option A: restore a dump (recommended for the same production state)
 
-Follow [`DB_TRANSFER.md`](DB_TRANSFER.md) (`scripts/db_transfer.py import`, with integrity checks on both ends). The target PostgreSQL must be the same major version as the source or newer (the manifest records it; the source runs 18.x), even though the schema alone only needs 15. A restore brings the history, the champion, the challengers, the odds already captured and the audit trail. It is also the only way to get the odds and closing lines you did not capture yourself.
+Follow [`DB_TRANSFER.md`](DB_TRANSFER.md) (`scripts/db_transfer.py import`, with integrity checks on both ends; it needs the PostgreSQL client tools `pg_dump`, `pg_restore` and `psql`). The target PostgreSQL must be the same major version as the source or newer (the manifest records it; the source runs 18.x), even though the schema alone only needs 15. A restore brings the history, the champion, the challengers, the odds already captured and the audit trail. It is also the only way to get the odds and closing lines you did not capture yourself.
 
 ### Option B: from scratch
 

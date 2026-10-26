@@ -254,7 +254,7 @@ Table count: the models define 20 tables (11 platform, 9 quant: `sportsbook`, `g
 | `league_report.py` | Data and text of the "Model league" section |
 | `paper_report.py` | Data and text of the paper-trading report |
 
-Adjacent, not part of the loop: `injury_scraper.py` (broken, fabricates data: see [`ROADMAP.md`](ROADMAP.md) item 1), `gemini_analyzer.py` and `telegram_service.py` (props pipeline).
+Adjacent, not part of the loop: `injury_scraper.py` (broken, fabricates data: see [`ROADMAP.md`](ROADMAP.md) item 1), `gemini_analyzer.py` and `telegram_service.py` (props pipeline), and `db_transfer.py` (the export, verify and import logic behind `scripts/db_transfer.py`, see [`DB_TRANSFER.md`](DB_TRANSFER.md)).
 
 Platform services (not documented here): `cache`, `clustering`, `data_update`, `doppelgangers`, `elo` (a legacy, unrelated `EloService`), `financial`, `historical`, `lineup`, `matchup_service`, `parallel_zones`, `pizza_chart`, `player`, `real_shotchart`, `report`, `similarity`, `team`, `training`, `versus`.
 
@@ -270,6 +270,7 @@ Platform services (not documented here): `cache`, `clustering`, `data_update`, `
 | `backend/scripts/record_predictions.py` | Run the recorder by hand | Yes (not with `--dry-run`) |
 | `backend/scripts/capture_odds_snapshot.py` | One manual opening or closing capture (spends credits) | Yes (not with `--dry-run`) |
 | `backend/scripts/bulk_ingest_nba.py` | Historical `nba_api` ingestion, seasons 2003-04 to 2025-26, no flags | Yes |
+| `backend/scripts/db_transfer.py` | `export`, `verify`, `import` and `manifest` for the whole database, with exact row-count checks ([`DB_TRANSFER.md`](DB_TRANSFER.md)) | `export` writes files outside the repository; `import` writes the target database |
 | `backend/scripts/seed_database.py`, `test_live_training.py` | Legacy Excel seeding and a manual training check | Legacy |
 | `scripts/register_tick_task.ps1` | Register, unregister or preview the Windows task | Machine config |
 | `scripts/start_services.ps1`, `stop_services.ps1`, `setup_windows_autostart.ps1`, `delayed_stop.ps1` | Start and stop the web services | Processes |
