@@ -4,7 +4,7 @@ This is the runbook for moving the ArchetypeNBA PostgreSQL database from one PC 
 
 ## 1. What you are moving
 
-- **The database `nba_platform`** (PostgreSQL). It was 229 MB on 2026-10-26; the dump is compressed (`pg_dump -Fc`), so the file is smaller than that.
+- **The database `nba_platform`** (PostgreSQL). It was 229 MB on 2026-10-26. The dump is compressed (`pg_dump -Fc`), so the file is much smaller: the export measured that day was **17.3 MB for 831,058 rows in 21 tables** (the 20 model tables plus `alembic_version`), small enough for a USB drive or an e-mail-sized upload to private storage.
 - **Why it cannot simply be rebuilt.** It holds odds captured every few minutes since 2026-10-06 (closing lines cannot be backfilled on the free Odds API tier), recorded predictions, paper bets and their settlement, and the model registry and evaluations. It also holds 23 seasons of game logs and Elo ratings; those are rebuildable, but slowly.
 - **The tool.** `backend/scripts/db_transfer.py` (logic in `backend/app/services/db_transfer.py`) wraps `pg_dump` and `pg_restore` and adds integrity checks on both ends:
 
@@ -149,11 +149,18 @@ About passwords: `--target-url` puts the password on this command's own command 
 2. Edit `DATABASE_URL` to the new database, for example `postgresql://nba:PASSWORD@localhost:5432/nba_platform` (percent-encode special characters in the password: `@` becomes `%40`).
 3. If you have no `.env` to copy, start from `backend/.env.example`, which lists every setting with its default. `THE_ODDS_API_KEY` comes from <https://the-odds-api.com>.
 
-The application also reads machine-level environment variables, and `backend/.env` overrides them. If the old PC keeps some secrets only as environment variables, you must recreate them in the new `.env`. List the **names** (never the values) of what is defined there:
+The application also reads machine-level environment variables (they feed `Settings`), and `backend/.env` overrides a variable of the same name. On the original PC, for example, `GEMINI_API_KEY` and `TELEGRAM_BOT_TOKEN` are defined at machine level, so the `.env` you copy may not contain them. Before you leave the old PC, **list the NAMES (never the values)** of every variable defined there that feeds `Settings`, and recreate each one on the new PC, in the new `backend/.env` or at machine level:
 
 ```powershell
 Get-ChildItem Env: | Where-Object { $_.Name -match '^(DATABASE_URL|REDIS_URL|CORS_ORIGINS|DEBUG|ETL_|GEMINI_|TELEGRAM_|THE_ODDS_|PROPS_|LEARNING_|PGPASSWORD)' } | Select-Object -ExpandProperty Name
+[Environment]::GetEnvironmentVariables('Machine').Keys | Where-Object { $_ -match '^(GEMINI_|TELEGRAM_|THE_ODDS_|DATABASE_URL|PGPASSWORD)' }   # names defined at machine level only
 ```
+
+```bash
+env | cut -d= -f1 | grep -E '^(DATABASE_URL|REDIS_URL|CORS_ORIGINS|DEBUG|ETL_|GEMINI_|TELEGRAM_|THE_ODDS_|PROPS_|LEARNING_|PGPASSWORD)'   # Linux and macOS: names only
+```
+
+Do not paste the values anywhere (a chat, a ticket, the repository). Carry them over through the same secure channel as `.env`.
 
 ### Step 7. New PC: check the application against the restored data
 
