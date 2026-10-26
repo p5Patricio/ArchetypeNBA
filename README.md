@@ -11,12 +11,12 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Next.js-16.2.6-black?style=flat-square&logo=next.js" alt="Next.js" />
   <img src="https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat-square&logo=fastapi" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/PostgreSQL-15+-336791?style=flat-square&logo=postgresql" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/PostgreSQL-15+-336791?style=flat-square&logo=postgresql" alt="PostgreSQL 15+ (18 recommended)" />
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python" alt="Python" />
   <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-4.0-38B2AC?style=flat-square&logo=tailwind-css" alt="Tailwind CSS" />
   <img src="https://img.shields.io/badge/scikit--learn-ML_Engine-F7931E?style=flat-square&logo=scikit-learn" alt="scikit-learn" />
-  <img src="https://img.shields.io/badge/Tests-633%20Passed-emerald?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-757%20Passed-emerald?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License" />
 </p>
 
@@ -55,7 +55,7 @@ flowchart LR
 | Status (2026-10-26) | Live since the 2026-10-20 opener. Samples are tiny: the market is still better than the baseline, as expected |
 | Operated through | Command-line tools (`scripts/paper_report.py`, `scripts/model_league.py`); there is no web page for it yet |
 
-Read next: [methodology](docs/QUANT_MODULE.md) · [architecture](docs/ARCHITECTURE.md) · [operations runbook](docs/OPERATIONS.md) · [decision log](docs/DECISIONS.md) · [roadmap](docs/ROADMAP.md).
+Read next: [methodology](docs/QUANT_MODULE.md) · [architecture](docs/ARCHITECTURE.md) · [operations runbook](docs/OPERATIONS.md) · [moving machines](docs/DB_TRANSFER.md) · [decision log](docs/DECISIONS.md) · [roadmap](docs/ROADMAP.md).
 
 ---
 
@@ -123,8 +123,8 @@ ArchetypeNBA/
 │   │   ├── services/        # Business logic, Monte Carlo simulators, odds capture, tick, model league
 │   │   └── deps.py          # Database sessions & connection pooling
 │   ├── alembic/             # Hand-written PostgreSQL migrations (head: d7a2f5b81c39)
-│   ├── scripts/             # CLIs: run_tick, paper_report, model_league, model_lab, backfill_elo, ...
-│   └── tests/               # Pytest suite, offline and deterministic (633 tests passing on 2026-10-26)
+│   ├── scripts/             # CLIs: run_tick, paper_report, model_league, model_lab, backfill_elo, db_transfer, ...
+│   └── tests/               # Pytest suite, offline and deterministic (757 tests passing on 2026-10-26)
 │
 ├── frontend/                 # Next.js 16 (App Router + Turbopack)
 │   ├── src/
@@ -142,7 +142,7 @@ ArchetypeNBA/
 ```
 
 ### Core Technologies
-- **Backend**: Python 3.12, FastAPI, SQLModel / SQLAlchemy, PostgreSQL, psycopg, Pydantic v2, scikit-learn, UMAP, NumPy, Pandas, ReportLab.
+- **Backend**: Python 3.12, FastAPI, SQLModel / SQLAlchemy, PostgreSQL (15+, 18 recommended), psycopg 3, Pydantic v2, scikit-learn, UMAP, NumPy, Pandas, ReportLab.
 - **Frontend**: Next.js 16.2 (Turbopack), React 19, TypeScript, Tailwind CSS v4, Lucide Icons, Canvas Confetti, Radix UI primitives.
 - **Design System**: ArchetypeNBA Clean Sports Analytics System (Light-first, `#F8FAFC`, crisp slate borders, athletic orange & emerald accents).
 - **Internationalization**: Dual-language support (English / Spanish) and dual unit conversions (Metric cm/kg $\leftrightarrow$ Imperial ft/lbs).
@@ -151,12 +151,12 @@ ArchetypeNBA/
 
 ## ⚡ Quick Start Guide
 
-> Full, step-by-step guide for any operating system (database options, historical ingestion, scheduled tick, first-day checklist): [`docs/SETUP.md`](docs/SETUP.md).
+> Full, step-by-step guide for any operating system (database options, historical ingestion, scheduled tick, first-day checklist): [`docs/SETUP.md`](docs/SETUP.md). Already have a running installation to copy? Move the database with the integrity-checked export and import tool: [`docs/DB_TRANSFER.md`](docs/DB_TRANSFER.md).
 
 ### Prerequisites
 - **Python**: `3.12` (tested; `3.10+` is declared)
 - **Node.js**: `20.9+` (required by Next.js 16)
-- **PostgreSQL**: `15+` (18 recommended). Version 15 is the minimum because the schema uses `NULLS NOT DISTINCT` unique constraints
+- **PostgreSQL**: `15+` minimum, `18` recommended (the production database runs 18). Version 15 is the minimum because the schema uses `NULLS NOT DISTINCT` unique constraints; restoring a dump needs a server of the same major version as the source, or newer
 
 ### 1. Database & Backend Setup
 
@@ -211,7 +211,7 @@ python -m pytest -q
 ```
 
 ```
-633 passed, 1 warning in 121.28s (0:02:01)
+757 passed, 1 warning in 140.60s (0:02:20)
 ```
 
 (2026-10-26, Windows, Python 3.12. Without PowerShell installed, four tests of the Windows task registration are skipped.)
@@ -251,6 +251,7 @@ The quant system has no HTTP endpoints: it runs on a schedule and is read throug
 | [`docs/QUANT_MODULE.md`](docs/QUANT_MODULE.md) | Methodology of the paper-trading system |
 | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | Runbook: scheduled task, credit budget, checks, deploys, troubleshooting |
 | [`docs/SETUP.md`](docs/SETUP.md) | Setup from scratch on any OS |
+| [`docs/DB_TRANSFER.md`](docs/DB_TRANSFER.md) | Move the database to another PC and take verified backups |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) · [`docs/ROADMAP.md`](docs/ROADMAP.md) · [`odd/README.md`](odd/README.md) | Why things are the way they are, and what comes next |
 
 ---
