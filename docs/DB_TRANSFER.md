@@ -4,7 +4,7 @@ This is the runbook for moving the ArchetypeNBA PostgreSQL database from one PC 
 
 ## 1. What you are moving
 
-- **The database `nba_platform`** (PostgreSQL). It was 229 MB on 2026-10-26. The dump is compressed (`pg_dump -Fc`), so the file is much smaller: the export measured that day was **17.3 MB for 831,058 rows in 21 tables** (the 20 model tables plus `alembic_version`), small enough for a USB drive or an e-mail-sized upload to private storage.
+- **The database `nba_platform`** (PostgreSQL). It was 229 MB on 2026-10-26. The dump is compressed (`pg_dump -Fc`), so the file is much smaller: the export measured that day was **17.3 MB for 831,058 rows in 21 tables** (the 20 model tables plus `alembic_version`).
 - **Why it cannot simply be rebuilt.** It holds odds captured every few minutes since 2026-10-06 (closing lines cannot be backfilled on the free Odds API tier), recorded predictions, paper bets and their settlement, and the model registry and evaluations. It also holds 23 seasons of game logs and Elo ratings; those are rebuildable, but slowly.
 - **The tool.** `backend/scripts/db_transfer.py` (logic in `backend/app/services/db_transfer.py`) wraps `pg_dump` and `pg_restore` and adds integrity checks on both ends:
 
