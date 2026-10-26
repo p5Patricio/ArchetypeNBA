@@ -141,7 +141,7 @@ Raising the props events per run from 1 to 3 would cost up to 3 + 3 x (3 + 3 x 2
 |-------|---------|----------------------|
 | League | `cd backend; python scripts/model_league.py status` | A "last candidate proposal" within the last 7 days; challenger `paired n` growing; no promotion or retirement you did not expect |
 | Schema | `cd backend; python -m alembic current` | Equals the head (`d7a2f5b81c39` as of 2026-10-26) |
-| Backup | A fresh dump of the database ([`DB_TRANSFER.md`](DB_TRANSFER.md), pending merge; until then `pg_dump -Fc -U postgres -d nba_platform -f <file>.dump`) | File exists and is copied off the machine |
+| Backup | `cd backend; python scripts/db_transfer.py export` ([section 9](#9-backups)) | A new `.dump` and `.manifest.json` pair that `verify` accepts, copied off the machine |
 | Code | `git status` and `git log -1` in the production checkout | Clean tree, on `main`, no unmerged work |
 | Disk | Size of `logs\` | A few MB (rotation caps `tick.log`; `backend.log` and `frontend.log` grow without rotation) |
 
@@ -163,7 +163,7 @@ Deploy a change that includes a migration:
 
 | # | Step | Command |
 |---|------|---------|
-| 1 | Back up the affected tables, or everything | `scripts/db_transfer.py export` (pending merge) or `pg_dump` |
+| 1 | Back up everything and verify the backup | `cd backend; python scripts/db_transfer.py export`, then `python scripts/db_transfer.py verify <dump>` |
 | 2 | Pause the tick and wait for any running tick to end | `Disable-ScheduledTask -TaskName NBA-Odds-Tick`; confirm `logs\tick.lock` is gone |
 | 3 | Merge to `main` (the maintainer's decision), then pull in the production checkout | `git pull` |
 | 4 | Migrate | `cd backend; python -m alembic upgrade head`, then `python -m alembic current` |
@@ -282,11 +282,19 @@ Pause with `sudo systemctl stop nba-tick.timer`, resume with `sudo systemctl sta
 
 ## 8. Moving to another machine
 
-Short form: pause and unregister on the old machine, export the database and `.env` through a secure channel (never git or chat), restore on the new machine, then register the tick there. The full procedure is in [`DB_TRANSFER.md`](DB_TRANSFER.md) (pending merge) and [`SETUP.md`](SETUP.md).
+Short form: pause and unregister on the old machine, export the database and `.env` through a secure channel (never git or chat), restore on the new machine, then register the tick there. The full procedure, with the cutover order, rollback and troubleshooting, is in [`DB_TRANSFER.md`](DB_TRANSFER.md); installation on the new machine is in [`SETUP.md`](SETUP.md). The scheduler examples in section 7 are system-wide; `DB_TRANSFER.md` (step 8) shows user-level variants (a systemd user timer with linger, a macOS launchd agent).
 
 ## 9. Backups
 
-The database is the system's memory: odds that were not captured cannot be recovered on a free plan. Dumps and `.env` files are secrets-adjacent and never go in git. Until `docs/DB_TRANSFER.md` and `backend/scripts/db_transfer.py` are merged, a plain `pg_dump -Fc` is the fallback, and `.dump` files are **not** yet in `.gitignore` (pending merge): keep them outside the repository.
+The database is the system's memory: odds that were not captured cannot be recovered on a free plan. Take an export every week; it is safe while the tick runs (a consistent snapshot):
+
+```
+cd backend
+python scripts/db_transfer.py export
+python scripts/db_transfer.py verify <path printed by export>.dump
+```
+
+`export` writes `<name>.dump` and `<name>.manifest.json` (exact row count of every table, sha256, Alembic revision) to `ArchetypeNBA-backups/`, a sibling folder of the repository; it refuses to write inside the repository, and `*.dump`, `*.manifest.json` and `backups/` are git-ignored. Copy both files to another disk or to private cloud storage. Old exports are never pruned automatically. Measured on 2026-10-26: the 229 MB database exported to a 17.3 MB dump (21 tables, 831,058 rows). Dumps and `.env` files never go in git or in chat. To restore, schedule the export or move machines, see [`DB_TRANSFER.md`](DB_TRANSFER.md) (sections 4 and 7).
 
 ## 10. Secrets and logs
 

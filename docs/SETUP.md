@@ -8,7 +8,7 @@ How to get ArchetypeNBA running on a new machine, on any operating system: prere
 2. `git clone`, create a virtualenv, `pip install -r backend/requirements.txt`.
 3. Create the database and `backend/.env`.
 4. `cd backend && python -m alembic upgrade head`.
-5. Fill the database: restore a dump ([`DB_TRANSFER.md`](DB_TRANSFER.md), pending merge) **or** ingest history and register the champion ([section 6](#6-fill-the-database)).
+5. Fill the database: restore a dump ([`DB_TRANSFER.md`](DB_TRANSFER.md)) **or** ingest history and register the champion ([section 6](#6-fill-the-database)).
 6. `python -m pytest -q`, then `python scripts/run_tick.py --dry-run`.
 7. Register the tick ([section 10](#10-register-the-scheduled-tick)) and walk the [first-day checklist](#11-first-day-verification-checklist).
 
@@ -61,7 +61,7 @@ Versions the test suite last passed with (2026-10-26, Windows, Python 3.12.10): 
 
 ## 4. Configuration (`backend/.env`)
 
-Create `backend/.env` (git-ignored; never commit it; never paste it into chat). `backend/.env.example` is the template and is being extended together with the database-transfer work (pending merge). The settings are defined in `backend/app/config.py`:
+Create `backend/.env` (git-ignored; never commit it; never paste it into chat). `backend/.env.example` is the template and lists every setting with its default. The settings are defined in `backend/app/config.py`:
 
 | Variable | Needed for the quant system | Example or default |
 |----------|----------------------------|--------------------|
@@ -103,7 +103,7 @@ python -m alembic current
 
 ### Option A: restore a dump (recommended for the same production state)
 
-Follow [`DB_TRANSFER.md`](DB_TRANSFER.md) (pending merge). A restore brings the history, the champion, the challengers, the odds already captured and the audit trail. It is also the only way to get the odds and closing lines you did not capture yourself.
+Follow [`DB_TRANSFER.md`](DB_TRANSFER.md) (`scripts/db_transfer.py import`, with integrity checks on both ends). The target PostgreSQL must be the same major version as the source or newer (the manifest records it; the source runs 18.x), even though the schema alone only needs 15. A restore brings the history, the champion, the challengers, the odds already captured and the audit trail. It is also the only way to get the odds and closing lines you did not capture yourself.
 
 ### Option B: from scratch
 

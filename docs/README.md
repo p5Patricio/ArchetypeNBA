@@ -7,7 +7,7 @@ Everything written about ArchetypeNBA, in one place, with the order to read it i
 | You are | Read, in this order |
 |---------|--------------------|
 | A new agent or developer | [`AGENTS.md`](../AGENTS.md), then [`ARCHITECTURE.md`](ARCHITECTURE.md), [`SETUP.md`](SETUP.md), [`ROADMAP.md`](ROADMAP.md) |
-| An operator | [`OPERATIONS.md`](OPERATIONS.md), then [`SETUP.md`](SETUP.md), [`DB_TRANSFER.md`](DB_TRANSFER.md) (pending merge) |
+| An operator | [`OPERATIONS.md`](OPERATIONS.md), then [`SETUP.md`](SETUP.md), [`DB_TRANSFER.md`](DB_TRANSFER.md) |
 | A modeller or reviewer | [`QUANT_MODULE.md`](QUANT_MODULE.md), then [`DECISIONS.md`](DECISIONS.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), [`ROADMAP.md`](ROADMAP.md) |
 
 ## Documents
@@ -19,7 +19,7 @@ Everything written about ArchetypeNBA, in one place, with the order to read it i
 | [`QUANT_MODULE.md`](QUANT_MODULE.md) | The methodology: odds maths, Elo, the `margin_features` model, betting policy, CLV and its biases, evaluation and promotion rules, how to read the reports, honest limits |
 | [`OPERATIONS.md`](OPERATIONS.md) | Runbook: the scheduled task, credit budget, daily and weekly checks, schema deploys, manual controls, web services, Linux and macOS schedulers, troubleshooting |
 | [`SETUP.md`](SETUP.md) | Install and configure from scratch on any OS, fill the database, run the tests, first-day checklist |
-| [`DB_TRANSFER.md`](DB_TRANSFER.md) | Export and restore the database when moving machines (**pending merge**, written by the database-transfer work) |
+| [`DB_TRANSFER.md`](DB_TRANSFER.md) | Move the database to another PC and take periodic backups: the `db_transfer.py` export, verify and import procedure, cutover order, rollback, troubleshooting |
 | [`DECISIONS.md`](DECISIONS.md) | Decision log (47 entries): what was decided, why, what was rejected, what followed |
 | [`ROADMAP.md`](ROADMAP.md) | Prioritized backlog with acceptance criteria, risks and a first step; item 1 is the next task |
 | [`../odd/README.md`](../odd/README.md) | Index of the feature plans in `odd/tasks/` (the decision history) and what ODD is |
