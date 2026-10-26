@@ -87,4 +87,4 @@ The user's goal is a system that improves with time. With ~2,600 held-out games 
 - A non-Elo champion is unsupported by the lab baseline and by `EloRatingService()` default resolution: L3 must handle promotion of `margin_features` (Elo ratings must keep a stable default model).
 
 ## Next step
-Run L3 (fix round after the statistical attack: look budget, truthful swap rows, protected last Elo model, lab error cadence).
+None for this plan: L1 to L4 are delivered (L1 PR #13, L2 PR #14, L3 PR #15 including the fix round after the statistical attack: look budget, truthful swap rows, protected last Elo model, lab error cadence; L4 was operations; related PRs #16 and #17). What remains is under Follow-ups and in `docs/ROADMAP.md`.
