@@ -10,14 +10,14 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Next.js-16.2.6-black?style=flat-square&logo=next.js" alt="Next.js" />
-  <img src="https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat-square&logo=fastapi" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi" alt="FastAPI" />
   <img src="https://img.shields.io/badge/PostgreSQL-15+-336791?style=flat-square&logo=postgresql" alt="PostgreSQL 15+ (18 recommended)" />
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python" alt="Python" />
   <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-4.0-38B2AC?style=flat-square&logo=tailwind-css" alt="Tailwind CSS" />
   <img src="https://img.shields.io/badge/scikit--learn-ML_Engine-F7931E?style=flat-square&logo=scikit-learn" alt="scikit-learn" />
   <img src="https://img.shields.io/badge/Tests-757%20Passed-emerald?style=flat-square" alt="Tests" />
-  <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License" />
+  <img src="https://img.shields.io/badge/License-not%20specified-lightgrey?style=flat-square" alt="License" />
 </p>
 
 ---
@@ -26,7 +26,7 @@
 
 **ArchetypeNBA** is an enterprise-grade sports science, machine learning analytics, and tactical simulation platform built for coaches, scouting departments, analysts, and basketball enthusiasts. 
 
-Powered by unsupervised clustering (K-Means), multi-dimensional dimensionality reduction (UMAP), Monte Carlo quantitative prop models (Negative Binomial distribution), tracking-level defensive matchups, and possession-based 5v5 simulation engines, the platform converts raw NBA data into actionable scouting intelligence across **23+ historical and modern NBA seasons (2003-04 through 2025-26, plus classic 80s and 90s championship eras)**.
+Powered by unsupervised clustering (K-Means), multi-dimensional dimensionality reduction (PCA), Monte Carlo quantitative prop models (Negative Binomial distribution), tracking-level defensive matchups, and possession-based 5v5 simulation engines, the platform converts raw NBA data into actionable scouting intelligence across **23+ historical and modern NBA seasons (2003-04 through 2025-26, plus classic 80s and 90s championship eras)**.
 
 > Working on this repository as a developer or an AI agent? Start with [`AGENTS.md`](AGENTS.md) (rules, gotchas, current state) and the [documentation index](docs/README.md).
 
@@ -103,8 +103,8 @@ Read next: [methodology](docs/QUANT_MODULE.md) · [architecture](docs/ARCHITECTU
 ### 9. 👥 Doppelgängers Históricos (`/doppelgangers`)
 - **Statistical Similarity Engine**: Multi-feature Euclidean distance mapping modern players to historical counterparts sharing identical athletic and statistical fingerprints.
 
-### 10. 🌌 Galaxia Táctica (UMAP Explorer) & 👑 Salón de la Fama (`/galaxy`, `/hall-of-fame`)
-- **2D UMAP Projection**: Visualizes player transition trajectories across basketball history.
+### 10. 🌌 Galaxia Táctica (PCA Explorer) & 👑 Salón de la Fama (`/galaxy`, `/hall-of-fame`)
+- **2D PCA Projection**: Visualizes player transition trajectories across basketball history.
 - **Hall of Fame Probability Model**: Random Forest and Logistic Regression engines predicting enshrinement probability for active players.
 
 ---
@@ -142,8 +142,8 @@ ArchetypeNBA/
 ```
 
 ### Core Technologies
-- **Backend**: Python 3.12, FastAPI, SQLModel / SQLAlchemy, PostgreSQL (15+, 18 recommended), psycopg 3, Pydantic v2, scikit-learn, UMAP, NumPy, Pandas, ReportLab.
-- **Frontend**: Next.js 16.2 (Turbopack), React 19, TypeScript, Tailwind CSS v4, Lucide Icons, Canvas Confetti, Radix UI primitives.
+- **Backend**: Python 3.12, FastAPI, SQLModel / SQLAlchemy, PostgreSQL (15+, 18 recommended), psycopg 3, Pydantic v2, scikit-learn (PCA, K-Means), NumPy, Pandas, ReportLab.
+- **Frontend**: Next.js 16.2 (Turbopack), React 19, TypeScript, Tailwind CSS v4, Lucide Icons, Radix icons.
 - **Design System**: ArchetypeNBA Clean Sports Analytics System (Light-first, `#F8FAFC`, crisp slate borders, athletic orange & emerald accents).
 - **Internationalization**: Dual-language support (English / Spanish) and dual unit conversions (Metric cm/kg $\leftrightarrow$ Imperial ft/lbs).
 
@@ -226,16 +226,16 @@ python -m pytest -q
 | `GET` | `/api/v1/shot-zones/presets` | Get curated player comparison duel presets (Curry vs Giannis, etc.) |
 | `GET` | `/api/v1/props/today` | Fetch daily player props with Monte Carlo +EV simulation and Kelly bankroll stakes |
 | `GET` | `/api/v1/matchups/player/{id}` | Query 1v1 defensive tracking matchups, stoppers, and mismatches |
-| `GET` | `/api/v1/players` | Query players with archetype filtering, season selection, and pagination |
-| `GET` | `/api/v1/players/{id}/radar` | Retrieve multi-dimensional percentile radar data |
+| `GET` | `/api/v1/players` | List player names, optionally filtered by `team` and `season_id` |
+| `GET` | `/api/v1/player/{player_name}/radars` | Retrieve multi-dimensional percentile radar data |
 | `GET` | `/api/v1/versus/players` | List catalog of players with available historical seasons & peak years |
 | `GET` | `/api/v1/versus/matchup` | Simulate 1 vs 1 matchup with probability, radar, and 7-game series |
 | `GET` | `/api/v1/lineup/presets` | Retrieve legendary pre-configured championship lineups |
 | `POST` | `/api/v1/lineup/evaluate` | Evaluate 5v5 lineup chemistry, spacing, ratings, and tactical diagnosis |
 | `POST` | `/api/v1/lineup/simulate` | Simulate full 48-minute game with quarter scores and Box Scores |
 | `GET` | `/api/v1/timeline` | Query NBA historical timeline eras and milestones |
-| `GET` | `/api/v1/galaxy/points` | Retrieve 2D UMAP projection points for all players across seasons |
-| `GET` | `/api/v1/hall-of-fame/players` | List Naismith HOF enshrinees and active star induction probabilities |
+| `GET` | `/api/v1/analytics/galaxy-map` | Retrieve the 2D PCA projection points for all players |
+| `GET` | `/api/v1/hall-of-fame` | List Naismith HOF enshrinees and active star induction probabilities |
 
 The quant system has no HTTP endpoints: it runs on a schedule and is read through its command-line reports (see [`docs/OPERATIONS.md`](docs/OPERATIONS.md)).
 
@@ -258,4 +258,4 @@ The quant system has no HTTP endpoints: it runs on a schedule and is read throug
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
+No licence has been chosen yet: the repository has no `LICENSE` file (an earlier version of this README claimed MIT). Until the owner adds one, all rights are reserved.

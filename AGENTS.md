@@ -9,7 +9,7 @@ Context for any AI coding agent (or human) picking this project up. **Snapshot d
 | What | Two products in one repo: (a) **ArchetypeNBA analytics platform** (FastAPI + Next.js: archetypes, shot zones, matchups, props, etc.); (b) a **quantitative betting research system** that predicts NBA games, *paper-trades* them (no real money, ever) and is built to **improve itself with evidence**. |
 | Goal of (b) | A closed loop: capture odds → predict → paper-bet → settle → measure (CLV = price taken vs the **same book's** closing quote; model skill = Brier vs **Pinnacle's de-vigged close**) → compare candidate models in shadow → promote only when statistics say so. |
 | Stack | Python 3.12, FastAPI, SQLModel/SQLAlchemy 2, Alembic, PostgreSQL 18 (tests: in-memory SQLite), NumPy/pandas/scikit-learn, `nba_api`, The Odds API; Next.js 16 / React 19 / Tailwind 4 frontend. |
-| Repo | `github.com/p5Patricio/ArchetypeNBA` (`main` is the only long-lived branch; PRs #1–#17+ merged). |
+| Repo | `github.com/p5Patricio/ArchetypeNBA` (`main` is the only long-lived branch; PRs #1–#19 merged as of this snapshot). |
 | Production | One Windows 11 PC runs a scheduled task every 15 minutes (`NBA-Odds-Tick`). **That PC executes the `main` checkout**, so unmerged code must never live there. |
 | State | Pipeline live since the 2026-10-20 opener. Baseline Elo champion + one shadow challenger. Too little data to judge anything yet (see §9). |
 | Next task | Replace the broken injury scraper with a real free source of injuries/lineups and test it as a model signal (see §10). |
@@ -17,7 +17,7 @@ Context for any AI coding agent (or human) picking this project up. **Snapshot d
 First five commands on a fresh machine (details in [`docs/SETUP.md`](docs/SETUP.md)):
 
 ```bash
-cd backend && python -m pytest -q                         # 633+ tests, all offline, ~2 min
+cd backend && python -m pytest -q                         # 757 tests, all offline, ~2.5 min
 python scripts/run_tick.py --dry-run                      # what the scheduled tick would do (no network, no writes)
 python scripts/paper_report.py                            # performance, CLV, model skill, model league
 python scripts/model_league.py status                     # champion/challenger table
@@ -147,7 +147,7 @@ Rejected/not done: paid odds feeds (OpticOdds ~$5k/mo), scraping ESPN/OddsPortal
 
 | Metric | Value |
 |--------|-------|
-| Tests | 633 backend tests pass (+ new ones from later PRs); frontend `tsc --noEmit` clean |
+| Tests | 757 backend tests pass (2026-10-26, includes the db_transfer tests); frontend `tsc --noEmit` clean |
 | Database | PostgreSQL 18.4, 229 MB, Alembic head `d7a2f5b81c39`; 23 seasons of game logs (2003-04..2025-26), 59k Elo rows per model |
 | Capture | Since 2026-10-06 (opening lines) and 2026-10-20 (full tick); Odds API credits left: 371 (resets on the 1st of each month); task healthy, 0 failed ticks |
 | Paper trading (2026-10-20 → 10-26) | flat: 56 bets (49 settled), P/L −5.28 u, ROI −11.4%; ¼ Kelly: 44 bets, −13.34 u. Bankrolls 94.7 u / 86.7 u. **Tiny samples, not evidence of anything.** |

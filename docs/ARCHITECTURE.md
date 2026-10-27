@@ -77,7 +77,7 @@ Each step runs inside its own error boundary: an exception becomes an `error` re
 |------|-----------|------|--------|
 | `opening` | No `opening` marker exists for today's machine-local date and at least one event is upcoming | 3 credits (`/events` is free) | `game`, `odds_history`, `odds_snapshot_capture` (kind `opening`) |
 | `closing` | An upcoming event tips off within `--window-minutes` (30) and has no `closing` marker; one props event per run without a `closing_props` marker | 3 credits for game lines plus 1 per props event | same tables; kinds `closing`, `closing_props` |
-| `results` | Always runs; it calls the network only if a `scheduled` game tipped off more than 3 h ago (one call), and otherwise only settles bets and fills CLV from what is already in the database | 0 credits; one free `nba_api` call at most | `player_game_log`, `game` (scores, `final`), `team_elo_rating`, `simulated_bet` (status, profit, closing fields) |
+| `results` | Always runs; it calls the network only if a `scheduled` game tipped off more than 3 h ago (normally one call; two around a season boundary because it fetches per season label), and otherwise only settles bets and fills CLV from what is already in the database | 0 credits; one free `nba_api` call at most | `player_game_log`, `game` (scores, `final`), `team_elo_rating`, `simulated_bet` (status, profit, closing fields) |
 | `learn` | Always; evaluation is DB only, the proposal at most every `LEARNING_PROPOSAL_DAYS` (7) days (1 day after a failed lab) | 0 credits | `model_evaluation`, `model_version` (roles), new challenger rows and their Elo ratings |
 | `record` | Always (DB only, so it also runs when capture or results failed) | 0 credits | `model_prediction`, `simulated_bet` |
 
@@ -285,7 +285,7 @@ Platform services (not documented here): `cache`, `clustering`, `data_update`, `
 |----------|-------------|-----------------|
 | `GET /api/v1/health` | Status and `db_connected` | Used by `start_services.ps1` to wait for readiness |
 | `GET /api/v1/seasons` | Seasons; hides seasons that have no player stats unless they are active | Protects the frontend from the empty 2026-27 row |
-| `GET /api/v1/props/today` | Cached Monte Carlo player props | Reads the on-disk cache; `refresh=true` recomputes |
+| `GET /api/v1/props/today` | Cached Monte Carlo player props | Reads a 1 h in-memory cache, then the on-disk cache file (no age check); `refresh=true` recomputes |
 | `POST /api/v1/props/run-analysis` | Recompute the props slate now | **Spends The Odds API credits** (up to 2 events x 3 markets = 6) and Gemini quota, outside the tick's credit guard |
 | `POST /api/v1/system/shutdown` | Stops both web services through `scripts/delayed_stop.ps1` | Windows only; **no CSRF or origin guard** (see [`ROADMAP.md`](ROADMAP.md)) |
 

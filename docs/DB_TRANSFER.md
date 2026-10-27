@@ -135,7 +135,7 @@ python scripts/db_transfer.py import --dump ../../ArchetypeNBA-backups/nba_platf
   --target-url "postgresql://nba:PASSWORD@localhost:5432/nba_platform"
 ```
 
-What it does, in order: verifies the dump, checks that the target server's major version is not older than the source's, refuses a target that already has tables, restores everything in a single transaction (all or nothing, `--exit-on-error`), runs `ANALYZE`, and prints a table with the expected and actual row count of every table plus the Alembic revision. The last line must be `RESULT: OK` and the exit code 0. Any `MISMATCH` means the data cannot be trusted (exit code 1): see section 9.
+What it does, in order: verifies the dump, checks that the target server's major version is not older than the source's, refuses a target that already has tables, restores everything in a single transaction (all or nothing, `--exit-on-error`), runs `ANALYZE`, and prints a table with the expected and actual row count of every table plus the Alembic revision. It must print `RESULT: OK` (a `Next:` hint follows it) and exit with code 0; the exit code is the reliable signal. Any `MISMATCH` means the data cannot be trusted (exit code 1): see section 9.
 
 Flags: `--create-db`, `--replace --confirm-database NAME` (wipes a non-empty target; section 6), `--skip-analyze`, `--pg-bin DIR`.
 
@@ -331,7 +331,7 @@ Found by the native multi-lens review (approved, non-blocking) and by the author
 
 | Limitation | What to do |
 |------------|------------|
-| Query parameters of the database URL (for example `?sslmode=require`) are not forwarded to `pg_dump` / `pg_restore`. | For a remote or TLS server set the libpq environment variables instead (`PGSSLMODE`, `PGSSLROOTCERT`, ...). |
+| Of the database URL's query parameters only `sslmode` is forwarded (as `PGSSLMODE`) to `pg_dump` / `pg_restore`; any other parameter (for example `sslrootcert`) is dropped. | For a remote or TLS server with extra settings use the libpq environment variables (`PGSSLROOTCERT`, `PGSSLCERT`, ...). |
 | `--replace` only drops and recreates the `public` schema, and the wipe is not atomic with the restore: if the restore fails afterwards, the database is left empty. | Keep the previous dump; use a fresh database (`--create-db`) whenever you can. Objects living in other schemas are not removed. |
 | There is no process timeout and no lock: a hung `pg_dump` or `pg_restore` must be interrupted by hand. | Pause the tick before the final export (step 1) so nothing writes meanwhile. |
 | The exit-code contract has two non-zero values (1 = operation failed or counts mismatch, 2 = refused before changing anything). | Trust the exit code and the final `RESULT:` line, not the wording of intermediate messages. |
@@ -352,6 +352,6 @@ python scripts/db_transfer.py manifest DUMP_OR_MANIFEST
 
 **Notes for an AI agent running this procedure**
 
-- Every command is non-interactive and prints a final line (`VERIFIED`, `RESULT: OK` / `RESULT: MISMATCH`) plus an exit code; trust the exit code.
+- Every command is non-interactive and prints a result line (`VERIFIED`, `RESULT: OK` / `RESULT: MISMATCH`, sometimes followed by a hint) plus an exit code; trust the exit code.
 - Ask the human for confirmation before steps 1 (pausing the tick), 8 and 9, and before any `--replace`. Never run the tick on two machines.
 - Never print, log or commit secrets: not the contents of `.env`, not environment variable values, not the password in a URL.
