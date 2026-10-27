@@ -1,3 +1,5 @@
+> **Status: historical research.** This survey of free NBA data sources predates the quantitative system. The feed decisions taken since are in [`docs/DECISIONS.md`](docs/DECISIONS.md) and the open data work (injuries and lineups, a second odds feed) is in [`docs/ROADMAP.md`](docs/ROADMAP.md). The current architecture is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The content below is kept unchanged for context.
+
 # NBA Data Sources Investigation Report
 
 ## Executive Summary

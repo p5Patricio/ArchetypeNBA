@@ -4,7 +4,7 @@ This is the runbook for moving the ArchetypeNBA PostgreSQL database from one PC 
 
 ## 1. What you are moving
 
-- **The database `nba_platform`** (PostgreSQL). It was 229 MB on 2026-10-26; the dump is compressed (`pg_dump -Fc`), so the file is smaller than that.
+- **The database `nba_platform`** (PostgreSQL). It was 229 MB on 2026-10-26. The dump is compressed (`pg_dump -Fc`), so the file is much smaller: the export measured that day was **17.3 MB for 831,058 rows in 21 tables** (the 20 model tables plus `alembic_version`).
 - **Why it cannot simply be rebuilt.** It holds odds captured every few minutes since 2026-10-06 (closing lines cannot be backfilled on the free Odds API tier), recorded predictions, paper bets and their settlement, and the model registry and evaluations. It also holds 23 seasons of game logs and Elo ratings; those are rebuildable, but slowly.
 - **The tool.** `backend/scripts/db_transfer.py` (logic in `backend/app/services/db_transfer.py`) wraps `pg_dump` and `pg_restore` and adds integrity checks on both ends:
 
@@ -38,10 +38,7 @@ On the **new** PC:
    python -m venv .venv
    source .venv/bin/activate          # Windows PowerShell: .\.venv\Scripts\Activate.ps1
    pip install -r requirements.txt
-   pip install "psycopg[binary]"      # see the note below
    ```
-
-   > `requirements.txt` lists `psycopg2-binary`, but the application connects with the psycopg 3 driver (`postgresql+psycopg://`, see `backend/app/deps.py`). On a fresh virtual environment you must install `psycopg[binary]` yourself, otherwise every script fails with `No module named 'psycopg'`.
 
 3. Install PostgreSQL, its command line tools (`pg_dump`, `pg_restore`, `psql`) and create the role as described in section 4, step 4 (the database itself can wait). The tool finds the tools on `PATH` or in the usual install folders; if it cannot, pass `--pg-bin <folder>`.
 4. **Rehearse the import** with an older export, so that cutover day holds no surprises:
@@ -138,7 +135,7 @@ python scripts/db_transfer.py import --dump ../../ArchetypeNBA-backups/nba_platf
   --target-url "postgresql://nba:PASSWORD@localhost:5432/nba_platform"
 ```
 
-What it does, in order: verifies the dump, checks that the target server's major version is not older than the source's, refuses a target that already has tables, restores everything in a single transaction (all or nothing, `--exit-on-error`), runs `ANALYZE`, and prints a table with the expected and actual row count of every table plus the Alembic revision. The last line must be `RESULT: OK` and the exit code 0. Any `MISMATCH` means the data cannot be trusted (exit code 1): see section 9.
+What it does, in order: verifies the dump, checks that the target server's major version is not older than the source's, refuses a target that already has tables, restores everything in a single transaction (all or nothing, `--exit-on-error`), runs `ANALYZE`, and prints a table with the expected and actual row count of every table plus the Alembic revision. It must print `RESULT: OK` (a `Next:` hint follows it) and exit with code 0; the exit code is the reliable signal. Any `MISMATCH` means the data cannot be trusted (exit code 1): see section 9.
 
 Flags: `--create-db`, `--replace --confirm-database NAME` (wipes a non-empty target; section 6), `--skip-analyze`, `--pg-bin DIR`.
 
@@ -152,11 +149,18 @@ About passwords: `--target-url` puts the password on this command's own command 
 2. Edit `DATABASE_URL` to the new database, for example `postgresql://nba:PASSWORD@localhost:5432/nba_platform` (percent-encode special characters in the password: `@` becomes `%40`).
 3. If you have no `.env` to copy, start from `backend/.env.example`, which lists every setting with its default. `THE_ODDS_API_KEY` comes from <https://the-odds-api.com>.
 
-The application also reads machine-level environment variables, and `backend/.env` overrides them. If the old PC keeps some secrets only as environment variables, you must recreate them in the new `.env`. List the **names** (never the values) of what is defined there:
+The application also reads machine-level environment variables (they feed `Settings`), and `backend/.env` overrides a variable of the same name. On the original PC, for example, `GEMINI_API_KEY` and `TELEGRAM_BOT_TOKEN` are defined at machine level, so the `.env` you copy may not contain them. Before you leave the old PC, **list the NAMES (never the values)** of every variable defined there that feeds `Settings`, and recreate each one on the new PC, in the new `backend/.env` or at machine level:
 
 ```powershell
 Get-ChildItem Env: | Where-Object { $_.Name -match '^(DATABASE_URL|REDIS_URL|CORS_ORIGINS|DEBUG|ETL_|GEMINI_|TELEGRAM_|THE_ODDS_|PROPS_|LEARNING_|PGPASSWORD)' } | Select-Object -ExpandProperty Name
+[Environment]::GetEnvironmentVariables('Machine').Keys | Where-Object { $_ -match '^(GEMINI_|TELEGRAM_|THE_ODDS_|DATABASE_URL|PGPASSWORD)' }   # names defined at machine level only
 ```
+
+```bash
+env | cut -d= -f1 | grep -E '^(DATABASE_URL|REDIS_URL|CORS_ORIGINS|DEBUG|ETL_|GEMINI_|TELEGRAM_|THE_ODDS_|PROPS_|LEARNING_|PGPASSWORD)'   # Linux and macOS: names only
+```
+
+Do not paste the values anywhere (a chat, a ticket, the repository). Carry them over through the same secure channel as `.env`.
 
 ### Step 7. New PC: check the application against the restored data
 
@@ -189,7 +193,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\register_tick_task.ps1 -WhatI
 powershell -ExecutionPolicy Bypass -File .\scripts\register_tick_task.ps1 -StartNow      # register and run one tick now
 ```
 
-Without `-PythonExe` the script reuses the interpreter path hardcoded in `scripts/run_pipeline.bat`, which is a path from the old PC; on the new PC pass `-PythonExe <path to the venv's python.exe>` (the `-WhatIf` preview prints the interpreter it will use, and the script stops with an error if it does not exist). Check with `Get-ScheduledTask -TaskName NBA-Odds-Tick` and read `logs\tick.log` (the tick writes its own rotating log).
+The script finds Python by itself, in this order: `-PythonExe`, the virtual environment at `backend\.venv`, the path inside `scripts/run_pipeline.bat` (only if that path exists on this PC), then the first `python.exe` on `PATH` (the empty Microsoft Store alias is ignored). It stops with an error if none is found. The `-WhatIf` preview prints the interpreter it will use; pass `-PythonExe <path to python.exe>` to override it. `scripts/run_backend.bat` and `scripts/run_pipeline.bat` still hardcode the old PC's Python path: edit them if you use `scripts/start_services.ps1` on the new PC. Check with `Get-ScheduledTask -TaskName NBA-Odds-Tick` and read `logs\tick.log` (the tick writes its own rotating log).
 
 **Linux** (cron, every 15 minutes; the tick logs to `<repo>/logs/tick.log` by itself):
 
@@ -315,7 +319,7 @@ It is safe while the tick runs (consistent snapshot). To automate it: on Linux/m
 | `password authentication failed` | Wrong password, or special characters not percent-encoded in the URL (`@` is `%40`), or `pg_hba.conf` does not allow the connection. |
 | Collation or locale error when creating the database | Create it from `template0` with an explicit encoding; the tool does this for `--create-db`. On Linux, `encoding UTF8 does not match locale` means you must pass a UTF-8 locale, for example `CREATE DATABASE nba_platform OWNER nba ENCODING 'UTF8' LOCALE 'C.UTF-8' TEMPLATE template0;`. Indexes are rebuilt during the restore with the target's collation, so only the sort order of text can differ. |
 | `character with byte sequence ... has no equivalent in encoding "WIN1252"` | The target database is not UTF-8 (player names such as Doncic or Jokic need UTF-8). Recreate it with `ENCODING 'UTF8'`. The import warns when the encodings differ. |
-| `No module named 'psycopg'` | `pip install "psycopg[binary]"` in the virtual environment (step 3 of the preparation). |
+| `No module named 'psycopg'` | An old checkout or a stale virtual environment: run `pip install -r backend/requirements.txt` in it (step 2 of the preparation). |
 | `RESULT: MISMATCH` | A table has a different row count, a table is missing or extra, or the Alembic revision differs. Do not use that database. Re-run the import into a fresh database; if it repeats, keep the output of the comparison table and the manifest and investigate before touching the old PC. |
 | `Refusing to write inside the repository working tree` | `export --out-dir` pointed inside the repo. Choose a folder outside it. |
 | A `*.dump.part` file in the backups folder | A previous export was interrupted. Delete it. |
@@ -327,7 +331,7 @@ Found by the native multi-lens review (approved, non-blocking) and by the author
 
 | Limitation | What to do |
 |------------|------------|
-| Query parameters of the database URL (for example `?sslmode=require`) are not forwarded to `pg_dump` / `pg_restore`. | For a remote or TLS server set the libpq environment variables instead (`PGSSLMODE`, `PGSSLROOTCERT`, ...). |
+| Of the database URL's query parameters only `sslmode` is forwarded (as `PGSSLMODE`) to `pg_dump` / `pg_restore`; any other parameter (for example `sslrootcert`) is dropped. | For a remote or TLS server with extra settings use the libpq environment variables (`PGSSLROOTCERT`, `PGSSLCERT`, ...). |
 | `--replace` only drops and recreates the `public` schema, and the wipe is not atomic with the restore: if the restore fails afterwards, the database is left empty. | Keep the previous dump; use a fresh database (`--create-db`) whenever you can. Objects living in other schemas are not removed. |
 | There is no process timeout and no lock: a hung `pg_dump` or `pg_restore` must be interrupted by hand. | Pause the tick before the final export (step 1) so nothing writes meanwhile. |
 | The exit-code contract has two non-zero values (1 = operation failed or counts mismatch, 2 = refused before changing anything). | Trust the exit code and the final `RESULT:` line, not the wording of intermediate messages. |
@@ -348,6 +352,6 @@ python scripts/db_transfer.py manifest DUMP_OR_MANIFEST
 
 **Notes for an AI agent running this procedure**
 
-- Every command is non-interactive and prints a final line (`VERIFIED`, `RESULT: OK` / `RESULT: MISMATCH`) plus an exit code; trust the exit code.
+- Every command is non-interactive and prints a result line (`VERIFIED`, `RESULT: OK` / `RESULT: MISMATCH`, sometimes followed by a hint) plus an exit code; trust the exit code.
 - Ask the human for confirmation before steps 1 (pausing the tick), 8 and 9, and before any `--replace`. Never run the tick on two machines.
 - Never print, log or commit secrets: not the contents of `.env`, not environment variable values, not the password in a URL.
