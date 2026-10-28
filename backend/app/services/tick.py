@@ -64,6 +64,7 @@ from app.services.odds_snapshot import (
     run_snapshot,
 )
 from app.services.prediction_recorder import PredictionRecorder
+from app.services.promotion_notifier import PromotionNotifier
 from app.services.results_sync import NbaApiResultsProvider, sync_results
 from app.services.settlement import fill_clv, settle_bets
 
@@ -258,6 +259,7 @@ class TickContext:
     results_provider: Optional[object] = None  # GameResultsProvider; None builds the nba_api one when it is needed
     clock: Callable[[], float] = time.monotonic  # injectable so the learn budget can be tested
     learn_budget_seconds: float = LEARN_BUDGET_SECONDS
+    notifier: Optional[object] = None  # PromotionNotifier or fake sender; None uses default PromotionNotifier
 
 
 Step = Callable[[TickContext], StepResult]
@@ -435,6 +437,15 @@ def learn_step(ctx: TickContext) -> StepResult:
     return StepResult("", STEP_OK if did_work else STEP_SKIPPED, message, detail_text)
 
 
+def _get_notifier(ctx: TickContext) -> PromotionNotifier:
+    if ctx.notifier is not None:
+        if isinstance(ctx.notifier, PromotionNotifier):
+            return ctx.notifier
+        if callable(ctx.notifier):
+            return PromotionNotifier(sender=ctx.notifier)
+    return PromotionNotifier()
+
+
 def _describe_pass(ctx: TickContext, outcome, messages: List[str], detail: List[str]) -> bool:
     """Adds the evaluation pass to the step text; True when it did (or, on a dry run, would do) something."""
     if outcome.message:
@@ -449,13 +460,19 @@ def _describe_pass(ctx: TickContext, outcome, messages: List[str], detail: List[
         messages.append(f"would evaluate {len(outcome.entries)} challenger(s), {len(ready)} with new paired games")
         return bool(ready)
     changes = [
-        f"{entry.model} {entry.action}"
+        entry
         for entry in outcome.entries
         if entry.action in (model_promotion.ACTION_PROMOTED, model_promotion.ACTION_ROLLED_BACK, model_promotion.ACTION_RETIRED)
     ]
+    if not ctx.dry_run and changes:
+        notifier = _get_notifier(ctx)
+        for entry in changes:
+            notifier.notify_pass_entry(entry, outcome.champion or "unknown", ctx.now)
+
+    changes_labels = [f"{entry.model} {entry.action}" for entry in changes]
     messages.append(
         f"evaluated {len(ready)} of {len(outcome.entries)} challenger(s), {outcome.rows_written} audit row(s)"
-        + (": " + ", ".join(changes) if changes else "")
+        + (": " + ", ".join(changes_labels) if changes_labels else "")
     )
     return bool(outcome.rows_written)
 
@@ -523,6 +540,13 @@ def _learn_proposal(
                 logger.exception("tick: rollback after a failed error marker also failed")
         return False
     messages.append("proposal: " + proposal.summary)
+    if not ctx.dry_run and proposal.registration is not None and proposal.registration.registered:
+        notifier = _get_notifier(ctx)
+        cand_by_label = {c.label: c for c in proposal.report.candidates}
+        for model in proposal.registration.registered:
+            cand = cand_by_label.get(f"{model.name} {model.version}")
+            notifier.notify_registered_candidate(model, cand, ctx.now)
+
     for candidate in proposal.report.candidates:
         verdict = "passes the historical gate" if candidate.gate.passed else "; ".join(candidate.gate.reasons)
         detail.append(f"candidate {candidate.label}: hold-out gain {candidate.gate.gain:+.4f}, {verdict}")
@@ -590,6 +614,7 @@ def run_tick(
     local_tz: Optional[tzinfo] = None,
     lock_path: Optional[Path] = None,
     results_provider: Optional[object] = None,
+    notifier: Optional[object] = None,
 ) -> TickSummary:
     """
     Runs every step once and returns the summary. A dry run takes no lock, never touches ``odds_service`` or the
@@ -621,7 +646,8 @@ def run_tick(
             )
 
         ctx = TickContext(
-            session, odds_service, now, dry_run, window_minutes, props_events, min_remaining, local_tz, results_provider
+            session, odds_service, now, dry_run, window_minutes, props_events, min_remaining, local_tz, results_provider,
+            notifier=notifier,
         )
         for name, step in default_steps() if steps is None else steps:
             result = _run_step(name, step, ctx)
