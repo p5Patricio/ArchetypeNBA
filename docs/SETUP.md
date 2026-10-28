@@ -99,7 +99,7 @@ python -m alembic upgrade head
 python -m alembic current
 ```
 
-`current` must print the head, `d7a2f5b81c39` as of 2026-10-26. This creates every table, the native enums, the generated columns, the `NULLS NOT DISTINCT` constraints and the two views (rendered offline on 2026-10-26 and checked to contain 20 model tables plus `alembic_version`). **Always migrate with Alembic rather than `create_all`**: only the migration creates the views. Several legacy scripts call `create_all`; after Alembic that is a no-op.
+`current` must print the head, `e3f8b1a4c9d2` as of 2026-10-28. This creates every table, the native enums, the generated columns, the `NULLS NOT DISTINCT` constraints and the two views (rendered offline on 2026-10-26 and checked to contain 20 model tables plus `alembic_version`). **Always migrate with Alembic rather than `create_all`**: only the migration creates the views. Several legacy scripts call `create_all`; after Alembic that is a no-op.
 
 ## 6. Fill the database
 
@@ -176,7 +176,7 @@ The first command only previews the task XML and prints the interpreter it chose
 ## 11. First-day verification checklist
 
 - [ ] `python -m pytest -q` passes (757 on 2026-10-26).
-- [ ] `python -m alembic current` prints `d7a2f5b81c39`.
+- [ ] `python -m alembic current` prints `e3f8b1a4c9d2`.
 - [ ] `python scripts/backfill_elo.py --evaluate --register` ran (or the dump restored the champion), and `python scripts/model_league.py status` lists `elo_538 1.1` as `champion`.
 - [ ] `python scripts/run_tick.py --dry-run` exits 0 and lists `opening`, `closing`, `results`, `learn`, `record`.
 - [ ] `backend/.env` has `THE_ODDS_API_KEY`; a first real `python scripts/run_tick.py` ends with `exit code: 0` (it spends 3 credits if events are upcoming).

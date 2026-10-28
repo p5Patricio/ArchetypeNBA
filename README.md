@@ -122,7 +122,7 @@ ArchetypeNBA/
 │   │   ├── schemas.py       # Pydantic v2 request/response models
 │   │   ├── services/        # Business logic, Monte Carlo simulators, odds capture, tick, model league
 │   │   └── deps.py          # Database sessions & connection pooling
-│   ├── alembic/             # Hand-written PostgreSQL migrations (head: d7a2f5b81c39)
+│   ├── alembic/             # Hand-written PostgreSQL migrations (head: e3f8b1a4c9d2)
 │   ├── scripts/             # CLIs: run_tick, paper_report, model_league, model_lab, backfill_elo, db_transfer, ...
 │   └── tests/               # Pytest suite, offline and deterministic (757 tests passing on 2026-10-26)
 │

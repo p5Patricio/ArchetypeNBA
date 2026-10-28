@@ -142,7 +142,7 @@ Raising the props events per run from 1 to 3 would cost up to 3 + 3 x (3 + 3 x 2
 | Check | Command | What good looks like |
 |-------|---------|----------------------|
 | League | `cd backend; python scripts/model_league.py status` | A "last candidate proposal" within the last 7 days; challenger `paired n` growing; no promotion or retirement you did not expect |
-| Schema | `cd backend; python -m alembic current` | Equals the head (`d7a2f5b81c39` as of 2026-10-26) |
+| Schema | `cd backend; python -m alembic current` | Equals the head (`e3f8b1a4c9d2` as of 2026-10-28) |
 | Backup | `cd backend; python scripts/db_transfer.py export` ([section 9](#9-backups)) | A new `.dump` and `.manifest.json` pair that `verify` accepts, copied off the machine |
 | Code | `git status` and `git log -1` in the production checkout | Clean tree, on `main`, no unmerged work |
 | Disk | Size of `logs\` | A few MB (rotation caps `tick.log`; `backend.log` and `frontend.log` grow without rotation) |
