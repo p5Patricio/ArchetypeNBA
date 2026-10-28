@@ -318,13 +318,13 @@ def test_an_eligible_candidate_creates_a_flat_and_a_kelly_bet_with_the_right_fie
     summary = world.recorder().run()
 
     bets = {b.strategy: b for b in _bets(db_session)}
-    assert set(bets) == {StakingStrategy.flat, StakingStrategy.kelly_fractional}
-    assert dict(summary.bets_placed) == {"flat": 1, "kelly_fractional": 1}
+    assert set(bets) == {StakingStrategy.flat, StakingStrategy.kelly_fractional, StakingStrategy.kelly_shrunk}
+    assert dict(summary.bets_placed) == {"flat": 1, "kelly_fractional": 1, "kelly_shrunk": 1}
 
     candidate = next(c for c in summary.candidates if c.eligible)
     prediction = _by_target(db_session)[(MarketType.h2h, BetSide.home, None)]
-    flat, kelly = bets[StakingStrategy.flat], bets[StakingStrategy.kelly_fractional]
-    for bet in (flat, kelly):
+    flat, kelly, shrunk = bets[StakingStrategy.flat], bets[StakingStrategy.kelly_fractional], bets[StakingStrategy.kelly_shrunk]
+    for bet in (flat, kelly, shrunk):
         assert bet.prediction_id == prediction.id
         assert bet.odds_taken_id == pinnacle_home.id
         assert float(bet.price_taken) == pytest.approx(american(-170))
@@ -337,10 +337,16 @@ def test_an_eligible_candidate_creates_a_flat_and_a_kelly_bet_with_the_right_fie
 
     p_blend = policy.shrink_probability(candidate.p_cond, candidate.p_fair)
     f_star = policy.kelly_fraction(p_blend, 0.0, american(-170))
+    break_even = 1.0 / american(-170)
+    edge = p_blend - break_even
+    shrink = policy.shrink_factor(edge, policy.MODEL_PROB_NOISE_SD)
     assert float(flat.stake_units) == 1.0 and flat.kelly_multiplier is None
     assert float(kelly.kelly_multiplier) == 0.25
     assert float(kelly.stake_units) == pytest.approx(round(100.0 * f_star * 0.25, 3), abs=1e-3)
     assert 0.05 < float(kelly.stake_units) < 2.0
+    assert float(shrunk.kelly_multiplier) == pytest.approx(round(0.5 * shrink, 3), abs=1e-3)
+    assert float(shrunk.stake_units) == pytest.approx(round(100.0 * f_star * 0.5 * shrink, 3), abs=1e-3)
+    assert 0.0 < float(shrunk.stake_units) < 2.0
 
 
 def test_the_kelly_stake_is_capped_at_two_percent_of_the_bankroll(world, db_session):
@@ -379,7 +385,7 @@ def test_the_away_side_is_bet_at_its_own_line(world, db_session):
     prediction = db_session.get(ModelPrediction, bets[StakingStrategy.flat].prediction_id)
     assert (prediction.market, prediction.side, float(prediction.line)) == (MarketType.spreads, BetSide.away, 3.5)
     assert float(bets[StakingStrategy.flat].line_taken) == 3.5
-    assert len(_bets(db_session)) == 2
+    assert len(_bets(db_session)) == 4
 
 
 # --- idempotency and guards --------------------------------------------------------------------
@@ -397,7 +403,7 @@ def test_a_second_run_writes_nothing(world, db_session):
     assert (len(_predictions(db_session)), len(_bets(db_session))) == before
     assert summary.predictions_written == 0 and summary.predictions_existing == before[0]
     assert sum(summary.bets_placed.values()) == 0
-    assert summary.skipped["already_bet"] == 2
+    assert summary.skipped["already_bet"] == 3
 
 
 def test_only_one_bet_per_side_even_if_the_line_moves(world, db_session):
@@ -413,7 +419,7 @@ def test_only_one_bet_per_side_even_if_the_line_moves(world, db_session):
     summary = world.recorder(now=later).run()
 
     assert {b.id for b in _bets(db_session)} == first
-    assert summary.skipped["already_bet"] == 2
+    assert summary.skipped["already_bet"] == 4
 
 
 def test_the_horizon_is_inclusive_and_nothing_at_or_after_tip_off_is_touched(world, db_session):
@@ -448,7 +454,7 @@ def test_a_recent_capture_marker_keeps_an_unchanged_old_quote_fresh(world, db_se
 
     world.recorder().run()
 
-    assert len(_bets(db_session)) == 2
+    assert len(_bets(db_session)) == 3
 
 
 def test_quotes_captured_after_now_are_ignored(world, db_session):
@@ -587,7 +593,7 @@ def test_a_dry_run_computes_everything_and_writes_nothing(world, db_session):
 
     assert _predictions(db_session) == [] and _bets(db_session) == []
     assert dry.dry_run and dry.predictions_written == 4
-    assert dry.bets_placed["flat"] == 1 and dry.bets_placed["kelly_fractional"] == 1
+    assert dry.bets_placed["flat"] == 1 and dry.bets_placed["kelly_fractional"] == 1 and dry.bets_placed["kelly_shrunk"] == 1
 
     real = world.recorder().run()
     assert real.predictions_written == dry.predictions_written

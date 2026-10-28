@@ -306,7 +306,7 @@ def format_report(report: PaperReport) -> str:
         lines.append("  No paper bets recorded yet.")
     for perf in report.strategies:
         lines.append(
-            f"  {perf.strategy:<17} bets {perf.bets} (settled {perf.settled}, pending {perf.pending}) | "
+            f"  {perf.strategy:<18} bets {perf.bets} (settled {perf.settled}, pending {perf.pending}) | "
             f"win rate {_pct(perf.win_rate)} | P/L {perf.pnl_units:+.2f}u | ROI {_pct(perf.roi)} | "
             f"avg CLV {_pct(perf.avg_clv, 2)} | beat close {_pct(perf.beat_close_rate)} (over {perf.clv_bets} bets with CLV)"
         )
@@ -385,5 +385,5 @@ def format_report(report: PaperReport) -> str:
 
     lines.append("Bankroll (start + settled P/L)")
     for perf in report.strategies:
-        lines.append(f"  {perf.strategy:<17} {perf.bankroll:.2f}u")
+        lines.append(f"  {perf.strategy:<18} {perf.bankroll:.2f}u")
     return "\n".join(lines)

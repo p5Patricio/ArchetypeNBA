@@ -22,6 +22,8 @@ MIN_RAW_EDGE = 0.02  # model probability minus fair probability, same side
 MIN_EV = 0.02  # expected profit per unit staked at the blended probability
 FLAT_UNITS = 1.0
 KELLY_MULTIPLIER = 0.25
+KELLY_MULTIPLIER_SHRUNK_BASE = 0.5
+MODEL_PROB_NOISE_SD = 0.05  # An ESTIMATE of the standard error of the model's win probability, to be calibrated from the model league, not a fact.
 PER_BET_CAP = 0.02  # fraction of bankroll
 DAILY_CAP = 0.10
 GAME_CAP = 0.04
@@ -99,6 +101,58 @@ def kelly_stake(
 ) -> float:
     """Fractional-Kelly stake in units after the per-bet, daily and per-game caps."""
     return cap_stake(bankroll * f_star * multiplier, bankroll, per_bet_cap, daily_room, game_room)
+
+
+def shrink_factor(edge: float, noise_sd: float = MODEL_PROB_NOISE_SD) -> float:
+    """
+    Baker & McHale (2013) shrinkage factor for model parameter uncertainty:
+    k = edge^2 / (edge^2 + noise_sd^2) clipped to [0, 1].
+    Returns 0.0 if edge <= 0 or noise_sd <= 0.
+    """
+    if edge <= 0.0 or noise_sd <= 0.0:
+        return 0.0
+    k = (edge ** 2) / (edge ** 2 + noise_sd ** 2)
+    return min(max(k, 0.0), 1.0)
+
+
+def kelly_shrunk_stake(
+    bankroll: float,
+    f_star: float,
+    edge: float = 0.0,
+    noise_sd: float = MODEL_PROB_NOISE_SD,
+    base_multiplier: float = KELLY_MULTIPLIER_SHRUNK_BASE,
+    multiplier: Optional[float] = None,
+    per_bet_cap: float = PER_BET_CAP,
+    daily_room: Optional[float] = None,
+    game_room: Optional[float] = None,
+) -> float:
+    """
+    Kelly stake shrunk for model parameter uncertainty (Baker & McHale 2013).
+    multiplier = base_multiplier * shrink_factor(edge, noise_sd) if multiplier is None.
+    """
+    if multiplier is None:
+        multiplier = base_multiplier * shrink_factor(edge, noise_sd)
+    return cap_stake(bankroll * f_star * multiplier, bankroll, per_bet_cap, daily_room, game_room)
+
+
+def evaluate_market_edge(
+    p_fair: float,
+    decimal_price: float,
+    min_ev: float = MIN_EV,
+) -> BetDecision:
+    """
+    Evaluates taking decimal_price at Pinnacle's fair probability p_fair.
+    No model probability is read or involved.
+    """
+    if p_fair <= 0.0 or p_fair >= 1.0 or decimal_price <= 1.0:
+        return BetDecision(False, "invalid_input", 0.0, 0.0, 0.0, 0.0, 0.0)
+
+    ev = bet_ev(p_fair, 0.0, decimal_price)
+    f_star = kelly_fraction(p_fair, 0.0, decimal_price)
+
+    if ev < min_ev - _EPS:
+        return BetDecision(False, "ev_below_min", p_fair, p_fair, 0.0, ev, f_star)
+    return BetDecision(True, "ok", p_fair, p_fair, 0.0, ev, f_star)
 
 
 def evaluate_candidate(
