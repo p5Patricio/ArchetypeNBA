@@ -38,7 +38,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from sqlalchemy import func, or_, select
 from sqlmodel import Session
@@ -185,6 +185,9 @@ class PredictionRecorder:
         self._benchmark: Optional[ModelVersion] = None
         self._totals_shadow: Optional[ModelVersion] = None
         self._totals_state: Optional[Any] = None
+        self._props_shadow: Optional[ModelVersion] = None
+        self._player_baselines: Optional[Dict[int, Any]] = None
+        self._prop_predictions: Dict[Tuple[Optional[int], int, str, int, str, Optional[Decimal]], int] = {}
 
     # ------------------------------------------------------------------ entry point
 
@@ -194,6 +197,7 @@ class PredictionRecorder:
         champion, challengers = models[0], models[1:]
         self._benchmark = model_registry.ensure_market_benchmark(self.session)
         self._totals_shadow = model_registry.ensure_totals_shadow_model(self.session)
+        self._props_shadow = model_registry.ensure_props_shadow_model(self.session)
 
         games = self._window_games()
         summary.games_considered = len(games)
@@ -201,7 +205,11 @@ class PredictionRecorder:
             return summary
 
         self._dry_run = dry_run
-        self._load_ledger(games, [model.row.id for model in models] + [self._benchmark.id, self._totals_shadow.id])
+        self._load_ledger(
+            games,
+            [model.row.id for model in models]
+            + [self._benchmark.id, self._totals_shadow.id, self._props_shadow.id],
+        )
 
         game_ids = [g.id for g in games]
         quotes = self._load_quotes(game_ids)
@@ -221,6 +229,7 @@ class PredictionRecorder:
                 else:
                     summary.games_processed += 1
                     self._record_game(game, champion, prediction, quotes.get(game.id, []), summary, season_id=season_id)
+                self._record_props_shadow(game, summary)
             if not dry_run:
                 self.session.commit()  # the champion's work is durable before any challenger runs
         except Exception:
@@ -420,6 +429,24 @@ class PredictionRecorder:
             )
         ):
             self._predictions[(model_id, game_id, _enum_value(market), _enum_value(side), _line(line))] = pred_id
+
+        self._prop_predictions = {}
+        for pred_id, model_id, game_id, market, player_id, side, line in self.session.execute(
+            select(
+                ModelPrediction.id,
+                ModelPrediction.model_version_id,
+                ModelPrediction.game_id,
+                ModelPrediction.market,
+                ModelPrediction.player_id,
+                ModelPrediction.side,
+                ModelPrediction.line,
+            ).where(
+                ModelPrediction.model_version_id.in_(list(model_ids)),
+                ModelPrediction.game_id.in_(game_ids),
+                ModelPrediction.player_id.is_not(None),
+            )
+        ):
+            self._prop_predictions[(model_id, game_id, _enum_value(market), player_id, _enum_value(side), _line(line))] = pred_id
 
         self._placed: Set[Tuple[str, int, str, str]] = set()
         self._game_stake: Dict[str, Dict[int, float]] = {s.value: defaultdict(float) for s in _STRATEGIES}
@@ -936,4 +963,118 @@ class PredictionRecorder:
         self.session.add(row)
         self.session.flush()
         self._predictions[key] = row.id
+        return row.id
+
+    def _get_player_baselines(self) -> Dict[int, Any]:
+        if self._player_baselines is None:
+            from app.analytics.props_engine import PropsEngine
+
+            engine = PropsEngine()
+            baselines = engine.load_baselines_from_db(session=self.session)
+            self._player_baselines = {b.player_id: b for b in baselines}
+        return self._player_baselines
+
+    def _record_props_shadow(self, game: Game, summary: RecorderSummary) -> None:
+        import numpy as np
+        from scipy.stats import nbinom
+
+        stmt = (
+            select(OddsHistory.player_id, OddsHistory.market, OddsHistory.line)
+            .where(
+                OddsHistory.game_id == game.id,
+                OddsHistory.player_id.is_not(None),
+                OddsHistory.line.is_not(None),
+                OddsHistory.captured_at <= self.now,
+                OddsHistory.market.in_([
+                    MarketType.player_points,
+                    MarketType.player_rebounds,
+                    MarketType.player_assists,
+                    MarketType.player_pra,
+                ]),
+            )
+            .distinct()
+        )
+        prop_targets = self.session.execute(stmt).all()
+        if not prop_targets:
+            return
+
+        baselines = self._get_player_baselines()
+        for p_id, market, line in prop_targets:
+            if p_id not in baselines:
+                summary.skipped["no_baseline"] += 1
+                continue
+            b = baselines[p_id]
+            m_val = _enum_value(market)
+            if m_val == MarketType.player_points.value:
+                rate = b.pts_per_min
+            elif m_val == MarketType.player_rebounds.value:
+                rate = b.reb_per_min
+            elif m_val == MarketType.player_assists.value:
+                rate = b.ast_per_min
+            elif m_val == MarketType.player_pra.value:
+                rate = b.pts_per_min + b.reb_per_min + b.ast_per_min
+            else:
+                continue
+
+            if rate <= 0 or b.avg_minutes <= 0:
+                summary.skipped["no_baseline"] += 1
+                continue
+
+            projected_mean = b.avg_minutes * rate
+            alpha = max(0.02, b.overdispersion_alpha or 0.10)
+            r_param = 1.0 / alpha
+            p_param = 1.0 / (1.0 + alpha * projected_mean)
+            k = int(np.floor(float(line)))
+            cdf_k = float(nbinom.cdf(k, r_param, p_param))
+            p_push = float(nbinom.pmf(k, r_param, p_param)) if float(line) == k else 0.0
+            prob_over = max(0.0001, min(0.9999, float(1.0 - cdf_k)))
+            prob_under = max(0.0001, min(0.9999, float(cdf_k - p_push)))
+
+            self._store_props_shadow_prediction(
+                game, p_id, market, BetSide.over, line, prob_over, projected_mean, summary
+            )
+            self._store_props_shadow_prediction(
+                game, p_id, market, BetSide.under, line, prob_under, projected_mean, summary
+            )
+
+    def _store_props_shadow_prediction(
+        self,
+        game: Game,
+        player_id: int,
+        market: MarketType,
+        side: BetSide,
+        line: Optional[Decimal],
+        model_prob: float,
+        mu: float,
+        summary: RecorderSummary,
+    ) -> int:
+        norm_line = _line(line)
+        shadow_id = self._props_shadow.id if self._props_shadow is not None else None
+        market_val = _enum_value(market)
+        side_val = _enum_value(side)
+        key = (shadow_id, game.id, market_val, player_id, side_val, norm_line)
+        existing = self._prop_predictions.get(key)
+        if existing is not None:
+            summary.predictions_existing += 1
+            return existing
+
+        summary.predictions_written += 1
+        if self._dry_run:
+            pid = -len(self._prop_predictions) - 1
+            self._prop_predictions[key] = pid
+            return pid
+
+        row = ModelPrediction(
+            model_version_id=shadow_id,
+            game_id=game.id,
+            market=market,
+            player_id=player_id,
+            side=side,
+            line=line,
+            model_prob=Decimal(f"{model_prob:.5f}"),
+            projection=Decimal(f"{mu:.2f}"),
+        )
+        self.session.add(row)
+        self.session.flush()
+        self._prop_predictions[key] = row.id
         return row.id
