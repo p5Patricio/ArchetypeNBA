@@ -65,7 +65,7 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
         <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
           
           {/* Left: Mobile Toggle & Page Breadcrumb Title */}
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <button
               onClick={() => setIsMobileMenuOpen(true)}
               className="rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 md:hidden shadow-2xs"
@@ -74,7 +74,7 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
               <Menu className="h-5 w-5" />
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400 hidden sm:inline">
                 PANEL /
               </span>
@@ -85,7 +85,7 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
           </div>
 
           {/* Right Actions: Search Bar, Season Dropdown & Preference Toggles */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
             
             {/* Universal Search Bar Trigger */}
             <button
@@ -95,7 +95,7 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
             >
               <Search className="h-3.5 w-3.5 text-slate-400" />
               <span className="hidden sm:inline">{t("nav_search_placeholder")}</span>
-              <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.2 font-mono text-[10px] text-slate-500 shadow-xs">
+              <kbd className="hidden sm:inline rounded border border-slate-200 bg-white px-1.5 py-0.2 font-mono text-[10px] text-slate-500 shadow-xs">
                 ⌘K
               </kbd>
             </button>
@@ -170,7 +170,7 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
                   ? "Detener servicios de la plataforma (liberar puertos 38920/38921)"
                   : "Stop platform services (release ports 38920/38921)"
               }
-              className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50/70 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:border-rose-300 hover:bg-rose-100 shadow-2xs transition-all cursor-pointer group"
+              className="hidden md:flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50/70 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:border-rose-300 hover:bg-rose-100 shadow-2xs transition-all cursor-pointer group"
             >
               <Power className="h-3.5 w-3.5 text-rose-600 transition-transform group-hover:scale-110" />
               <span className="hidden xl:inline text-[11px]">
