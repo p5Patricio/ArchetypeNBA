@@ -45,7 +45,11 @@ export function ShutdownModal({ isOpen, onClose }: ShutdownModalProps) {
     setErrorMessage(null);
 
     try {
-      await shutdownServices();
+      const result = await shutdownServices();
+      if (result.status === "error") {
+        setErrorMessage(result.message);
+        return;
+      }
       setStopped(true);
     } catch (err: unknown) {
       // If server dies immediately, the connection drop might manifest as a network error,
