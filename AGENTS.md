@@ -10,14 +10,14 @@ Context for any AI coding agent (or human) picking this project up. **Snapshot d
 | Goal of (b) | A closed loop: capture odds → predict → paper-bet → settle → measure (CLV = price taken vs the **same book's** closing quote; model skill = Brier vs **Pinnacle's de-vigged close**) → compare candidate models in shadow → promote only when statistics say so. |
 | Stack | Python 3.12, FastAPI, SQLModel/SQLAlchemy 2, Alembic, PostgreSQL 18 (tests: in-memory SQLite), NumPy/pandas/scikit-learn, `nba_api`, The Odds API; Next.js 16 / React 19 / Tailwind 4 frontend. |
 | Repo | `github.com/p5Patricio/ArchetypeNBA` (`main` is the only long-lived branch; PRs #1–#19 merged as of this snapshot). |
-| Production | One Windows 11 PC runs a scheduled task every 15 minutes (`NBA-Odds-Tick`). **That PC executes the `main` checkout**, so unmerged code must never live there. |
+| Production | Since 2026-10-27 everything runs in **WSL2 Ubuntu** on the owner's Windows 11 PC: PostgreSQL 18 on port 5433, the web services on 38920/38921 and a systemd user timer (`nba-tick.timer`) that runs the tick every 15 minutes. **That checkout executes `main`**, so unmerged code must never live there. See [`docs/WSL.md`](docs/WSL.md). |
 | State | Pipeline live since the 2026-10-20 opener. Baseline Elo champion + one shadow challenger. Too little data to judge anything yet (see §9). |
 | Next task | Replace the broken injury scraper with a real free source of injuries/lineups and test it as a model signal (see §10). |
 
 First five commands on a fresh machine (details in [`docs/SETUP.md`](docs/SETUP.md)):
 
 ```bash
-cd backend && python -m pytest -q                         # 757 tests, all offline, ~2.5 min
+cd backend && python -m pytest tests -q                   # ~760 tests, all offline, ~2.5 min (NOT a bare `pytest`: it hangs in WSL, see docs/WSL.md)
 python scripts/run_tick.py --dry-run                      # what the scheduled tick would do (no network, no writes)
 python scripts/paper_report.py                            # performance, CLV, model skill, model league
 python scripts/model_league.py status                     # champion/challenger table
@@ -29,7 +29,7 @@ python -m alembic current                                 # must equal the head 
 1. **Paper trading only.** Never add code that places real bets, handles money or sportsbook accounts.
 2. **Free tiers only.** No paid APIs/services without the user's explicit approval. The Odds API Starter gives 500 credits/month; guard it (`--min-remaining 25`).
 3. **Never fabricate data.** Hardcoded "consensus" odds, default `-110` prices, sample injury reports etc. were all removed or must be removed; a missing value stays missing. A fallback that invents data is a bug.
-4. **No visible windows from background jobs.** Scheduled/background Python must run with **`pythonw.exe`** directly. `powershell -WindowStyle Hidden` or `python.exe` flash a console and steal focus (it interrupted the user's meetings and games). Verify with a process watch, not by eye.
+4. **No visible windows from background jobs.** (Native Windows only; in WSL systemd runs everything headless.) Scheduled/background Python must run with **`pythonw.exe`** directly. `powershell -WindowStyle Hidden` or `python.exe` flash a console and steal focus (it interrupted the user's meetings and games). Verify with a process watch, not by eye.
 5. **Secrets and data stay out of git.** `backend/.env`, database dumps, `logs/`, the Odds API key (httpx INFO logs print it; they are silenced), Telegram/Gemini tokens. Dumps are `*.dump` + `*.manifest.json` and git-ignored.
 6. **Tests are offline and deterministic.** No network, no real database, seeded randomness. SQLite in-memory for unit tests.
 7. **Production checkout discipline.** The machine that runs the tick executes whatever is checked out in its main working tree. Develop in a separate `git worktree`, merge to `main`, then pull. Schema changes follow the lockstep deploy in §7.
@@ -60,7 +60,8 @@ backend/
   scripts/             # CLIs: run_tick, paper_report, model_league, model_lab, backfill_elo, record_predictions, capture_odds_snapshot, bulk_ingest_nba, ...
   tests/               # pytest suite (offline); tests/synthetic_league.py generates fake leagues
 frontend/              # Next.js app (props page, shutdown modal, scouting modules); npm run dev | build | start
-scripts/               # Windows ops: register_tick_task.ps1, start_services.ps1, stop_services.ps1, setup_windows_autostart.ps1
+scripts/               # WSL ops: start_services_wsl.sh, stop_services_wsl.sh, backup_db_wsl.sh, systemd/ (tick + backup units), windows/NBAAnalyticsWSL.vbs (logon launcher)
+                       # Windows-only (previous setup): register_tick_task.ps1, start_services.ps1, stop_services.ps1, setup_windows_autostart.ps1
 odd/tasks/             # one markdown plan per feature (ODD workflow, see §7) — the best history of WHY things are as they are
 docs/                  # architecture, quant methodology, operations, setup, DB transfer, decisions, roadmap
 logs/                  # git-ignored runtime logs (tick.log rotating 2 MB x3, tick.lock)
@@ -71,8 +72,8 @@ Legacy at the repo root (`api.py`, `nba_data_processor.py`, `nba_player_analyzer
 ## 5. How the quant system works
 
 ```
-every 15 min (Windows Task Scheduler, only while the user is logged on)
-  pythonw.exe backend/scripts/run_tick.py
+every 15 min (systemd user timer nba-tick.timer in WSL; runs while the distro is alive, i.e. while the PC is on)
+  .venv/bin/python backend/scripts/run_tick.py   # on native Windows: Task Scheduler + pythonw.exe
     1 opening   once per LOCAL day: GET /odds (h2h, spreads, totals; 7 books incl. Pinnacle) → odds_history        3 credits
     2 closing   games tipping off within 30 min: GET /odds (+1 props event) → odds_history + closing marker       3–4 credits
     3 results   games started >3 h ago: nba_api PlayerGameLogs → player_game_log → game final → Elo update → settle bets → CLV
@@ -121,22 +122,23 @@ Rejected/not done: paid odds feeds (OpticOdds ~$5k/mo), scraping ESPN/OddsPortal
 - **Delegation.** Work was done by bounded "writer" agents with a precise brief and verified by a separate read-only "verifier" agent that tried to break the claims (it found real bugs several times: a season-selection regression, challenger failures aborting the champion, repeated-looks inflation, last-Elo-model stall). Keep doing independent verification for anything that touches money-like logic, promotion, or production scheduling.
 - **RDD review ritual (`gentle-ai review ...`).** On the original PC the CLI asks for consent per candidate; the user has declined every time. If it appears, relay the consent envelope to the user verbatim and never answer for them.
 - **Worktree development.** `git worktree add ../ArchetypeNBA-worktrees/<name> -b <branch> origin/main`. Run Python from the worktree's `backend/`; check `python -c "import app; print(app.__file__)"` resolves inside it. `backend/.env` is only in the main checkout; reading real data from a worktree needs the URL passed deliberately.
-- **Lockstep schema deploy** (production PC): `pg_dump` the affected tables (or use `scripts/db_transfer.py export`) → `Disable-ScheduledTask NBA-Odds-Tick` → merge → `git pull` → `alembic upgrade head` → dry runs (`run_tick.py --dry-run`, `paper_report.py`) → `Enable-ScheduledTask` → one real tick. New code cannot read an un-migrated schema and old code fails in its Elo write path after the migration.
+- **Lockstep schema deploy** (production PC): `pg_dump` the affected tables (or use `scripts/db_transfer.py export`) → pause the tick (`systemctl --user stop nba-tick.timer`; native Windows: `Disable-ScheduledTask NBA-Odds-Tick`) → merge → `git pull` → `alembic upgrade head` → dry runs (`run_tick.py --dry-run`, `paper_report.py`) → resume the tick (`systemctl --user start nba-tick.timer`) → one real tick. New code cannot read an un-migrated schema and old code fails in its Elo write path after the migration.
 - **Memory.** The original agent used Engram (local SQLite memory). It does **not** travel with the repo. Everything essential is in this file, `docs/` and `odd/tasks/`. A JSON export of the original memories may be handed over separately (`engram import <file>`).
 
 ## 8. Gotchas (each one cost time)
 
 - `backend/app/config.py` loads `backend/.env` with `override=True`: exporting `DATABASE_URL` in the shell does **not** redirect Alembic or the app. Tests/experiments that must not hit the real DB need an explicit guard.
-- Real DB on the original PC is a **native PostgreSQL 18.4** on 5432 (user `postgres`, DB `nba_platform`). `backend/docker-compose.yml` exists but is unused; its container conflicts with the native port.
+- The real DB is a **native PostgreSQL 18 cluster inside WSL on port 5433** (role `nba`, DB `nba_platform`, URL in the repo-root `.env`). WSL uses mirrored networking, so `localhost:5432` would reach a Windows server if one exists: always confirm `select version()` says `linux` before any write or `--replace`. Daily backups: `nba-backup.timer` -> `~/ArchetypeNBA-backups`. On the original Windows PC it was a native 18.4 on 5432 (user `postgres`). `backend/docker-compose.yml` exists but is unused; its container conflicts with the native port.
 - `Season.id` is not chronological (2023-24 is id 1). Order by `season_label`. A 2026-27 season row exists (inactive) so upcoming games resolve a season; `/api/v1/seasons` hides non-active seasons without player stats; never flip `is_active` casually (it drives the frontend default).
 - The `team` table has junk non-NBA rows (EST, WST, MAC, ...), historical abbreviations (NJN→BKN, NOH/NOK→NOP, SEA→OKC) and `full_name == abbreviation` rows. Elo only counts NBA game types `2,4,5,6` (3rd char of `game_id`): preseason `1` and all-star `3` are excluded; 12 neutral-site Cup/international games with two away rows are skipped.
 - Player names from the odds feed carry diacritics; matching normalizes both sides (`normalize_player_key`).
 - `odds_history` uniqueness uses `NULLS NOT DISTINCT` (PostgreSQL 15+); SQLite in tests emulates it in Python. `price_decimal`, `fair_decimal`, `clv_pct` are generated columns; `closing_price` must be positive.
 - Closing-line caveats: a book that dropped a market looks like "unchanged", so a stale quote can pass as the close; CLV coverage is low because books move lines (35% of bets as of 2026-10-26); 13 of 43 tipped-off games had no closing capture because the PC was off. These cannot be backfilled on free tiers.
 - The tick decides "today" with the **machine's local timezone** (opening once per local day, daily caps). Keep `America/Mexico_City` or accept the shift.
+- WSL specifics (mirrored networking, ports, bare-`pytest` hang, CORS origins, frontend API base baked at build time) are in [`docs/WSL.md`](docs/WSL.md) section 4.
 - Git on Windows prints LF→CRLF warnings (`core.autocrlf=true`); they are noise.
 - `nba_api` can be slow or block datacenter IPs; calls use 30–45 s timeouts. An empty `season_type` returns all game types in a window.
-- `scripts/start_services.ps1` starts the backend on **38921** and the frontend on **38920** (not 8000/3000). The backend process must be restarted to pick up code changes.
+- `scripts/start_services_wsl.sh` (WSL) and `scripts/start_services.ps1` (Windows) start the backend on **38921** and the frontend on **38920** (not 8000/3000). The backend process must be restarted to pick up code changes.
 - **Known fabrication / rule-3 violations still in the code**: `services/injury_scraper.py` (invented fallback injuries, see §10) and `analytics/props_engine.py::load_baselines_from_db` (opens a SQLite file that does not exist and falls back to hardcoded star baselines; its season weights key on the non-chronological `season.id`). The props page and `daily_runner.py` still use them.
 - **Credit guard gap**: `POST /api/v1/props/run-analysis` and `GET /api/v1/props/today?refresh=true` call The Odds API (up to 6 credits: 2 events × 3 markets) plus Gemini, *outside* the tick's `--min-remaining` guard. The props cache file is served without checking its age.
 - **Hardcoded interpreter paths**: `scripts/run_backend.bat` and `scripts/run_pipeline.bat` contain this PC's Python path. `scripts/register_tick_task.ps1` now discovers Python (`-PythonExe`, `backend/.venv`, `run_pipeline.bat` if the path exists, then PATH), but the `.bat` files still need editing on a new machine.
@@ -178,9 +180,9 @@ Other backlog (see [`docs/ROADMAP.md`](docs/ROADMAP.md)): totals and props model
 
 ## 11. Moving to a new PC (checklist)
 
-1. Old PC: pause the tick (`Disable-ScheduledTask NBA-Odds-Tick`), run `python backend/scripts/db_transfer.py export`, verify, copy the `.dump` + `.manifest.json` and `backend/.env` through a secure channel (never git/chat).
+1. Old PC: pause the tick (`systemctl --user stop nba-tick.timer` in WSL, `Disable-ScheduledTask NBA-Odds-Tick` on Windows), run `python backend/scripts/db_transfer.py export`, verify, copy the `.dump` + `.manifest.json` and `backend/.env` through a secure channel (never git/chat).
 2. New PC: install the same PostgreSQL major (18), clone the repo, create the venv, `pip install -r backend/requirements.txt`, `python backend/scripts/db_transfer.py import ...`, set `backend/.env`, run tests, `paper_report.py`.
-3. Register the tick on the new PC (Windows: `scripts/register_tick_task.ps1`; Linux/macOS: cron/systemd in `docs/OPERATIONS.md`) and **unregister it on the old PC** (`scripts/register_tick_task.ps1 -Unregister`): two machines capturing would double-spend the same API quota and fork the data.
+3. Register the tick on the new PC (WSL/Linux: `scripts/systemd/` units, see `docs/WSL.md`; Windows: `scripts/register_tick_task.ps1`; macOS: launchd in `docs/DB_TRANSFER.md`) and **unregister it on the old PC** (`scripts/register_tick_task.ps1 -Unregister`): two machines capturing would double-spend the same API quota and fork the data.
 
 Full runbook: [`docs/DB_TRANSFER.md`](docs/DB_TRANSFER.md), [`docs/SETUP.md`](docs/SETUP.md).
 

@@ -249,6 +249,7 @@ The quant system has no HTTP endpoints: it runs on a schedule and is read throug
 | [`docs/README.md`](docs/README.md) | Index of all documentation with reading orders |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Components, tick pipeline, data model, module map, configuration |
 | [`docs/QUANT_MODULE.md`](docs/QUANT_MODULE.md) | Methodology of the paper-trading system |
+| [`docs/WSL.md`](docs/WSL.md) | The WSL2 production setup: services, timers, backups, gotchas |
 | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | Runbook: scheduled task, credit budget, checks, deploys, troubleshooting |
 | [`docs/SETUP.md`](docs/SETUP.md) | Setup from scratch on any OS |
 | [`docs/DB_TRANSFER.md`](docs/DB_TRANSFER.md) | Move the database to another PC and take verified backups |

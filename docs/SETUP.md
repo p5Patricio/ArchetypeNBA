@@ -1,5 +1,7 @@
 # Setup from scratch
 
+> The reference installation runs in WSL2; its layout, services, timers and gotchas are in [`WSL.md`](WSL.md). This guide stays OS-neutral.
+
 How to get ArchetypeNBA running on a new machine, on any operating system: prerequisites, installation, configuration, the database (migrate and ingest, or restore a dump), tests, starting the services and registering the scheduled tick. The quant system needs only the backend and PostgreSQL; the frontend is optional for it. Commands were checked against the repository on 2026-10-26; what could not be run on a development machine is marked **unverified**.
 
 ## Quick path

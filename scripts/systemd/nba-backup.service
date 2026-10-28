@@ -1,0 +1,7 @@
+[Unit]
+Description=ArchetypeNBA database backup (export, verify, prune)
+
+[Service]
+Type=oneshot
+ExecStart=%h/proyectos/ArchetypeNBA/scripts/backup_db_wsl.sh
+TimeoutStartSec=900

@@ -1,0 +1,8 @@
+[Unit]
+Description=ArchetypeNBA odds and prediction tick
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/proyectos/ArchetypeNBA/backend
+ExecStart=%h/proyectos/ArchetypeNBA/.venv/bin/python scripts/run_tick.py
+TimeoutStartSec=600

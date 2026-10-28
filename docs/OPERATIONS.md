@@ -1,5 +1,7 @@
 # Operations runbook
 
+> **Current production setup is WSL2 (since 2026-10-27): see [`WSL.md`](WSL.md) for the systemd timers, commands and gotchas.** The PowerShell / Task Scheduler / `pythonw.exe` procedures below describe a native Windows install; section 7 holds the Linux equivalents that WSL uses.
+
 How to keep the paper-trading system running: the scheduled tick, the credit budget, the daily and weekly checks, schema deploys, manual controls, the web services and a troubleshooting table. Commands are shown for Windows PowerShell (the production setup) with Linux/macOS equivalents where they differ. Run them from the repository root unless a `cd` says otherwise. Facts were verified against the code on 2026-10-26; items that could not be checked from a development machine are marked **unverified**.
 
 ## Quick path
@@ -285,6 +287,8 @@ Pause with `sudo systemctl stop nba-tick.timer`, resume with `sudo systemctl sta
 Short form: pause and unregister on the old machine, export the database and `.env` through a secure channel (never git or chat), restore on the new machine, then register the tick there. The full procedure, with the cutover order, rollback and troubleshooting, is in [`DB_TRANSFER.md`](DB_TRANSFER.md); installation on the new machine is in [`SETUP.md`](SETUP.md). The scheduler examples in section 7 are system-wide; `DB_TRANSFER.md` (step 8) shows user-level variants (a systemd user timer with linger, a macOS launchd agent).
 
 ## 9. Backups
+
+In WSL a systemd timer does this daily (`nba-backup.timer` -> `scripts/backup_db_wsl.sh`: export, verify, keep the newest 7 in `~/ArchetypeNBA-backups`); copy that folder to an external drive now and then. The manual procedure below still applies.
 
 The database is the system's memory: odds that were not captured cannot be recovered on a free plan. Take an export every week; it is safe while the tick runs (a consistent snapshot):
 
