@@ -395,17 +395,27 @@ def _store_game_lines(
         summary.game_line_quotes += len(event_quotes)
         summary.game_lines = summary.game_lines.merge(result)
         game = games.get(event["id"])  # opening may target events whose teams/season did not resolve
-        if game is not None and record_capture(
-            session,
-            game.id,
-            kind,
-            now,
-            credits_spent=credits_left,
-            quotes_seen=len(event_quotes),
-            quotes_inserted=result.inserted,
-        ):
-            summary.markers_written += 1
-            credits_left = 0
+        if game is not None:
+            marker = record_capture(
+                session,
+                game.id,
+                kind,
+                now,
+                credits_spent=credits_left,
+                quotes_seen=len(event_quotes),
+                quotes_inserted=result.inserted,
+            )
+            if marker is not None:
+                summary.markers_written += 1
+                credits_left = 0
+            if kind == CAPTURE_CLOSING and event_quotes:
+                capture_id = marker.id if marker is not None else session.exec(
+                    select(OddsSnapshotCapture.id)
+                    .where(OddsSnapshotCapture.game_id == game.id)
+                    .where(OddsSnapshotCapture.kind == CAPTURE_CLOSING)
+                ).first()
+                if capture_id is not None:
+                    ingestion.ingest_capture_presence(capture_id, game.id, event_quotes)
 
 
 def format_summary(summary: SnapshotSummary) -> str:

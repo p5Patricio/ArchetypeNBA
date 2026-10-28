@@ -22,7 +22,17 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, select
 
 from app.analytics.props_engine import normalize_player_key
-from app.models import BetSide, Game, MarketType, OddsHistory, Player, Season, Sportsbook, Team
+from app.models import (
+    BetSide,
+    Game,
+    MarketType,
+    OddsCapturePresence,
+    OddsHistory,
+    Player,
+    Season,
+    Sportsbook,
+    Team,
+)
 from app.services.odds_api_service import GAME_LINE_MARKETS, MARKET_TO_STAT, GameQuote, OddsQuote
 
 logger = logging.getLogger(__name__)
@@ -440,4 +450,97 @@ class OddsIngestionService:
 
         self.session.commit()
         return result
+
+    def ingest_capture_presence(
+        self, capture_id: int, game_id: int, quotes: Iterable[GameQuote], *, commit: bool = False
+    ) -> int:
+        """
+        Records the (book, market, side, line) quotes present in a closing capture payload.
+        Bulk-inserted and idempotent: duplicate presence rows within the payload or from a re-ingest
+        are ignored.
+        """
+        rows: List[dict] = []
+        for q in quotes:
+            market = _GAME_MARKETS.get(q.market_key)
+            side = _SIDES.get(q.side)
+            if market is None or side is None:
+                continue
+            book = self.upsert_sportsbook(q.bookmaker_key, q.bookmaker_title)
+            line_val = None if q.line is None else Decimal(str(q.line)).quantize(Decimal("0.1"))
+            rows.append({
+                "capture_id": capture_id,
+                "game_id": game_id,
+                "sportsbook_id": book.id,
+                "market": market,
+                "side": side,
+                "line": line_val,
+            })
+        return self._insert_presence_rows(capture_id, rows, commit=commit)
+
+    def _insert_presence_rows(
+        self, capture_id: int, rows: List[dict], *, commit: bool = False
+    ) -> int:
+        if not rows:
+            return 0
+
+        deduped: Dict[tuple, dict] = {}
+        for r in rows:
+            m_val = r["market"].value if hasattr(r["market"], "value") else str(r["market"])
+            s_val = r["side"].value if hasattr(r["side"], "value") else str(r["side"])
+            key = (r["sportsbook_id"], m_val, s_val, r["line"])
+            if key not in deduped:
+                deduped[key] = r
+
+        dialect = self.session.get_bind().dialect.name
+        fresh: List[dict] = list(deduped.values())
+        if dialect != "postgresql":
+            # Without NULLS NOT DISTINCT SQLite treats NULL lines as distinct.
+            # Pre-filter against existing rows in the DB to emulate NULLS NOT DISTINCT.
+            table = OddsCapturePresence.__table__
+            stmt = sa_select(
+                table.c.sportsbook_id,
+                table.c.market,
+                table.c.side,
+                table.c.line,
+            ).where(table.c.capture_id == capture_id)
+            existing = set()
+            for book_id, market, side, line in self.session.execute(stmt):
+                m_val = market.value if hasattr(market, "value") else str(market)
+                s_val = side.value if hasattr(side, "value") else str(side)
+                line_val = None if line is None else Decimal(str(line)).quantize(Decimal("0.1"))
+                existing.add((book_id, m_val, s_val, line_val))
+            fresh = [
+                r for r in deduped.values()
+                if (
+                    r["sportsbook_id"],
+                    r["market"].value if hasattr(r["market"], "value") else str(r["market"]),
+                    r["side"].value if hasattr(r["side"], "value") else str(r["side"]),
+                    r["line"],
+                ) not in existing
+            ]
+
+        if not fresh:
+            return 0
+
+        table = OddsCapturePresence.__table__
+        make_insert = {"postgresql": pg_insert, "sqlite": sqlite_insert}.get(dialect, generic_insert)
+        inserted = 0
+        for start in range(0, len(fresh), self._CHUNK):
+            chunk = fresh[start : start + self._CHUNK]
+            stmt = make_insert(table).values(chunk)
+            if dialect in ("postgresql", "sqlite"):
+                stmt = stmt.on_conflict_do_nothing()
+            if dialect == "postgresql":
+                res = self.session.execute(stmt.returning(table.c.id)).all()
+                inserted += len(res)
+            else:
+                self.session.execute(stmt)
+                inserted += len(chunk)
+
+        if commit:
+            self.session.commit()
+        else:
+            self.session.flush()
+        return inserted
+
 
