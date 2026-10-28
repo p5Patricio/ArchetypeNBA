@@ -517,6 +517,14 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Consequences**: There is a gap in which nothing is captured; closing lines of games that tip off in it are lost for good, so the cutover is done in the morning, before the first tip-off. The old database stays untouched for a few days as a fallback.
 - **Source**: [`db-transfer.md`](../odd/tasks/db-transfer.md) (design decision 8); [`DB_TRANSFER.md`](DB_TRANSFER.md) sections 2, 4 and 5.
 
+### D-55 Everything runs in WSL2; systemd timers replace Task Scheduler
+- **Date**: 2026-10-27
+- **Decision**: The project moved from native Windows to WSL2 Ubuntu 24.04: native PostgreSQL 18 on port 5433, the tick as a systemd user timer (every 15 min, `Persistent=true`, linger on), a daily backup timer (`scripts/backup_db_wsl.sh`, 7 kept), the web services started by `scripts/start_services_wsl.sh`, and a Windows Startup stub (`NBAAnalyticsWSL.vbs`) that keeps the distro alive and opens the browser.
+- **Context**: The owner wanted the whole project in WSL. WSL does not start by itself at boot, so one Windows-side trigger is unavoidable; WSL uses mirrored networking, so Windows and WSL share `localhost` ports.
+- **Alternatives rejected**: Docker Postgres (rejected earlier, see section 6 of `AGENTS.md`); keeping the Windows tick; PostgreSQL on 5432 (a Windows server may hold that port under mirrored networking).
+- **Consequences**: The cutover followed D-54: tick paused, final export, verified restore (all 21 tables matched), WSL tick registered, Windows task removed; the gap was about five minutes, at night. The tick only runs while the distro is alive. The shutdown endpoint became cross-platform. A bare `pytest` hangs in this network mode, so the documented command is `python -m pytest tests -q`.
+- **Source**: [`WSL.md`](WSL.md); [`DB_TRANSFER.md`](DB_TRANSFER.md).
+
 ## Next step
 
 Planned work and the reasons behind it: [`ROADMAP.md`](ROADMAP.md).
