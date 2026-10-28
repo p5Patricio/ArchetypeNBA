@@ -22,7 +22,17 @@ class TelegramService:
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.bot_token and self.chat_id and "your_" not in self.bot_token)
+        return bool(
+            self.bot_token
+            and self.chat_id
+            and "your_" not in self.bot_token
+            and "your_" not in self.chat_id
+        )
+
+    def _mask_token(self, text: str) -> str:
+        if self.bot_token and self.bot_token in text:
+            return text.replace(self.bot_token, "***")
+        return text
 
     def _split_message(self, text: str, max_length: int = 4000) -> list[str]:
         """Splits text into chunks under Telegram's 4096 character limit."""
@@ -70,7 +80,8 @@ class TelegramService:
                     response = client.post(url, json=payload)
                     response.raise_for_status()
                 except Exception as e:
-                    logger.error(f"TelegramService: Failed to send message chunk: {e}")
+                    err_msg = self._mask_token(str(e))
+                    logger.error(f"TelegramService: Failed to send message chunk: {err_msg}")
                     # Try plain text fallback in case markdown parsing failed
                     try:
                         payload["parse_mode"] = None
@@ -79,6 +90,10 @@ class TelegramService:
                         success = False
 
         return success
+
+    def send_plain_text_sync(self, text: str) -> bool:
+        """Synchronously send a plain-text message without Markdown parsing."""
+        return self.send_message_sync(text, parse_mode=None)
 
     async def send_message_async(self, text: str, parse_mode: str = "Markdown") -> bool:
         """Asynchronously send a message to the configured Telegram chat."""
@@ -102,7 +117,8 @@ class TelegramService:
                     response = await client.post(url, json=payload)
                     response.raise_for_status()
                 except Exception as e:
-                    logger.error(f"TelegramService: Async send error: {e}")
+                    err_msg = self._mask_token(str(e))
+                    logger.error(f"TelegramService: Async send error: {err_msg}")
                     try:
                         payload["parse_mode"] = None
                         await client.post(url, json=payload)
