@@ -109,3 +109,25 @@ def test_the_paper_report_includes_the_league_section(league):
 def test_the_paper_report_still_works_with_an_empty_database(db_session):
     out = format_report(build_report(db_session, NOW))
     assert "No champion registered" in out and "No model registered" in out
+
+
+def test_shadow_and_benchmark_models_are_ignored_by_league_report(league):
+    from app.services.model_registry import ensure_market_benchmark, ensure_totals_shadow_model
+
+    win, margin, mu_champion, mu_challenger = simulate(10, 3, 6.0, 5.0)
+    league.populate(win, margin, mu_champion, mu_challenger, days=5)
+
+    before_league = build_league(league.session, NOW)
+    before_text = text(league)
+
+    # Register benchmark and shadow models
+    ensure_market_benchmark(league.session)
+    ensure_totals_shadow_model(league.session)
+    league.session.commit()
+
+    after_league = build_league(league.session, NOW)
+    after_text = text(league)
+
+    assert after_text == before_text
+    assert len(after_league.challengers) == len(before_league.challengers)
+    assert [c.model_id for c in after_league.challengers] == [c.model_id for c in before_league.challengers]

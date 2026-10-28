@@ -27,6 +27,7 @@ from app.models import (
     MODEL_ROLE_CHALLENGER,
     MODEL_ROLE_CHAMPION,
     MODEL_ROLE_RETIRED,
+    MODEL_ROLE_SHADOW,
     ModelVersion,
 )
 
@@ -36,6 +37,10 @@ BENCHMARK_FAMILY_NAME = "market_pinnacle"
 BENCHMARK_VERSION = "1"
 BENCHMARK_FAMILY = "market"
 BENCHMARK_NOTES = "Pinnacle's de-vigged probability, not a forecasting model"
+TOTALS_SHADOW_FAMILY_NAME = "totals_pace"
+TOTALS_SHADOW_VERSION = "1"
+TOTALS_SHADOW_FAMILY = "totals"
+TOTALS_SHADOW_NOTES = "Pace-based rolling totals shadow model, not a bettor"
 
 
 class ModelRegistryError(RuntimeError):
@@ -188,6 +193,35 @@ def ensure_market_benchmark(session: Session) -> ModelVersion:
             params={"family": BENCHMARK_FAMILY},
             role=MODEL_ROLE_BENCHMARK,
             notes=BENCHMARK_NOTES,
+        )
+        session.add(row)
+        session.flush()
+    return row
+
+
+def get_totals_shadow_model(session: Session) -> Optional[ModelVersion]:
+    """The shadow totals model version (role='shadow'), or None."""
+    return session.execute(
+        select(ModelVersion).where(
+            ModelVersion.name == TOTALS_SHADOW_FAMILY_NAME,
+            ModelVersion.version == TOTALS_SHADOW_VERSION,
+        )
+    ).scalar_one_or_none()
+
+
+def ensure_totals_shadow_model(session: Session) -> ModelVersion:
+    """
+    Get or create the shadow totals model version (role='shadow').
+    Flushes, never commits: the caller owns the transaction.
+    """
+    row = get_totals_shadow_model(session)
+    if row is None:
+        row = ModelVersion(
+            name=TOTALS_SHADOW_FAMILY_NAME,
+            version=TOTALS_SHADOW_VERSION,
+            params={"family": TOTALS_SHADOW_FAMILY, "window": 10, "prior_weight": 5.0},
+            role=MODEL_ROLE_SHADOW,
+            notes=TOTALS_SHADOW_NOTES,
         )
         session.add(row)
         session.flush()
