@@ -31,18 +31,18 @@ Free sources only. No real-money features. No paid APIs. Automated download of N
 
 ## Tasks
 Wave A (backend, parallel):
-- [ ] WP1 Pinnacle-referenced CLV, clustered per game, in `paper_report` plus a read-only `GET /api/v1/paper/*` API; totals/props audit script (research items 1 and 7) - delegated.
-- [ ] WP2 Staking and benchmark arm: `kelly_shrunk` and `market_edge` strategies (enum migration, recorder, settlement, report) (items 2 and 3) - delegated, lockstep deploy.
-- [ ] WP3 League API (`GET /api/v1/league`, cached) and promotion notifications over Telegram (ROADMAP 3 backend, 4) - delegated.
-- [ ] WP4 Data honesty: remove the fabricated injury fallback, explicit "unavailable", terms-gated PDF parser, lineup logger for `nba_api` live boxscore (items 5 and 6) - delegated.
-- [ ] WP5 Quality and safety: CI workflow, `testpaths`, shutdown origin/host check (ROADMAP 5, 9) - delegated.
-- [ ] WP6 Correctness: postponed-game polling, `props_engine` baselines from the database, props credit guard and cache freshness (ROADMAP 7, 11, hygiene) - delegated.
-- [ ] WP10 Multiple-comparison control in the candidate lab (item 4) - delegated.
+- [x] WP1 Pinnacle-referenced CLV, clustered per game, in `paper_report` plus a read-only `GET /api/v1/paper/*` API; totals/props audit script (research items 1 and 7) - delegated.
+- [x] WP2 Staking and benchmark arm: `kelly_shrunk` and `market_edge` strategies (enum migration, recorder, settlement, report) (items 2 and 3) - delegated, lockstep deploy.
+- [x] WP3 League API (`GET /api/v1/league`, cached) and promotion notifications over Telegram (ROADMAP 3 backend, 4) - delegated.
+- [x] WP4 Data honesty: remove the fabricated injury fallback, explicit "unavailable", terms-gated PDF parser, lineup logger for `nba_api` live boxscore (items 5 and 6) - delegated.
+- [x] WP5 Quality and safety: CI workflow, `testpaths`, shutdown origin/host check (ROADMAP 5, 9) - delegated.
+- [x] WP6 Correctness: postponed-game polling, `props_engine` baselines from the database, props credit guard and cache freshness (ROADMAP 7, 11, hygiene) - delegated.
+- [x] WP10 Multiple-comparison control in the candidate lab (item 4) - delegated.
 
 Wave B (frontend, after the APIs merge):
-- [ ] WP7 Model league page.
-- [ ] WP8 Paper-trading dashboard (KPIs, bankroll, CLV vs Pinnacle, bets table with filters).
-- [ ] WP9 Props page UX and design pass (states, mobile, accessibility, data freshness, credit usage).
+- [x] WP7 Model league page.
+- [x] WP8 Paper-trading dashboard (KPIs, bankroll, CLV vs Pinnacle, bets table with filters).
+- [x] WP9 Props page UX and design pass (states, mobile, accessibility, data freshness, credit usage).
 
 Wave C:
 - [ ] WP11 Docs, ROADMAP and decisions updated; final verification and a production deploy.
@@ -54,10 +54,16 @@ Wave C:
 - The tick keeps running (exit code 0) through every merge and the lockstep deploy.
 
 ## Checks
-Pending.
+- Backend suite on the integrated branch: 843 passed, 4 skipped (baseline 755 + 88 new), run by Claude, not taken from the agents' reports.
+- `tsc --noEmit` clean; `next build --webpack` succeeds (Turbopack refuses the shared `node_modules` symlink of the worktrees); eslint clean on the new files (30 pre-existing errors elsewhere untouched).
+- Migration `e3f8b1a4c9d2` applied to a throwaway copy of the production database (`nba_staging`): enum shows flat, kelly_fractional, kelly_shrunk, market_edge.
+- Pinnacle CLV recomputed independently with SQL: 21 of 21 h2h games within 0.0002 log units of the service.
+- New API endpoints (`/paper/*`, `/league`) answered with real data from the copy; `POST /system/shutdown` without Origin returns 403.
+- UI: `/paper`, `/league`, `/props` captured in headless Edge at desktop and with DevTools mobile emulation at 390 px; the top bar overflowed on every page (pre-existing) and was fixed (document width 390 on all three).
+- Not exercised on real quotes: the recorder with the two new strategies (it only reads scheduled games, so a replay is impossible); first real use is the first tick after deployment.
 
 ## Progress
-2026-10-28: plan created from the research report; worktrees prepared.
+2026-10-28: plan created from the research report; worktrees prepared. Wave A (WP1-WP6, WP10) and Wave B (WP7-WP9) written by Antigravity agents on Gemini 3.8 Flash (High), merged locally into `integration/betting`, verified by Claude. Navbar mobile fix added. Pull requests and deployment wait for the owner's approval to merge.
 
 ## Follow-ups (out of scope)
 - Totals and props models (measure first with the audit script from WP1).
@@ -65,4 +71,4 @@ Pending.
 - Second odds feed (ROADMAP 8) and closing-quote presence (ROADMAP 6) need terms and schema work; revisit after WP1 results.
 
 ## Next step
-Merge this plan, then launch Wave A.
+Open the pull requests, get the owner's approval to merge, then deploy in lockstep (pause the tick, backup, pull, `alembic upgrade head`, dry runs, resume, one real tick) and check the first tick with the two new strategies.

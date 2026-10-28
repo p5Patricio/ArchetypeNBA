@@ -56,6 +56,12 @@ The injury-report PDFs are the best free source, and the page carries "No portio
 | NBA terms "explicitly prohibit scraping" | **Not supported** by the text retrieved (see section 4) |
 | `nba_api` "starters populate ~30 minutes before tip-off" and ESPN / Rotowire / Basketball-Reference access rules | **Unverified** (the docs do not state the timing; the other terms pages were not read) |
 
+## 5b. Follow-up measurements (2026-10-28)
+
+- **Pinnacle-referenced CLV, first real reading** (database copy of 2026-10-28, 23 games with a comparable close): mean +0.34%, standard error 1.27%, t 0.27, observed sd 6.11%; about 231 independent bets are needed to detect +1%. The same-book figure over 40 bets was +4.10%, so the optimism warned about in section 1 is real. The h2h part was recomputed independently with SQL (21 games, maximum difference 0.0002 in log units).
+- **Closing totals** (39 settled games): mean error (final total minus closing total) -5.05 points, sd 17.69; far too few games to say anything about bias, but the sd is the scale any totals model has to beat.
+- **`balldontlie` injuries are not free**: its API page lists `GET /v1/player_injuries` for the ALL-STAR and GOAT tiers only and `GET /v1/lineups` for GOAT only, with starters available only once the game begins. The free tier cannot supply either, so the only free injury source remains the NBA PDFs (owner decision pending).
+
 ## 6. Suggested order
 
 1. Item 1 (Pinnacle CLV with clustering) and item 3 groundwork: no external dependency, makes every later result readable.
