@@ -64,23 +64,27 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 ## 2. Totals and props models, with settlement
 
-**Status**: Totals implemented (WP-T: settlement, same-book and Pinnacle CLV, reporting, and model-free `market_edge` paper bets); props models deliberately deferred.
+**Status**: Totals implemented (WP-T: settlement, same-book and Pinnacle CLV, reporting, and model-free `market_edge` paper bets; WP-S1: shadow totals forecasting model `totals_pace` with leak-free pace/efficiency estimation and closed-loop evaluation against Pinnacle's close); props handled in a separate package.
 
 **Why.** The 3-credit game-lines call already captures totals for every game, and one player-props event per closing run is stored. Research on closing totals lines revealed a forecast error standard deviation of ~17.7 points over 39 games (`scripts/market_audit.py`) with no verified evidence of an edge for statistical scoring models. Consequently, totals are handled through:
 - Complete settlement in `settlement.grade_bet` (over wins when total > line, under when total < line, push on equal).
 - Same-book and Pinnacle-referenced CLV at the exact matching total line.
 - Paper betting strictly via the model-free `market_edge` arm against Pinnacle de-vigged over/under lines (champion models and model-driven strategies never bet totals).
+- A pure statistical shadow totals forecasting model (`totals_pace` v1, role `'shadow'`, `analytics/totals_model.py`) recording leak-free pace/efficiency predictions at Pinnacle's lines without betting.
+- Closed-loop evaluation against Pinnacle's de-vigged closing line in `market_audit.py` and `paper_report.py` (Brier, log loss, paired bootstrap intervals, error mean and sd; "insufficient data" under n < 30).
 - Reporting in `paper_report` with per-market breakdowns (`h2h`, `spreads`, `totals`) and `/paper` bets table display in Spanish and English.
 
-Props models are deliberately deferred: player prop bets are not recorded anywhere in paper trading, and capturing one event per tick produces far too small and noisy of a sample to justify model development or paper trading.
+Props models are handled in a separate package: player prop bets are not recorded anywhere in paper trading, and capturing one event per tick produces far too small and noisy of a sample to justify model development or paper trading without dedicated data work.
 
 **Acceptance criteria.**
 
 - [x] `settlement.grade_bet` handles `totals` (over and under, with pushes on integer lines); CLV works for it; the paper report shows it.
 - [x] Pinnacle-referenced CLV supports totals (`_devig_totals` at matching line).
 - [x] Totals considered and paper-bet exclusively by the `market_edge` benchmark arm against Pinnacle de-vigged quotes, attached to benchmark model `market_pinnacle` (role `benchmark`); zero pollution of the model league or champion attribution.
+- [x] Pure shadow totals model (`totals_pace` v1, role `shadow`) records predictions at Pinnacle lines with zero betting and zero league pollution (WP-S1).
+- [x] Closed-loop evaluation of shadow totals against Pinnacle close in `market_audit.py` and `paper_report.py` with bootstrap 95% intervals and n < 30 guard.
 - [x] Per-market breakdown in `paper_report` and `/paper` bets table UI localized.
-- [ ] Props models and props grading (deferred: insufficient sample size at 1 event/tick).
+- [ ] Props models and props grading (handled in a separate package).
 
 ## 3. Frontend model-league page
 
@@ -249,7 +253,7 @@ Small items found while documenting (2026-10-26). Each is a few lines.
 | Hardcoded player filter in props | `_compute_today_props` analyses only 8 named star players; it limits credit use but is static data standing in for a rule |
 | Backend strings in English on Spanish pages | The league gate sentence and audit reason come from the backend untranslated |
 | `balldontlie` is not a free source of injuries | Injuries need the ALL-STAR tier ($9.99/month), lineups the GOAT tier; free tier is 5 requests/minute with basic data |
-| Items still open | 2 (totals and props models: measure first with `scripts/market_audit.py`), 8 (second odds feed, terms), 10 (legacy cleanup) |
+| Items still open | 2 (shadow totals model built; props handled in a separate package), 8 (second odds feed, terms), 10 (legacy cleanup) |
 
 ## Next step
 
