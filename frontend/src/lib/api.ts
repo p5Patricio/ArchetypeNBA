@@ -1227,6 +1227,11 @@ export interface TodayPropsResponse {
   total_props: number;
   value_picks_count: number;
   items: PropItem[];
+  baselines_available?: boolean;
+  stale?: boolean;
+  generated_at?: string;
+  age?: string;
+  age_seconds?: number;
 }
 
 export async function getTodayProps(params?: {

@@ -3,13 +3,13 @@ import json
 import logging
 from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.config import settings
 from app.services.injury_scraper import InjuryScraperService
 from app.services.gemini_analyzer import GeminiAnalyzerService
-from app.services.odds_api_service import OddsApiService
+from app.services.odds_api_service import InsufficientQuotaError, OddsApiService
 from app.services.telegram_service import TelegramService
 from app.analytics.props_engine import (
     PropsEngine,
@@ -71,6 +71,52 @@ class TodayPropsResponse(BaseModel):
     total_props: int
     value_picks_count: int
     items: List[PropItemResponse]
+    baselines_available: bool = True
+    stale: bool = False
+    generated_at: Optional[str] = None
+    age: Optional[str] = None
+    age_seconds: Optional[int] = None
+
+
+def _format_age(seconds: int) -> str:
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m"
+    hours = minutes // 60
+    rem_min = minutes % 60
+    if hours < 24:
+        return f"{hours}h {rem_min}m"
+    days = hours // 24
+    rem_hours = hours % 24
+    return f"{days}d {rem_hours}h"
+
+
+def _apply_freshness(response: TodayPropsResponse) -> TodayPropsResponse:
+    """Checks whether the response was generated on today's local date; computes its age."""
+    now_local = datetime.now().astimezone()
+    today_local = now_local.strftime("%Y-%m-%d")
+    now_utc = datetime.now(timezone.utc)
+
+    if response.generated_at:
+        try:
+            gen_dt = datetime.fromisoformat(response.generated_at)
+            if gen_dt.tzinfo is None:
+                gen_dt = gen_dt.replace(tzinfo=timezone.utc)
+            gen_local_date = gen_dt.astimezone().strftime("%Y-%m-%d")
+            age_sec = max(0, int((now_utc - gen_dt.astimezone(timezone.utc)).total_seconds()))
+        except Exception:
+            gen_local_date = response.date
+            age_sec = 0
+    else:
+        gen_local_date = response.date
+        age_sec = 0
+
+    response.stale = (gen_local_date != today_local)
+    response.age_seconds = age_sec
+    response.age = _format_age(age_sec)
+    return response
 
 
 def _save_cache_to_file(response: TodayPropsResponse) -> None:
@@ -88,7 +134,7 @@ def _load_cache_from_file() -> Optional[TodayPropsResponse]:
     try:
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return TodayPropsResponse(**data)
+            return _apply_freshness(TodayPropsResponse(**data))
     except Exception as e:
         logger.warning(f"Could not read props cache from {CACHE_FILE}: {e}")
         return None
@@ -172,22 +218,19 @@ def _compute_today_props() -> TodayPropsResponse:
     modifier_map = {m.player_name.lower(): m for m in analysis.modifiers}
 
     # 3. Retrieve live sportsbook lines via The Odds API
+    from app.services.odds_snapshot import DEFAULT_MIN_REMAINING
     odds_service = OddsApiService()
-    props_map = index_props_by_player(odds_service.get_slate_props_map())
+    props_map = index_props_by_player(odds_service.get_slate_props_map(min_remaining=DEFAULT_MIN_REMAINING))
 
     # 4. Quantitative simulations with PropsEngine
     engine = PropsEngine(simulation_runs=settings.PROPS_SIMULATION_RUNS)
-    backend_dir = Path(__file__).resolve().parents[3]
-    db_file = backend_dir / "nba_platform.db"
-
-    all_baselines = engine.load_baselines_from_db(db_path=db_file)
+    all_baselines = engine.load_baselines_from_db()
     target_names = {
         "luka doncic", "nikola jokic", "giannis antetokounmpo", "lebron james",
         "anthony davis", "kyrie irving", "stephen curry", "jayson tatum"
     }
-    baselines = [b for b in all_baselines if b.name.lower() in target_names]
-    if not baselines:
-        baselines = engine.get_standard_star_baselines()
+    baselines = [b for b in all_baselines if b.name.lower() in target_names] if all_baselines else []
+    baselines_available = bool(baselines)
 
     items: List[PropItemResponse] = []
     value_count = 0
@@ -251,6 +294,11 @@ def _compute_today_props() -> TodayPropsResponse:
     ai_label = model_label if analysis.engine_source == "GEMINI" else "Modo Heurístico Local"
     odds_label = ODDS_SOURCE_LIVE if odds_service.last_fetch_live else ODDS_SOURCE_NO_LIVE
 
+    now_utc = datetime.now(timezone.utc)
+    now_local = datetime.now().astimezone()
+    today_str = now_local.strftime("%Y-%m-%d")
+    gen_at_str = now_utc.isoformat()
+
     resp = TodayPropsResponse(
         date=today_str,
         ai_engine=ai_label,
@@ -259,6 +307,11 @@ def _compute_today_props() -> TodayPropsResponse:
         total_props=len(items),
         value_picks_count=value_count,
         items=items,
+        baselines_available=baselines_available,
+        stale=False,
+        generated_at=gen_at_str,
+        age="0s",
+        age_seconds=0,
     )
 
     # Persist to disk cache
@@ -279,7 +332,10 @@ def get_today_props(
     now = datetime.now(timezone.utc).timestamp()
 
     if refresh:
-        _cached_response = _compute_today_props()
+        try:
+            _cached_response = _compute_today_props()
+        except InsufficientQuotaError as exc:
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc))
         _last_computed_time = now
     elif _cached_response is None:
         _cached_response = _load_cache_from_file()
@@ -288,7 +344,7 @@ def get_today_props(
 
     if _cached_response is None:
         # Idle state: do not automatically consume quota until the user clicks the action button
-        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today_str = datetime.now().astimezone().strftime("%Y-%m-%d")
         return TodayPropsResponse(
             date=today_str,
             ai_engine="Gemini 3.6 Flash (En Pausa)",
@@ -297,9 +353,14 @@ def get_today_props(
             total_props=0,
             value_picks_count=0,
             items=[],
+            baselines_available=True,
+            stale=False,
+            generated_at=None,
+            age=None,
+            age_seconds=None,
         )
 
-    response_data = _cached_response
+    response_data = _apply_freshness(_cached_response)
 
     # Apply filters
     filtered_items = response_data.items
@@ -316,6 +377,11 @@ def get_today_props(
         total_props=len(filtered_items),
         value_picks_count=sum(1 for i in filtered_items if i.edge_pct > 0 and "PASS" not in i.recommendation),
         items=filtered_items,
+        baselines_available=response_data.baselines_available,
+        stale=response_data.stale,
+        generated_at=response_data.generated_at,
+        age=response_data.age,
+        age_seconds=response_data.age_seconds,
     )
 
 
@@ -328,7 +394,10 @@ def run_props_analysis(
     Consumes Gemini API & The Odds API only when requested by the user.
     """
     global _cached_response, _last_computed_time
-    _cached_response = _compute_today_props()
+    try:
+        _cached_response = _compute_today_props()
+    except InsufficientQuotaError as exc:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc))
     _last_computed_time = datetime.now(timezone.utc).timestamp()
 
     if send_telegram:

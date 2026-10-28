@@ -34,6 +34,10 @@ DEFAULT_BOOKMAKERS = (
 MAX_BOOKMAKERS_PER_CALL = 10  # The Odds API bills one "region" per group of 10 bookmakers
 
 
+class InsufficientQuotaError(Exception):
+    """Raised when an operation would breach the minimum remaining API credits floor."""
+
+
 @dataclass(frozen=True)
 class GameQuote:
     """A single price offered by one bookmaker for one side of one game market (moneyline, spread, total)."""
@@ -351,10 +355,11 @@ class OddsApiService:
         self.last_call_ok = True
         return quotes
 
-    def get_slate_props_map(self) -> Dict[str, Dict[str, PropBetLine]]:
+    def get_slate_props_map(self, min_remaining: Optional[int] = None) -> Dict[str, Dict[str, PropBetLine]]:
         """
         Consolidates live player props for the slate into one line per player/stat (see select_best_lines).
         Returns an empty dict when no key is configured or no book has posted lines; never invents lines.
+        Respects the minimum remaining credits floor (DEFAULT_MIN_REMAINING).
         `last_fetch_live` tells callers whether the result came from live market data.
         """
         self.last_fetch_live = False
@@ -363,9 +368,22 @@ class OddsApiService:
             logger.warning("OddsApiService: API key not configured; no live lines available.")
             return {}
 
+        events = self.fetch_upcoming_events()[:2]
+        if not events:
+            return {}
+
+        if min_remaining is not None:
+            from app.services.odds_snapshot import credit_guard
+
+            cost = len(events) * len(MARKET_TO_STAT)
+            allowed, reason = credit_guard(self.requests_remaining, cost, min_remaining)
+            if not allowed:
+                logger.warning(f"OddsApiService: Credit guard refused props fetch: {reason}")
+                raise InsufficientQuotaError(f"Credit guard refused props fetch: {reason}")
+
         quotes: List[OddsQuote] = []
         # Only query up to 2 events to conserve monthly quota (500 requests/mo limit)
-        for event in self.fetch_upcoming_events()[:2]:
+        for event in events:
             event_id = event.get("id")
             if event_id:
                 quotes.extend(self.fetch_event_prop_quotes(event_id))
