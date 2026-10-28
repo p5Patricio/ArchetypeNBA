@@ -175,20 +175,20 @@ def run_pipeline(dry_run: bool = False) -> bool:
 
     # 3. Retrieve live sportsbook lines via The Odds API
     logger.info("Step 3: Fetching sportsbook lines via The Odds API...")
+    from app.services.odds_snapshot import DEFAULT_MIN_REMAINING
     odds_service = OddsApiService()
-    props_map = odds_service.get_slate_props_map()
+    props_map = odds_service.get_slate_props_map(min_remaining=DEFAULT_MIN_REMAINING)
 
     # 4. Quantitative simulations with PropsEngine
     logger.info("Step 4: Running Negative Binomial + Monte Carlo prop models...")
     engine = PropsEngine(simulation_runs=settings.PROPS_SIMULATION_RUNS)
     
-    # Load dynamic multi-season recency-weighted baselines from database (2025-26 latest teams)
-    db_file = backend_dir / "nba_platform.db"
-    all_baselines = engine.load_baselines_from_db(db_path=db_file)
+    # Load dynamic multi-season recency-weighted baselines from database
+    all_baselines = engine.load_baselines_from_db()
     target_names = {"luka doncic", "nikola jokic", "giannis antetokounmpo", "lebron james", "anthony davis", "kyrie irving", "stephen curry", "jayson tatum"}
-    baselines = [b for b in all_baselines if b.name.lower() in target_names]
+    baselines = [b for b in all_baselines if b.name.lower() in target_names] if all_baselines else []
     if not baselines:
-        baselines = engine.get_standard_star_baselines()
+        logger.warning("PropsEngine: No baselines available in database for target players.")
 
     results = evaluate_players(engine, baselines, props_map, modifier_map)
 

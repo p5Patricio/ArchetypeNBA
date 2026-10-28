@@ -2,7 +2,7 @@ import logging
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 import numpy as np
 from scipy.stats import nbinom
 from pydantic import BaseModel
@@ -361,118 +361,149 @@ class PropsEngine:
 
     def load_baselines_from_db(
         self,
-        db_path=None,
+        session: Optional[Any] = None,
         min_minutes: float = 200.0,
-        season_weights: Optional[Dict[int, float]] = None,
+        season_weights: Optional[Dict[str, float]] = None,
+        *,
+        db_path: Any = None,
     ) -> List[PlayerBaseline]:
         """
-        Dynamically loads player baselines from SQLite multi-season data.
-        1. Identifies the player's CURRENT team from their latest recorded season.
-        2. Computes recency-weighted multi-season production rates (PTS/min, REB/min, AST/min).
+        Dynamically loads player baselines from multi-season data in the platform database.
+        1. Identifies the player's CURRENT team from their latest recorded season (by season_label).
+        2. Computes recency-weighted multi-season production rates (PTS/min, REB/min, AST/min),
+           ordering seasons chronologically by season_label (not non-chronological season.id).
+        3. Never invents static fallback data when the database is empty or inaccessible.
         """
-        import sqlite3
-        from pathlib import Path
+        # Backwards compatibility: if a path/string was passed as the first positional argument
+        if session is not None and not hasattr(session, "execute"):
+            db_path = session
+            session = None
 
-        if db_path is None:
-            db_path = Path(__file__).resolve().parent.parent.parent / "nba_platform.db"
-        else:
-            db_path = Path(db_path)
+        if session is None:
+            try:
+                from app.deps import get_db_context
+                with get_db_context() as sess:
+                    return self.load_baselines_from_db(
+                        session=sess,
+                        min_minutes=min_minutes,
+                        season_weights=season_weights,
+                    )
+            except Exception as e:
+                logger.warning(f"PropsEngine: Error obtaining database session: {e}. Returning empty baselines.")
+                return []
 
-        if not db_path.exists():
-            logger.warning(f"PropsEngine: Database {db_path} not found. Falling back to static stars.")
-            return self.get_standard_star_baselines()
-
-        if season_weights is None:
-            # 50% for 2025-26 (id=3), 30% for 2024-25 (id=2), 20% for 2023-24 (id=1)
-            season_weights = {3: 0.50, 2: 0.30, 1: 0.20}
+        from sqlmodel import select
+        from app.models import Player, PlayerSeasonStats, Season, Team
 
         try:
-            conn = sqlite3.connect(db_path)
-            cur = conn.cursor()
-
-            query = """
-            SELECT ps.player_id, p.full_name, t.full_name, t.abbreviation,
-                   ps.season_id, ps.gp, ps.min, ps.pts, ps.reb, ps.ast
-            FROM player_season_stats ps
-            JOIN player p ON ps.player_id = p.id
-            JOIN team t ON ps.team_id = t.id
-            WHERE t.abbreviation != 'TOT'
-            ORDER BY ps.player_id, ps.season_id ASC
-            """
-            rows = cur.execute(query).fetchall()
-            conn.close()
-
-            player_records: Dict[int, Dict] = {}
-            for r in rows:
-                p_id, full_name, team_full, team_abbr, s_id, gp, minutes, pts, reb, ast = r
-                norm_name = self.normalize_name(full_name)
-
-                if p_id not in player_records:
-                    player_records[p_id] = {
-                        "name": norm_name,
-                        "latest_season": s_id,
-                        "current_team": team_full,
-                        "current_team_abbr": team_abbr,
-                        "seasons": [],
-                    }
-
-                if s_id >= player_records[p_id]["latest_season"]:
-                    player_records[p_id]["latest_season"] = s_id
-                    player_records[p_id]["current_team"] = team_full
-                    player_records[p_id]["current_team_abbr"] = team_abbr
-
-                player_records[p_id]["seasons"].append({
-                    "season_id": s_id,
-                    "gp": gp or 0,
-                    "min": minutes or 0.0,
-                    "pts": pts or 0.0,
-                    "reb": reb or 0.0,
-                    "ast": ast or 0.0,
-                })
-
-            baselines: List[PlayerBaseline] = []
-            for p_id, data in player_records.items():
-                total_weighted_mins = 0.0
-                total_weighted_pts = 0.0
-                total_weighted_reb = 0.0
-                total_weighted_ast = 0.0
-                total_raw_mins = 0.0
-                total_raw_gp = 0
-
-                for s in data["seasons"]:
-                    w = season_weights.get(s["season_id"], 0.20)
-                    m = s["min"]
-                    total_raw_mins += m
-                    total_raw_gp += s["gp"]
-                    total_weighted_mins += m * w
-                    total_weighted_pts += s["pts"] * w
-                    total_weighted_reb += s["reb"] * w
-                    total_weighted_ast += s["ast"] * w
-
-                if total_raw_mins < min_minutes or total_weighted_mins <= 0:
-                    continue
-
-                avg_min = total_raw_mins / max(1, total_raw_gp)
-                pts_pm = total_weighted_pts / total_weighted_mins
-                reb_pm = total_weighted_reb / total_weighted_mins
-                ast_pm = total_weighted_ast / total_weighted_mins
-
-                baselines.append(
-                    PlayerBaseline(
-                        player_id=p_id,
-                        name=data["name"],
-                        team=data["current_team"],
-                        avg_minutes=round(avg_min, 1),
-                        pts_per_min=round(pts_pm, 3),
-                        reb_per_min=round(reb_pm, 3),
-                        ast_per_min=round(ast_pm, 3),
-                        overdispersion_alpha=0.10,
-                    )
+            stmt = (
+                select(
+                    PlayerSeasonStats.player_id,
+                    Player.full_name,
+                    Team.full_name,
+                    Team.abbreviation,
+                    Season.season_label,
+                    PlayerSeasonStats.gp,
+                    PlayerSeasonStats.min,
+                    PlayerSeasonStats.pts,
+                    PlayerSeasonStats.reb,
+                    PlayerSeasonStats.ast,
                 )
-
-            logger.info(f"PropsEngine: Loaded {len(baselines)} multi-season player baselines from DB.")
-            return baselines
-
+                .join(Player, PlayerSeasonStats.player_id == Player.id)
+                .join(Team, PlayerSeasonStats.team_id == Team.id)
+                .join(Season, PlayerSeasonStats.season_id == Season.id)
+                .where(Team.abbreviation != "TOT")
+                .order_by(PlayerSeasonStats.player_id, Season.season_label.asc())
+            )
+            rows = session.execute(stmt).all()
         except Exception as e:
-            logger.error(f"PropsEngine: Error loading from database: {e}. Falling back to default stars.")
-            return self.get_standard_star_baselines()
+            logger.error(f"PropsEngine: Error loading from database: {e}.")
+            return []
+
+        if not rows:
+            logger.info("PropsEngine: No player season stats found in database.")
+            return []
+
+        all_labels = sorted({str(r[4]) for r in rows if r[4]})
+        weights: Dict[str, float] = {}
+        if season_weights:
+            for k, w in season_weights.items():
+                weights[str(k)] = float(w)
+        else:
+            recency_schedule = [0.50, 0.30, 0.20]
+            for idx, label in enumerate(reversed(all_labels)):
+                if idx < len(recency_schedule):
+                    weights[label] = recency_schedule[idx]
+                else:
+                    weights[label] = 0.10
+
+        player_records: Dict[int, Dict] = {}
+        for r in rows:
+            p_id, full_name, team_full, team_abbr, s_label, gp, minutes, pts, reb, ast = r
+            norm_name = self.normalize_name(full_name)
+
+            if p_id not in player_records:
+                player_records[p_id] = {
+                    "name": norm_name,
+                    "latest_season_label": s_label,
+                    "current_team": team_full,
+                    "current_team_abbr": team_abbr,
+                    "seasons": [],
+                }
+
+            if s_label >= player_records[p_id]["latest_season_label"]:
+                player_records[p_id]["latest_season_label"] = s_label
+                player_records[p_id]["current_team"] = team_full
+                player_records[p_id]["current_team_abbr"] = team_abbr
+
+            player_records[p_id]["seasons"].append({
+                "season_label": s_label,
+                "gp": gp or 0,
+                "min": minutes or 0.0,
+                "pts": pts or 0.0,
+                "reb": reb or 0.0,
+                "ast": ast or 0.0,
+            })
+
+        baselines: List[PlayerBaseline] = []
+        for p_id, data in player_records.items():
+            total_weighted_mins = 0.0
+            total_weighted_pts = 0.0
+            total_weighted_reb = 0.0
+            total_weighted_ast = 0.0
+            total_raw_mins = 0.0
+            total_raw_gp = 0
+
+            for s in data["seasons"]:
+                w = weights.get(s["season_label"], 0.20)
+                m = s["min"]
+                total_raw_mins += m
+                total_raw_gp += s["gp"]
+                total_weighted_mins += m * w
+                total_weighted_pts += s["pts"] * w
+                total_weighted_reb += s["reb"] * w
+                total_weighted_ast += s["ast"] * w
+
+            if total_raw_mins < min_minutes or total_weighted_mins <= 0:
+                continue
+
+            avg_min = total_raw_mins / max(1, total_raw_gp)
+            pts_pm = total_weighted_pts / total_weighted_mins
+            reb_pm = total_weighted_reb / total_weighted_mins
+            ast_pm = total_weighted_ast / total_weighted_mins
+
+            baselines.append(
+                PlayerBaseline(
+                    player_id=p_id,
+                    name=data["name"],
+                    team=data["current_team"],
+                    avg_minutes=round(avg_min, 1),
+                    pts_per_min=round(pts_pm, 3),
+                    reb_per_min=round(reb_pm, 3),
+                    ast_per_min=round(ast_pm, 3),
+                    overdispersion_alpha=0.10,
+                )
+            )
+
+        logger.info(f"PropsEngine: Loaded {len(baselines)} multi-season player baselines from DB.")
+        return baselines
