@@ -567,6 +567,16 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Consequences**: Hand-written Alembic migration `b3d5f7a9c1e4` updates `ck_model_version_role` to include `'shadow'`. The recorder stores totals predictions for `totals_pace` alongside `market_pinnacle`. The model league and promotion gates remain isolated.
 - **Source**: WP-S1; [`QUANT_MODULE.md`](QUANT_MODULE.md); [`DECISIONS.md`](DECISIONS.md); migration `b3d5f7a9c1e4`.
 
+### D-60 Persist player-prop quotes and evaluate props shadow model (props_nb) against book close
+- **Date**: 2026-10-28
+- **Decision**: Persist closing player-prop quotes in `odds_history` for requested markets (`player_points`, `player_rebounds`, `player_assists`, `player_pra`) with truthful `quotes_seen` / `quotes_inserted` capture tracking. Map player names to database players using diacritic and standard suffix stripping (`Jr.`, `Sr.`, `II`, `III`, `IV`, `V`), restricted to candidate players from the two teams of the game; ambiguous or unmatched names are skipped and counted. Register shadow model `props_nb` v1 with role `'shadow'` (`model_registry.py`). Record shadow predictions for quoted lines using negative-binomial machinery (`analytics/props_engine.py`); players lacking baselines are skipped without fabrication. Zero paper bets are created. Evaluate settled games against the SAME book's de-vigged closing over/under pair (`devig_two_way`) at or before tip-off; derive actual stats from `player_game_log`; classify as over/under/push, or `VOID` when player did not play (0 minutes or no log). Report $n$, Brier score, log loss, paired bootstrap 95% intervals, void count, and unmatched name count in `market_audit.py`, `paper_report.py`, and `GET /api/v1/paper/summary` (with $n < 30$ guard). Shadow model rows remain completely isolated from the model league, promotion, learn, and champion attribution.
+- **Context**: 40 closing props captures spent 40 credits and saw 12,325 quotes but inserted 0 due to missing name resolution and game scoping. Credits bought no empirical evidence. Props paper bets are deliberately deferred because there is no universal sharp reference for props and the sample is tiny; the shadow evaluation loop measures calibration before any betting is entertained.
+- **Alternatives rejected**:
+  1. Paper betting player props (rejected: soft books and no sharp closing benchmark; risk of false edge on tiny samples). Revisit only when shadow evaluation reaches $n \ge 200$.
+  2. Fabricating missing player baseline data or consensus odds (rejected: strict Rule 3 violation; uncalibrated or missing players are skipped and counted).
+- **Consequences**: `odds_history` captures high-fidelity closing player props quotes. Truthful quote metrics on capture markers. Clean, settlement-free evaluation of negative-binomial props calibration against bookmakers.
+- **Source**: WP-S2; [`QUANT_MODULE.md`](QUANT_MODULE.md); [`DECISIONS.md`](DECISIONS.md); [`ROADMAP.md`](ROADMAP.md).
+
 ## Next step
 
 Planned work and the reasons behind it: [`ROADMAP.md`](ROADMAP.md).

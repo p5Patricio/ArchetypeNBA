@@ -127,6 +127,20 @@ One `FeatureState` class serves training and serving. A single chronological pas
 | Role isolation | Role `'shadow'` is strictly ignored by the model league, promotion gates, active models list, and candidate proposals |
 | Evaluation | Benchmarked against Pinnacle's de-vigged closing quotes in `scripts/market_audit.py` and `scripts/paper_report.py`: reports $n$, Brier, log loss, paired differences with bootstrap 95% intervals, and model total error mean and sd; prints "insufficient data" when $n < 30$ |
 
+### `props_nb`: the shadow props model
+
+`analytics/props_engine.py`, registered in `model_version` as `props_nb` v1 with role `'shadow'` (`model_registry.py`).
+
+| Item | Value |
+|------|-------|
+| Purpose | Shadow-only forecasting model for player props (points, rebounds, assists, PRA). Evaluates statistical calibration of negative-binomial projections against sportsbook quotes without betting |
+| Probability calculation | Negative-binomial machinery from `analytics/props_engine.py` (mean $\mu = \text{avg\_minutes} \times \text{per-minute rate}$, dispersion parameter $r$). Evaluates $p_{\text{over}}(\text{line})$ for each stored quote's `(player_id, market, line)`. Players without database baseline data are skipped (never fabricated) |
+| Prediction recording | One prediction row per `(game_id, market, player_id, line, side)` under `props_nb` v1 right after props capture within the tick prediction recording step; idempotent; zero bets created |
+| Role isolation | Role `'shadow'` is strictly ignored by the model league, promotion gates, active models list, and candidate proposals |
+| Settlement-free evaluation | Derives actual stat value from `player_game_log` (`pts`, `reb`, `ast`, `pra`) for final games. Classifies as over/under/push, or `VOID` when player has no log row or played 0 minutes (never guessed). Pushes on integer lines are excluded from binary scoring |
+| Market benchmark | Compares model probability against the **same book's** de-vigged closing over/under quote (`devig_two_way`) at or before tip-off. Reports $n$, Brier score, log loss, paired differences with bootstrap 95% intervals, void count, and unmatched name count; displays "insufficient data" when $n < 30$ |
+| Betting status | Zero bets. Props paper bets are deliberately not built: there is no universal sharp reference for player props and the sample is tiny. Revisit when shadow evaluation reaches $n \ge 200$ |
+
 ## 6. Betting policy
 
 `analytics/betting_policy.py`, applied by `prediction_recorder.py`. Changing any value is a **new `model_version`** so every bet stays attributable (rule 8).
@@ -144,7 +158,7 @@ One `FeatureState` class serves training and serving. A single chronological pas
 | Never | At or after tip-off |
 | Stale ratings guard | A game is skipped while either team has an earlier game that is not settled |
 | Uniqueness | One bet per (strategy, game, market, side) across all runs |
-| Markets | h2h and spreads are model-driven (champion and shadow challengers). Totals are evaluated and bet strictly by the model-free `market_edge` arm against Pinnacle's de-vigged over/under lines and attached to the benchmark model `market_pinnacle` (`role = benchmark`; champion model strategies `flat`, `kelly_fractional`, `kelly_shrunk` never bet totals). A shadow totals model `totals_pace` (`role = shadow`) records predictions for measurement only and never bets. Props are not modelled or paper-bet |
+| Markets | h2h and spreads are model-driven (champion and shadow challengers). Totals are evaluated and bet strictly by the model-free `market_edge` arm against Pinnacle's de-vigged over/under lines and attached to the benchmark model `market_pinnacle` (`role = benchmark`; champion model strategies `flat`, `kelly_fractional`, `kelly_shrunk` never bet totals). A shadow totals model `totals_pace` (`role = shadow`) records predictions for measurement only and never bets. Props quotes are persisted in `odds_history` and evaluated under the shadow model `props_nb` (`role = shadow`, negative-binomial engine); props are NEVER paper-bet (no sharp reference and tiny sample; revisit when $n \ge 200$) |
 
 ### Staking
 

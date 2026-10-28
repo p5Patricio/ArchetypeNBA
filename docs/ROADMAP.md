@@ -64,7 +64,7 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 ## 2. Totals and props models, with settlement
 
-**Status**: Totals implemented (WP-T: settlement, same-book and Pinnacle CLV, reporting, and model-free `market_edge` paper bets; WP-S1: shadow totals forecasting model `totals_pace` with leak-free pace/efficiency estimation and closed-loop evaluation against Pinnacle's close); props handled in a separate package.
+**Status**: Totals implemented (WP-T: settlement, same-book and Pinnacle CLV, reporting, and model-free `market_edge` paper bets; WP-S1: shadow totals forecasting model `totals_pace` with leak-free pace/efficiency estimation and closed-loop evaluation against Pinnacle's close); player props quotes persisted and shadow-evaluated (WP-S2: negative-binomial shadow model `props_nb` with settlement-free evaluation against same-book close; props BETS deliberately not built).
 
 **Why.** The 3-credit game-lines call already captures totals for every game, and one player-props event per closing run is stored. Research on closing totals lines revealed a forecast error standard deviation of ~17.7 points over 39 games (`scripts/market_audit.py`) with no verified evidence of an edge for statistical scoring models. Consequently, totals are handled through:
 - Complete settlement in `settlement.grade_bet` (over wins when total > line, under when total < line, push on equal).
@@ -74,7 +74,11 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 - Closed-loop evaluation against Pinnacle's de-vigged closing line in `market_audit.py` and `paper_report.py` (Brier, log loss, paired bootstrap intervals, error mean and sd; "insufficient data" under n < 30).
 - Reporting in `paper_report` with per-market breakdowns (`h2h`, `spreads`, `totals`) and `/paper` bets table display in Spanish and English.
 
-Props models are handled in a separate package: player prop bets are not recorded anywhere in paper trading, and capturing one event per tick produces far too small and noisy of a sample to justify model development or paper trading without dedicated data work.
+Props quotes and shadow evaluation are completed under WP-S2:
+- Closing player props quotes are persisted in `odds_history` across requested markets (`player_points`, `player_rebounds`, `player_assists`, `player_pra`) with truthful capture counts (`quotes_seen` and `quotes_inserted`). Player names are matched using diacritic and suffix normalization restricted to candidate players from the two game teams.
+- Shadow props model `props_nb` (v1, role `'shadow'`, negative-binomial engine) computes leak-free probabilities and stores predictions for quoted lines without betting.
+- Settlement-free evaluation derives actual outcomes from `player_game_log`, marks non-participants or 0-minute players as `VOID` (never guessed), excludes pushes, and measures calibration (Brier score, log loss, paired bootstrap 95% CIs) against the same book's closing de-vigged line (`devig_two_way`) with an $n < 30$ "insufficient data" guard.
+- Props paper BETS are deliberately not built: there is no sharp closing benchmark for player props and the sample is tiny. Revisit when shadow evaluation reaches $n \ge 200$.
 
 **Acceptance criteria.**
 
@@ -84,7 +88,7 @@ Props models are handled in a separate package: player prop bets are not recorde
 - [x] Pure shadow totals model (`totals_pace` v1, role `shadow`) records predictions at Pinnacle lines with zero betting and zero league pollution (WP-S1).
 - [x] Closed-loop evaluation of shadow totals against Pinnacle close in `market_audit.py` and `paper_report.py` with bootstrap 95% intervals and n < 30 guard.
 - [x] Per-market breakdown in `paper_report` and `/paper` bets table UI localized.
-- [ ] Props models and props grading (handled in a separate package).
+- [x] Props quotes persisted in `odds_history` and shadow-evaluated via `props_nb` (WP-S2); props paper bets deliberately deferred until evaluation reaches $n \ge 200$.
 
 ## 3. Frontend model-league page
 
