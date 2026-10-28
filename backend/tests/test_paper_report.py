@@ -28,7 +28,7 @@ def test_the_report_runs_on_empty_tables_and_says_so(world):
     report = build_report(world, NOW)
     text = format_report(report)
 
-    assert [s.strategy for s in report.strategies] == ["flat", "kelly_fractional"]
+    assert [s.strategy for s in report.strategies] == ["flat", "kelly_fractional", "kelly_shrunk", "market_edge"]
     assert all(s.bets == 0 and s.win_rate is None and s.roi is None and s.avg_clv is None for s in report.strategies)
     assert report.clv.coverage is None and report.skill.brier_model is None
     assert "No paper bets recorded yet." in text
@@ -55,7 +55,10 @@ def test_performance_per_strategy_matches_the_paper_performance_view(world):
     world.commit()
 
     report = build_report(world, NOW)
-    flat, kelly_perf = report.strategies
+    by_name = {s.strategy: s for s in report.strategies}
+    flat, kelly_perf = by_name["flat"], by_name["kelly_fractional"]
+    assert by_name["kelly_shrunk"].bets == 0
+    assert by_name["market_edge"].bets == 0
 
     assert flat.strategy == "flat" and (flat.bets, flat.settled, flat.pending) == (4, 3, 1)
     assert flat.win_rate == pytest.approx(0.5)  # 1 won / (1 won + 1 lost); the push is outside the rate

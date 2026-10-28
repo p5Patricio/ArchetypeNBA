@@ -73,7 +73,12 @@ STALE_GAME_WINDOW = timedelta(hours=24)
 UNKNOWN_SEASON_ID = -1  # no team has ever played in it, so every rating gets the season carryover
 
 _RECORDED_MARKETS = (MarketType.h2h, MarketType.spreads)
-_STRATEGIES = (StakingStrategy.flat, StakingStrategy.kelly_fractional)
+_STRATEGIES = (
+    StakingStrategy.flat,
+    StakingStrategy.kelly_fractional,
+    StakingStrategy.kelly_shrunk,
+    StakingStrategy.market_edge,
+)
 _SETTLED = (BetStatus.won, BetStatus.lost, BetStatus.push)
 
 
@@ -628,9 +633,13 @@ class PredictionRecorder:
                 quote.price, decision.p_cond, p_fair, decision.raw_edge, decision.ev, decision.eligible, decision.reason,
             )
         )
+        market_decision = policy.evaluate_market_edge(p_fair, quote.price)
+
         if not decision.eligible:
             summary.skipped[decision.reason] += 1
-            return
+            if not market_decision.eligible:
+                return
+
         if _aware_utc(game.commence_time) <= self.now:  # hard guard: nothing at or after tip-off
             summary.skipped["game_started"] += 1
             return
@@ -638,6 +647,15 @@ class PredictionRecorder:
         today = _local_day(self.now)
         for strategy in _STRATEGIES:
             name = strategy.value
+            if strategy == StakingStrategy.market_edge:
+                if not market_decision.eligible:
+                    continue
+                strat_ev = market_decision.ev
+            else:
+                if not decision.eligible:
+                    continue
+                strat_ev = decision.ev
+
             if (name, game.id, market.value, side.value) in self._placed:
                 summary.skipped["already_bet"] += 1
                 continue
@@ -647,9 +665,24 @@ class PredictionRecorder:
             if strategy == StakingStrategy.flat:
                 stake = policy.cap_stake(policy.flat_stake(), bankroll, daily_room=day_room, game_room=game_room)
                 multiplier = None
-            else:
+            elif strategy == StakingStrategy.kelly_fractional:
                 stake = policy.kelly_stake(bankroll, decision.f_star, daily_room=day_room, game_room=game_room)
                 multiplier = Decimal(f"{policy.KELLY_MULTIPLIER:.3f}")
+            elif strategy == StakingStrategy.kelly_shrunk:
+                break_even = 1.0 / quote.price if quote.price > 0 else 1.0
+                edge = decision.p_blend - break_even
+                shrink = policy.shrink_factor(edge, policy.MODEL_PROB_NOISE_SD)
+                eff_mult = policy.KELLY_MULTIPLIER_SHRUNK_BASE * shrink
+                stake = policy.kelly_shrunk_stake(
+                    bankroll, decision.f_star, edge=edge, daily_room=day_room, game_room=game_room
+                )
+                multiplier = Decimal(f"{eff_mult:.3f}")
+            elif strategy == StakingStrategy.market_edge:
+                stake = policy.cap_stake(policy.flat_stake(), bankroll, daily_room=day_room, game_room=game_room)
+                multiplier = None
+            else:
+                continue
+
             if stake <= 0:
                 summary.skipped["stake_below_min"] += 1
                 continue
@@ -667,7 +700,7 @@ class PredictionRecorder:
                     price_taken=Decimal(f"{quote.price:.4f}"),
                     line_taken=_line(quote.line),
                     fair_prob_at_bet=_prob(p_fair),
-                    ev_per_unit=Decimal(f"{decision.ev:.5f}"),
+                    ev_per_unit=Decimal(f"{strat_ev:.5f}"),
                     strategy=strategy,
                     kelly_multiplier=multiplier,
                     stake_units=Decimal(f"{stake:.3f}"),
