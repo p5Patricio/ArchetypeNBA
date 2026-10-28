@@ -1,0 +1,498 @@
+{
+  "success": true,
+  "data": [
+    {
+      "eventID": "wzQYDbc9F1ZV6tG8tB6q",
+      "sportID": "TENNIS",
+      "leagueID": "WTA",
+      "type": "match",
+      "teams": {
+        "home": {
+          "teamID": "ANNA_SISKOVA_WTA",
+          "names": {
+            "long": "Anna Siskova",
+            "medium": "A. Siskova",
+            "short": "SIS",
+            "firstName": "Anna",
+            "lastName": "Siskova"
+          },
+          "colors": {
+            "primaryContrast": "#FFFFFF",
+            "primary": "#374DF5"
+          },
+          "statEntityID": "home",
+          "score": 1
+        },
+        "away": {
+          "teamID": "ELSA_JACQUEMOT_WTA",
+          "names": {
+            "long": "Elsa Jacquemot",
+            "medium": "E. Jacquemot",
+            "short": "JAC",
+            "firstName": "Elsa",
+            "lastName": "Jacquemot"
+          },
+          "colors": {
+            "primaryContrast": "#FFFFFF",
+            "primary": "#374DF5"
+          },
+          "statEntityID": "away",
+          "score": 0
+        }
+      },
+      "status": {
+        "started": true,
+        "completed": false,
+        "cancelled": false,
+        "ended": false,
+        "live": true,
+        "delayed": false,
+        "currentPeriodID": "2s",
+        "previousPeriodID": "1s",
+        "displayShort": "2nd",
+        "displayLong": "2nd Set",
+        "inBreak": false,
+        "startsAt": "2025-12-12T14:00:00.000Z",
+        "previousStartsAt": [
+          "2025-12-12T13:00:00.000Z",
+          "2025-12-12T13:20:00.000Z"
+        ],
+        "hardStart": true,
+        "periods": {
+          "started": [
+            "1s",
+            "2s",
+            "game",
+            "reg"
+          ],
+          "ended": [
+            "1s"
+          ]
+        },
+        "oddsPresent": true,
+        "oddsAvailable": true,
+        "finalized": false
+      },
+      "info": {
+        "seasonWeek": "WTA 125K Limoges, France Women Singles 2025"
+      },
+      "links": {},
+      "results": {
+        "1s": {
+          "home": {
+            "games": 6
+          },
+          "away": {
+            "games": 3
+          }
+        },
+        "game": {
+          "home": {
+            "points": 1
+          },
+          "away": {
+            "points": 0
+          }
+        },
+        "2s": {
+          "home": {
+            "games": 1
+          },
+          "away": {
+            "games": 3
+          }
+        }
+      },
+      "odds": {
+        "points-away-game-ml-away": {
+          "oddID": "points-away-game-ml-away",
+          "opposingOddID": "points-home-game-ml-home",
+          "marketName": "Moneyline",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "game",
+          "betTypeID": "ml",
+          "sideID": "away",
+          "started": true,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-108",
+          "bookOdds": "-117",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "-117",
+              "lastUpdatedAt": "2025-12-12T14:59:33.271Z",
+              "available": true
+            }
+          },
+          "closeBookOdds": "-117",
+          "closeFairOdds": "-108",
+          "score": 0
+        },
+        "points-home-game-ml-home": {
+          "oddID": "points-home-game-ml-home",
+          "opposingOddID": "points-away-game-ml-away",
+          "marketName": "Moneyline",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "game",
+          "betTypeID": "ml",
+          "sideID": "home",
+          "started": true,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+108",
+          "bookOdds": "+100",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+100",
+              "lastUpdatedAt": "2025-12-12T14:59:33.271Z",
+              "available": true
+            }
+          },
+          "closeBookOdds": "+100",
+          "closeFairOdds": "+108",
+          "score": 1
+        },
+        "points-away-game-sp-away": {
+          "oddID": "points-away-game-sp-away",
+          "opposingOddID": "points-home-game-sp-home",
+          "marketName": "Spread",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "game",
+          "betTypeID": "sp",
+          "sideID": "away",
+          "started": true,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-108",
+          "bookOdds": "-357",
+          "fairSpread": "+0",
+          "bookSpread": "+1.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "-357",
+              "spread": "+1.5",
+              "lastUpdatedAt": "2025-12-12T14:59:33.271Z",
+              "available": true
+            }
+          },
+          "closeBookOdds": "-357",
+          "closeBookSpread": "+1.5",
+          "closeFairOdds": "-108",
+          "closeFairSpread": "+0",
+          "score": 0
+        },
+        "points-home-game-sp-home": {
+          "oddID": "points-home-game-sp-home",
+          "opposingOddID": "points-away-game-sp-away",
+          "marketName": "Spread",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "game",
+          "betTypeID": "sp",
+          "sideID": "home",
+          "started": true,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+108",
+          "bookOdds": "+306",
+          "fairSpread": "+0",
+          "bookSpread": "-1.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+306",
+              "spread": "-1.5",
+              "lastUpdatedAt": "2025-12-12T14:59:33.271Z",
+              "available": true
+            }
+          },
+          "closeBookOdds": "+306",
+          "closeBookSpread": "-1.5",
+          "closeFairOdds": "+108",
+          "closeFairSpread": "+0",
+          "score": 1
+        },
+        "points-all-game-ou-over": {
+          "oddID": "points-all-game-ou-over",
+          "opposingOddID": "points-all-game-ou-under",
+          "marketName": "Over/Under",
+          "statID": "points",
+          "statEntityID": "all",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "over",
+          "started": true,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-317",
+          "bookOdds": "-357",
+          "fairOverUnder": "2.5",
+          "bookOverUnder": "2.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "-357",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:59:33.271Z",
+              "available": true
+            }
+          },
+          "closeBookOdds": "-357",
+          "closeBookOverUnder": "2.5",
+          "closeFairOdds": "-317",
+          "closeFairOverUnder": "2.5",
+          "score": 1
+        },
+        "points-all-game-ou-under": {
+          "oddID": "points-all-game-ou-under",
+          "opposingOddID": "points-all-game-ou-over",
+          "marketName": "Over/Under",
+          "statID": "points",
+          "statEntityID": "all",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "under",
+          "started": true,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+317",
+          "bookOdds": "+306",
+          "fairOverUnder": "2.5",
+          "bookOverUnder": "2.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+306",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:59:33.271Z",
+              "available": true
+            }
+          },
+          "closeBookOdds": "+306",
+          "closeBookOverUnder": "2.5",
+          "closeFairOdds": "+317",
+          "closeFairOverUnder": "2.5",
+          "score": 1
+        },
+        "points-away-1s-ml-away": {
+          "oddID": "points-away-1s-ml-away",
+          "opposingOddID": "points-home-1s-ml-home",
+          "marketName": "1st Set Moneyline",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "1s",
+          "betTypeID": "ml",
+          "sideID": "away",
+          "started": true,
+          "ended": true,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": false,
+          "fairOdds": "+1181",
+          "bookOdds": "+1167",
+          "scoringSupported": false,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+1167",
+              "lastUpdatedAt": "2025-12-12T14:38:03.228Z",
+              "available": false
+            }
+          },
+          "closeBookOdds": "+1167",
+          "closeFairOdds": "+1181"
+        },
+        "points-home-1s-ml-home": {
+          "oddID": "points-home-1s-ml-home",
+          "opposingOddID": "points-away-1s-ml-away",
+          "marketName": "1st Set Moneyline",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "1s",
+          "betTypeID": "ml",
+          "sideID": "home",
+          "started": true,
+          "ended": true,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": false,
+          "fairOdds": "-1181",
+          "bookOdds": "-1370",
+          "scoringSupported": false,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "-1370",
+              "lastUpdatedAt": "2025-12-12T14:38:03.228Z",
+              "available": false
+            }
+          },
+          "closeBookOdds": "-1370",
+          "closeFairOdds": "-1181"
+        },
+        "games-all-game-ou-over": {
+          "oddID": "games-all-game-ou-over",
+          "opposingOddID": "games-all-game-ou-under",
+          "marketName": "Total Games Over/Under",
+          "statID": "games",
+          "statEntityID": "all",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "over",
+          "started": true,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+105",
+          "bookOdds": "-102",
+          "fairOverUnder": "26.5",
+          "bookOverUnder": "26.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "prizepicks": {
+              "odds": "+100",
+              "overUnder": "20",
+              "lastUpdatedAt": "2025-12-12T12:58:35.171Z",
+              "available": false,
+              "deeplink": "https://app.prizepicks.com/?projections=8497054-o-20"
+            },
+            "pinnacle": {
+              "odds": "-102",
+              "overUnder": "26.5",
+              "lastUpdatedAt": "2025-12-12T14:59:33.271Z",
+              "available": true
+            }
+          },
+          "closeBookOdds": "-102",
+          "closeBookOverUnder": "26.5",
+          "closeFairOdds": "+105",
+          "closeFairOverUnder": "26.5",
+          "score": 13
+        },
+        "games-all-game-ou-under": {
+          "oddID": "games-all-game-ou-under",
+          "opposingOddID": "games-all-game-ou-over",
+          "marketName": "Total Games Over/Under",
+          "statID": "games",
+          "statEntityID": "all",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "under",
+          "started": true,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-105",
+          "bookOdds": "-114",
+          "fairOverUnder": "26.5",
+          "bookOverUnder": "26.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "prizepicks": {
+              "odds": "+100",
+              "overUnder": "20",
+              "lastUpdatedAt": "2025-12-12T12:58:35.171Z",
+              "available": false,
+              "deeplink": "https://app.prizepicks.com/?projections=8497054-u-20"
+            },
+            "pinnacle": {
+              "odds": "-114",
+              "overUnder": "26.5",
+              "lastUpdatedAt": "2025-12-12T14:59:33.271Z",
+              "available": true
+            }
+          },
+          "closeBookOdds": "-114",
+          "closeBookOverUnder": "26.5",
+          "closeFairOdds": "-105",
+          "closeFairOverUnder": "26.5",
+          "score": 13
+        },
+        "breakPoints-home-game-ou-under": {
+          "oddID": "breakPoints-home-game-ou-under",
+          "opposingOddID": "breakPoints-home-game-ou-over",
+          "marketName": "Anna Siskova Break Points Won Over/Under",
+          "statID": "breakPoints",
+          "statEntityID": "home",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "under",
+          "started": true,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": false,
+          "fairOdds": "+100",
+          "bookOdds": "+100",
+          "fairOverUnder": "3.5",
+          "bookOverUnder": "3",
+          "scoringSupported": false,
+          "byBookmaker": {
+            "prizepicks": {
+              "odds": "+100",
+              "overUnder": "3",
+              "lastUpdatedAt": "2025-12-12T12:58:35.171Z",
+              "available": false,
+              "deeplink": "https://app.prizepicks.com/?projections=8488023-u-3"
+            }
+          },
+          "closeBookOdds": "+100",
+          "closeBookOverUnder": "3",
+          "closeFairOdds": "+100",
+          "closeFairOverUnder": "3.5"
+        },
+        "breakPoints-home-game-ou-over": {
+          "oddID": "breakPoints-home-game-ou-over",
+          "opposingOddID": "breakPoints-home-game-ou-under",
+          "marketName": "Anna Siskova Break Points Won Over/Under",
+          "statID": "breakPoints",
+          "statEntityID": "home",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "over",
+          "started": true,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": false,
+          "fairOdds": "+100",
+          "bookOdds": "+100",
+          "fairOverUnder": "3.5",
+          "bookOverUnder": "3",
+          "scoringSupported": false,
+          "byBookmaker": {
+            "prizepicks": {
+              "odds": "+100",
+              "overUnder": "3",
+              "lastUpdatedAt": "2025-12-12T12:58:35.171Z",
+              "available": false,
+              "deeplink": "https://app.prizepicks.com/?projections=8488023-o-3"
+            }
+          },
+          "closeBookOdds": "+100",
+          "closeBookOverUnder": "3",
+          "closeFairOdds": "+100",
+          "closeFairOverUnder": "3.5"
+        }
+      }
+    }
+  ]
+}

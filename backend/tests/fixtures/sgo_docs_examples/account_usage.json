@@ -1,0 +1,38 @@
+{
+  "success": true,
+  "data": {
+    "keyID": "qj3ytfuo78vhkzivos9w6j5a2tp2xfm0sri783i8uym6u1zxj1a9rce17b4ompwd",
+    "customerID": "cus_1tQSgt470KJaIv",
+    "email": "email@example.com",
+    "isActive": true,
+    "tier": "amateur",
+    "rateLimits": {
+      "per-second": {
+        "max-requests": "unlimited",
+        "max-entities": "unlimited"
+      },
+      "per-minute": {
+        "max-requests": 100,
+        "current-requests": 4,
+        "max-entities": "unlimited"
+      },
+      "per-hour": {
+        "max-requests": 50000,
+        "current-requests": 24,
+        "max-entities": 250000,
+        "current-entities": 28
+      },
+      "per-day": {
+        "max-requests": 500000,
+        "current-requests": 145,
+        "max-entities": 3000000,
+        "current-entities": 173
+      },
+      "per-month": {
+        "max-requests": "unlimited",
+        "max-entities": 1000000,
+        "current-entities": 914
+      }
+    }
+  }
+}
