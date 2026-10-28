@@ -206,6 +206,12 @@ Every manual change writes an audit row whose reason starts with `manual:`. A re
 | Rebuild or update Elo | `python scripts/backfill_elo.py --update` (new games only), `--rebuild` (everything), `--model-id N` (one model), `--dry-run`, `--evaluate`, `--register` |
 | Run the historical lab | `python scripts/model_lab.py [--seed N] [--configs N] [--max-seconds S] [--json file]`; add `--register --confirm-database nba_platform` to insert challengers |
 
+### League API and promotion notifications
+
+- **Endpoint `GET /api/v1/league`**: A read-only JSON representation of the model league (champion, challengers with live evaluation metrics, paired $n$ vs the 150 target, log-loss gain with CI, margin NLL gain, Brier-vs-market gap, gate status in words, promotion/retirement history, and the last candidate proposal date). Responses are cached in-memory with a 5-minute TTL to avoid repeated bootstrap recomputations. The endpoint never writes to the database. An empty database returns status 200 with a clean empty structure.
+- **Promotion notifications (Telegram)**: Whenever a role change commits during the `learn` step (`promote`, `rollback`, `retire`, or a new challenger is registered by the candidate lab), the system dispatches a plain-text Telegram message summarizing what happened, model names, evidence numbers (paired $n$, gain and CI), and the date.
+- **How to enable notifications**: Notifications are opt-in. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `backend/.env` to valid Telegram bot credentials (real values; placeholders containing `your_` are treated as unset). If either is unset, notifications are skipped. A notification failure never causes the tick to fail or roll back: any error is logged as a warning with the token masked, and the tick proceeds normally.
+
 ## 6. Web services (backend 38921, frontend 38920)
 
 | Action | Command |
