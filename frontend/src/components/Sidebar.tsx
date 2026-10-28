@@ -20,6 +20,8 @@ import {
   History,
   Target,
   TrendingUp,
+  Banknote,
+  Trophy,
   Power,
 } from "lucide-react";
 
@@ -81,6 +83,22 @@ export function Sidebar({ isOpen = false, onClose, onOpenShutdown }: SidebarProp
       active: pathname.startsWith("/props"),
       accent: "text-orange-600",
       activeBg: "bg-orange-50 text-orange-800 border-orange-200 font-extrabold",
+    },
+    {
+      href: "/paper",
+      label: language === "es" ? "Paper Trading" : "Paper Trading",
+      icon: Banknote,
+      active: pathname.startsWith("/paper"),
+      accent: "text-emerald-600",
+      activeBg: "bg-emerald-50 text-emerald-800 border-emerald-200 font-extrabold",
+    },
+    {
+      href: "/league",
+      label: language === "es" ? "Model League" : "Model League",
+      icon: Trophy,
+      active: pathname.startsWith("/league"),
+      accent: "text-violet-600",
+      activeBg: "bg-violet-50 text-violet-800 border-violet-200 font-extrabold",
     },
     {
       href: "/lineup",
