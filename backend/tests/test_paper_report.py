@@ -201,3 +201,34 @@ def test_model_skill_uses_the_champion_only_and_the_active_models_table_lists_ev
     assert "Model skill of the champion (elo_538 2.0)" in text
     assert "Active models (only the champion bets)" in text and "challenger" in text
     assert legacy.id != champion.id
+
+
+def test_paper_report_includes_pinnacle_clv_section(world):
+    # A game with a bet and Pinnacle quotes
+    game1 = add_game(world, "BOS", "LAC", start=TIPOFF)
+    add_marker(world, game1, at=CLOSING_AT)
+    place_bet(world, game1, MarketType.h2h, BetSide.home, price="2.0000", placed_at=PLACED)
+    add_quote(world, game1, "pinnacle", MarketType.h2h, BetSide.home, -110, captured_at=CLOSING_AT)
+    add_quote(world, game1, "pinnacle", MarketType.h2h, BetSide.away, -110, captured_at=CLOSING_AT)
+
+    # A second game
+    game2 = add_game(world, "NYK", "LAL", start=TIPOFF)
+    add_marker(world, game2, at=CLOSING_AT)
+    place_bet(world, game2, MarketType.h2h, BetSide.home, price="1.9000", placed_at=PLACED)
+    add_quote(world, game2, "pinnacle", MarketType.h2h, BetSide.home, -110, captured_at=CLOSING_AT)
+    add_quote(world, game2, "pinnacle", MarketType.h2h, BetSide.away, -110, captured_at=CLOSING_AT)
+
+    report = build_report(world, NOW)
+    assert report.pinnacle_clv is not None
+    assert report.pinnacle_clv.games_count == 2
+    assert report.pinnacle_clv.stats.n_games == 2
+
+    text = format_report(report)
+    assert "CLV vs Pinnacle close (per game)" in text
+    assert "games 2" in text
+    assert "mean CLV" in text
+    assert "SE" in text
+    assert "t " in text
+    assert "sd " in text
+    assert "bets needed for +1%" in text
+    assert "Exclusions:" in text
