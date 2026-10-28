@@ -19,7 +19,8 @@ Paper-trading report: how the strategies are doing and whether the model has any
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from decimal import Decimal
+from typing import Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import func, select
 from sqlmodel import Session
@@ -32,6 +33,8 @@ from app.models import (
     Game,
     MarketType,
     ModelPrediction,
+    OddsCapturePresence,
+    OddsHistory,
     OddsSnapshotCapture,
     SimulatedBet,
     StakingStrategy,
@@ -41,6 +44,13 @@ from app.services.clv_report import PinnacleClvReport, build_pinnacle_clv_report
 from app.services.league_report import League, build_league, format_league
 
 _SETTLED = (BetStatus.won, BetStatus.lost, BetStatus.push)
+
+
+def _line(value) -> Optional[Decimal]:
+    if value is None:
+        return None
+    return Decimal(str(value)).quantize(Decimal("0.1"))
+
 
 
 def _aware_utc(value: datetime) -> datetime:
@@ -71,6 +81,7 @@ class ClvCoverage:
     bets_tipped_off: int = 0
     bets_with_clv: int = 0
     bets_line_moved: int = 0  # the book closed at another line: no comparable closing price
+    bets_absent_at_close: int = 0  # quote absent from closing capture payload (market dropped)
     games_tipped_off: int = 0
     closings_missed: int = 0  # tipped-off games (not postponed) without a closing marker
 
@@ -180,12 +191,51 @@ def _performance(session: Session) -> List[StrategyPerformance]:
 
 def _clv_coverage(session: Session, now: datetime) -> ClvCoverage:
     coverage = ClvCoverage()
-    for bet_row in session.execute(
-        select(SimulatedBet.closing_price, SimulatedBet.closing_line, Game.commence_time)
+    bet_rows = session.execute(
+        select(
+            SimulatedBet.closing_price,
+            SimulatedBet.closing_line,
+            Game.commence_time,
+            Game.id,
+            ModelPrediction.market,
+            ModelPrediction.side,
+            SimulatedBet.line_taken,
+            OddsHistory.sportsbook_id,
+            SimulatedBet.placed_at,
+        )
         .join(ModelPrediction, ModelPrediction.id == SimulatedBet.prediction_id)
         .join(Game, Game.id == ModelPrediction.game_id)
+        .join(OddsHistory, OddsHistory.id == SimulatedBet.odds_taken_id)
+    ).all()
+
+    # Games with closing capture marker
+    markers: Dict[int, Tuple[int, datetime]] = {}  # game_id -> (capture_id, captured_at)
+    for cap_id, game_id, captured_at in session.execute(
+        select(OddsSnapshotCapture.id, OddsSnapshotCapture.game_id, OddsSnapshotCapture.captured_at).where(
+            OddsSnapshotCapture.kind == CAPTURE_CLOSING
+        )
     ).all():
-        closing_price, closing_line, commence = bet_row
+        if captured_at is not None:
+            markers[game_id] = (cap_id, _aware_utc(captured_at))
+
+    capture_ids = [cap_id for cap_id, _ in markers.values()]
+    presence_by_capture: Dict[int, Set[Tuple[int, str, str, Optional[Decimal]]]] = {}
+    if capture_ids:
+        for cap_id, book_id, market, side, line in session.execute(
+            select(
+                OddsCapturePresence.capture_id,
+                OddsCapturePresence.sportsbook_id,
+                OddsCapturePresence.market,
+                OddsCapturePresence.side,
+                OddsCapturePresence.line,
+            ).where(OddsCapturePresence.capture_id.in_(capture_ids))
+        ).all():
+            m_val = market.value if hasattr(market, "value") else str(market)
+            s_val = side.value if hasattr(side, "value") else str(side)
+            l_val = _line(line)
+            presence_by_capture.setdefault(cap_id, set()).add((book_id, m_val, s_val, l_val))
+
+    for closing_price, closing_line, commence, game_id, market, side, line_taken, book_id, placed_at in bet_rows:
         if _aware_utc(commence) > now:
             continue
         coverage.bets_tipped_off += 1
@@ -193,12 +243,19 @@ def _clv_coverage(session: Session, now: datetime) -> ClvCoverage:
             coverage.bets_with_clv += 1
         elif closing_line is not None:
             coverage.bets_line_moved += 1
+        else:
+            marker_info = markers.get(game_id)
+            if marker_info is not None:
+                cap_id, closed_at = marker_info
+                if placed_at is None or closed_at > _aware_utc(placed_at):
+                    if cap_id in presence_by_capture:
+                        m_str = market.value if hasattr(market, "value") else str(market)
+                        s_str = side.value if hasattr(side, "value") else str(side)
+                        l_val = _line(line_taken)
+                        if (book_id, m_str, s_str, l_val) not in presence_by_capture[cap_id]:
+                            coverage.bets_absent_at_close += 1
 
-    with_closing = set(
-        session.execute(
-            select(OddsSnapshotCapture.game_id).where(OddsSnapshotCapture.kind == CAPTURE_CLOSING)
-        ).scalars()
-    )
+    with_closing = set(markers.keys())
     for game_id, commence, status in session.execute(select(Game.id, Game.commence_time, Game.status)).all():
         if status == "postponed" or _aware_utc(commence) > now:
             continue
@@ -322,6 +379,9 @@ def format_report(report: PaperReport) -> str:
     else:
         lines.append("  No bets on tipped-off games yet.")
     lines.append(
+        f"  Quotes absent at close: {clv.bets_absent_at_close} bet(s) dropped before tip-off."
+    )
+    lines.append(
         f"  Closing captures missed: {clv.closings_missed} of {clv.games_tipped_off} tipped-off games "
         "(those closing lines cannot be recovered)."
     )
@@ -347,7 +407,8 @@ def format_report(report: PaperReport) -> str:
         lines.append(
             f"  Exclusions: {exc.total} bets (no closing marker {exc.no_closing_marker}, "
             f"no Pinnacle quote {exc.no_pinnacle_quote}, line moved {exc.line_moved}, "
-            f"one-sided {exc.one_sided_quote}, closing before bet {exc.closing_before_bet})"
+            f"one-sided {exc.one_sided_quote}, closing before bet {exc.closing_before_bet}, "
+            f"absent at close {exc.absent_at_close})"
         )
         lines.append("")
 
