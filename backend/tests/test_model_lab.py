@@ -408,3 +408,66 @@ def test_the_cli_reports_a_missing_champion_instead_of_crashing(db_session, caps
 
     assert code == 1
     assert "model lab cannot run" in capsys.readouterr().err
+
+
+# ----------------------------------------------------------- multiple comparison integration
+
+def test_report_only_multiple_testing_records_pvalues_and_leaves_registration_unchanged(synthetic, db_session):
+    report = lab.run_lab(synthetic, EloParams(k=1.0), seed=5, n_configs=6, resamples=200)
+
+    assert report.selection_pvalue_rc is not None and 0.0 <= report.selection_pvalue_rc <= 1.0
+    assert report.selection_pvalue_spa is not None and 0.0 <= report.selection_pvalue_spa <= 1.0
+    assert report.selection_pvalue_dm_hln is not None and 0.0 <= report.selection_pvalue_dm_hln <= 1.0
+
+    passing_candidates = [c for c in report.candidates if c.gate.passed and c.deploy_params is not None]
+    assert len(passing_candidates) > 0
+    best_cand = passing_candidates[0]
+    assert best_cand.deploy_params["selection_pvalue_rc"] == report.selection_pvalue_rc
+    assert best_cand.deploy_params["selection_pvalue_spa"] == report.selection_pvalue_spa
+    assert best_cand.deploy_params["selection_pvalue_dm_hln"] == report.selection_pvalue_dm_hln
+
+    db_session.add(ModelVersion(name="elo_538", version="1.0", params={}, role="champion"))
+    db_session.commit()
+    result = lab.register_candidates(db_session, report, dry_run=False)
+    assert len(result.registered) > 0
+    registered = result.registered[0]
+    assert registered.params["selection_pvalue_spa"] == report.selection_pvalue_spa
+    notes = json.loads(registered.notes)
+    assert notes["selection_pvalue_spa"] == report.selection_pvalue_spa
+
+
+def test_multitest_gate_blocks_candidate_when_spa_pvalue_exceeds_threshold(db_session):
+    # 1. evaluate_gate behaviour
+    verdict_default = lab.evaluate_gate(gain=0.002, differs=True, selection_pvalue_spa=0.45, multitest_gate=False)
+    assert verdict_default.passed is True
+
+    verdict_gated = lab.evaluate_gate(gain=0.002, differs=True, selection_pvalue_spa=0.45, multitest_gate=True)
+    assert verdict_gated.passed is False
+    assert any("selection SPA p-value 0.4500 is not below 0.2000" in r for r in verdict_gated.reasons)
+
+    # 2. register_candidates with multitest_gate=True
+    db_session.add(ModelVersion(name="elo_538", version="1.0", params={}, role="champion"))
+    db_session.commit()
+    report = _fake_report([_elo_candidate(passed=True)])
+    report.selection_pvalue_spa = 0.35
+
+    res_off = lab.register_candidates(db_session, report, dry_run=True, multitest_gate=False)
+    assert len(res_off.planned) == 1
+
+    res_on = lab.register_candidates(db_session, report, dry_run=True, multitest_gate=True)
+    assert len(res_on.planned) == 0
+    assert any("selection SPA p-value" in s for s in res_on.skipped)
+
+
+def test_the_cli_displays_multiple_testing_pvalues(league_db, capsys):
+    cli = _load_cli()
+
+    code = cli.main(["--configs", "4"], session_factory=lambda: nullcontext(league_db))
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "Multiple-testing control (selection window):" in out
+    assert "Reality Check p=" in out
+    assert "SPA p=" in out
+    assert "DM-HLN p=" in out
+

@@ -37,6 +37,7 @@ from sqlmodel import Session
 
 from app.analytics.elo import EloParams
 from app.analytics.features import FeatureSet, build_feature_set
+from app.analytics.multiple_testing import dm_hln_test, reality_check_pvalue, spa_pvalue
 from app.models import MODEL_ROLE_CHALLENGER, ModelVersion, Season
 from app.services import margin_features_model as mfm
 from app.services import model_registry
@@ -46,6 +47,7 @@ SELECTION_SEASONS = 8  # [T-9, T-2]
 HOLDOUT_SEASONS = 2  # [T-1, T]
 SIGMA_LOOKBACK = 5
 GATE_MIN_GAIN = 0.0005
+GATE_MAX_SPA_PVALUE = 0.2
 MAX_CHALLENGERS = 3
 BOOTSTRAP_RESAMPLES = 2000
 BOOTSTRAP_CHUNK = 250
@@ -340,15 +342,33 @@ class GateVerdict:
     gain: float  # champion hold-out log loss minus the candidate's
     differs: bool
     reasons: Tuple[str, ...]
+    selection_pvalue_spa: Optional[float] = None
 
 
-def evaluate_gate(gain: float, differs: bool, min_gain: float = GATE_MIN_GAIN) -> GateVerdict:
+def evaluate_gate(
+    gain: float,
+    differs: bool,
+    min_gain: float = GATE_MIN_GAIN,
+    selection_pvalue_spa: Optional[float] = None,
+    multitest_gate: bool = False,
+    max_spa_pvalue: float = GATE_MAX_SPA_PVALUE,
+) -> GateVerdict:
     reasons = []
     if gain < min_gain:
         reasons.append(f"hold-out log loss gain {gain:+.4f} is below the required {min_gain:+.4f}")
     if not differs:
         reasons.append("parameters do not differ materially from an active model")
-    return GateVerdict(passed=not reasons, gain=float(gain), differs=bool(differs), reasons=tuple(reasons))
+    if multitest_gate:
+        if selection_pvalue_spa is None or selection_pvalue_spa >= max_spa_pvalue:
+            spa_str = "None" if selection_pvalue_spa is None else f"{selection_pvalue_spa:.4f}"
+            reasons.append(f"selection SPA p-value {spa_str} is not below {max_spa_pvalue:.4f}")
+    return GateVerdict(
+        passed=not reasons,
+        gain=float(gain),
+        differs=bool(differs),
+        reasons=tuple(reasons),
+        selection_pvalue_spa=selection_pvalue_spa,
+    )
 
 
 # --------------------------------------------------------------------------------------------- report
@@ -371,6 +391,10 @@ class CandidateResult:
     selection_gain: Optional[PairedDelta] = None
     summary: Dict[str, Any] = field(default_factory=dict)  # what makes the candidate: Elo params or penalties
     deploy_params: Optional[Dict[str, Any]] = None  # model_version.params of the deployable version (gate passers)
+    selection_pvalue_rc: Optional[float] = None
+    selection_pvalue_spa: Optional[float] = None
+    selection_pvalue_dm_hln: Optional[float] = None
+    dm_hln_pvalue: Optional[float] = None
 
 
 @dataclass
@@ -388,6 +412,10 @@ class LabReport:
     partial: bool = False
     notes: List[str] = field(default_factory=list)
     elapsed_seconds: float = 0.0
+    selection_pvalue_rc: Optional[float] = None
+    selection_pvalue_spa: Optional[float] = None
+    selection_pvalue_dm_hln: Optional[float] = None
+    dm_hln_pvalue: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -420,11 +448,19 @@ def run_lab(
     min_gain: float = GATE_MIN_GAIN,
     top_n: int = TOP_N,
     with_margin_features: bool = True,
+    multitest_gate: Optional[bool] = None,
 ) -> LabReport:
     """
     Run the whole lab on ``data``. ``deadline`` (``clock`` units) ends the work gracefully: at least the champion
     and one Elo configuration are always evaluated, anything skipped is listed in ``notes`` and ``partial`` is set.
     """
+    if multitest_gate is None:
+        try:
+            from app.config import settings
+            multitest_gate = getattr(settings, "LAB_MULTITEST_GATE", False)
+        except Exception:
+            multitest_gate = False
+
     started = clock()
     out_of_time = lambda: deadline is not None and clock() >= deadline
     split = make_split(data.completed_ranks)
@@ -437,11 +473,13 @@ def run_lab(
     # ---- Elo random search, selected on the selection window only
     configs = search_elo_params(n_configs, seed)
     scored: List[Tuple[float, int, EloParams, ModelRun]] = []
+    rows = np.isin(data.ranks, list(split.selection))
+    champ_losses = log_loss_each(champion.p[rows], data.win[rows])
+
     for index, params in enumerate(configs):
         if index > 0 and out_of_time():
             break
         run = run_elo(data, params, f"elo#{index}")
-        rows = np.isin(data.ranks, list(split.selection))
         scored.append((float(log_loss_each(run.p[rows], data.win[rows]).mean()), index, params, run))
     partial = len(scored) < len(configs)
     if partial:
@@ -457,6 +495,24 @@ def run_lab(
         for _, _, params, run in scored[:top_n]
     ]
 
+    # Multiple comparison control on the selection window (over all evaluated configs of this run)
+    p_rc: Optional[float] = None
+    p_spa: Optional[float] = None
+    p_dm_hln: Optional[float] = None
+
+    if scored:
+        loss_diffs_matrix = np.column_stack([
+            champ_losses - log_loss_each(run.p[rows], data.win[rows])
+            for _, _, _, run in scored
+        ])
+        p_rc = reality_check_pvalue(loss_diffs_matrix, n_boot=resamples, seed=seed)
+        p_spa = spa_pvalue(loss_diffs_matrix, n_boot=resamples, seed=seed)
+
+        _, best_index, best_params, best_run = scored[0]
+        best_diff = champ_losses - log_loss_each(best_run.p[rows], data.win[rows])
+        dm_res = dm_hln_test(best_diff, h=1)
+        p_dm_hln = dm_res.p_value if dm_res is not None else None
+
     candidates: List[CandidateResult] = []
     _, best_index, best_params, best_run = scored[0]
     candidates.append(
@@ -467,6 +523,10 @@ def run_lab(
             selection=evaluate(data, best_run, split.selection),
             selection_gain=paired_gain(data, champion, best_run, split.selection, seed, resamples),
             deploy=lambda: _deployed_elo_params(data, best_params, best_run, seed),
+            selection_pvalue_rc=p_rc,
+            selection_pvalue_spa=p_spa,
+            selection_pvalue_dm_hln=p_dm_hln,
+            multitest_gate=bool(multitest_gate),
         )
     )
 
@@ -482,6 +542,7 @@ def run_lab(
             hold_plan = [([r for r in completed if r <= split.fit_through], list(split.holdout))]
             hold_run, hold_params = run_margin_features(data, hold_plan, seed)
             selection_metrics = selection_gain = None
+            selection_run = None
             if not walk_plan:
                 notes.append("margin_features selection-window walk-forward skipped: too few training seasons")
             elif out_of_time():
@@ -492,6 +553,15 @@ def run_lab(
                 selection_run, _ = run_margin_features(data, walk_plan, seed)
                 selection_metrics = evaluate(data, selection_run, walked)
                 selection_gain = paired_gain(data, champion, selection_run, walked, seed, resamples)
+
+            mf_dm_p: Optional[float] = None
+            if selection_run is not None and walk_plan:
+                walked = [test[0] for _, test in walk_plan]
+                walked_rows = np.isin(data.ranks, walked)
+                mf_diff = log_loss_each(champion.p[walked_rows], data.win[walked_rows]) - log_loss_each(selection_run.p[walked_rows], data.win[walked_rows])
+                mf_dm_res = dm_hln_test(mf_diff, h=1)
+                mf_dm_p = mf_dm_res.p_value if mf_dm_res is not None else None
+
             candidates.append(
                 _candidate(
                     data, split, champion, hold_run, mfm.FAMILY_NAME, "margin_features",
@@ -501,6 +571,10 @@ def run_lab(
                     selection=selection_metrics,
                     selection_gain=selection_gain,
                     deploy=lambda: fit_margin_model(data, completed, seed),
+                    selection_pvalue_rc=p_rc,
+                    selection_pvalue_spa=p_spa,
+                    selection_pvalue_dm_hln=mf_dm_p,
+                    multitest_gate=bool(multitest_gate),
                 )
             )
 
@@ -518,6 +592,10 @@ def run_lab(
         partial=partial,
         notes=notes,
         elapsed_seconds=clock() - started,
+        selection_pvalue_rc=p_rc,
+        selection_pvalue_spa=p_spa,
+        selection_pvalue_dm_hln=p_dm_hln,
+        dm_hln_pvalue=p_dm_hln,
     )
 
 
@@ -525,10 +603,29 @@ def _candidate(
     data: LabData, split: SeasonSplit, champion: ModelRun, run: ModelRun, kind: str, label: str, differs: bool,
     seed: int, resamples: int, min_gain: float, *, summary: Dict[str, Any], selection: Optional[Metrics],
     selection_gain: Optional[PairedDelta], deploy: Callable[[], Dict[str, Any]],
+    selection_pvalue_rc: Optional[float] = None,
+    selection_pvalue_spa: Optional[float] = None,
+    selection_pvalue_dm_hln: Optional[float] = None,
+    multitest_gate: bool = False,
 ) -> CandidateResult:
     holdout = evaluate(data, run, split.holdout)
     gain = paired_gain(data, champion, run, split.holdout, seed, resamples)
-    gate = evaluate_gate(gain.mean, differs, min_gain)
+    gate = evaluate_gate(
+        gain.mean,
+        differs,
+        min_gain,
+        selection_pvalue_spa=selection_pvalue_spa,
+        multitest_gate=multitest_gate,
+    )
+    deploy_params = deploy() if gate.passed else None
+    if deploy_params is not None:
+        if selection_pvalue_rc is not None:
+            deploy_params["selection_pvalue_rc"] = selection_pvalue_rc
+        if selection_pvalue_spa is not None:
+            deploy_params["selection_pvalue_spa"] = selection_pvalue_spa
+        if selection_pvalue_dm_hln is not None:
+            deploy_params["selection_pvalue_dm_hln"] = selection_pvalue_dm_hln
+            deploy_params["dm_hln_pvalue"] = selection_pvalue_dm_hln
     return CandidateResult(
         kind=kind,
         label=label,
@@ -538,7 +635,11 @@ def _candidate(
         selection=selection,
         selection_gain=selection_gain,
         summary=summary,
-        deploy_params=deploy() if gate.passed else None,
+        deploy_params=deploy_params,
+        selection_pvalue_rc=selection_pvalue_rc,
+        selection_pvalue_spa=selection_pvalue_spa,
+        selection_pvalue_dm_hln=selection_pvalue_dm_hln,
+        dm_hln_pvalue=selection_pvalue_dm_hln,
     )
 
 
@@ -635,6 +736,13 @@ def _plan(report: LabReport, champion: ModelVersion, now: datetime) -> List[Plan
     planned = []
     for candidate in passed:
         params = dict(candidate.deploy_params)
+        if report.selection_pvalue_rc is not None:
+            params.setdefault("selection_pvalue_rc", report.selection_pvalue_rc)
+        if report.selection_pvalue_spa is not None:
+            params.setdefault("selection_pvalue_spa", report.selection_pvalue_spa)
+        if report.selection_pvalue_dm_hln is not None:
+            params.setdefault("selection_pvalue_dm_hln", report.selection_pvalue_dm_hln)
+            params.setdefault("dm_hln_pvalue", report.selection_pvalue_dm_hln)
         notes = {
             "source": "model_lab",
             "seed": report.seed,
@@ -643,6 +751,10 @@ def _plan(report: LabReport, champion: ModelVersion, now: datetime) -> List[Plan
             "holdout": asdict(candidate.holdout),
             "holdout_gain_vs_champion": asdict(candidate.holdout_gain),
             "champion_holdout": asdict(report.champion_holdout),
+            "selection_pvalue_rc": report.selection_pvalue_rc,
+            "selection_pvalue_spa": report.selection_pvalue_spa,
+            "selection_pvalue_dm_hln": report.selection_pvalue_dm_hln,
+            "dm_hln_pvalue": report.selection_pvalue_dm_hln,
         }
         planned.append(
             PlannedModel(
@@ -664,12 +776,26 @@ def register_candidates(
     dry_run: bool = False,
     confirm_database: Optional[str] = None,
     max_challengers: int = MAX_CHALLENGERS,
+    multitest_gate: Optional[bool] = None,
 ) -> RegistrationResult:
     """
     Insert the gate-passing candidates as challengers (parent = the champion) and, for Elo candidates, run the
     initial rating backfill so the first tick does not replay the whole history. ``dry_run`` only plans.
     Raises ``RegistrationRefused`` on a guarded database or when ``max_challengers`` (default 3) are already active.
     """
+    if multitest_gate is None:
+        try:
+            from app.config import settings
+            multitest_gate = getattr(settings, "LAB_MULTITEST_GATE", False)
+        except Exception:
+            multitest_gate = False
+
+    if multitest_gate and (report.selection_pvalue_spa is None or report.selection_pvalue_spa >= GATE_MAX_SPA_PVALUE):
+        result = RegistrationResult(dry_run=dry_run)
+        val_str = "None" if report.selection_pvalue_spa is None else f"{report.selection_pvalue_spa:.4f}"
+        result.skipped.append(f"selection SPA p-value {val_str} is not below {GATE_MAX_SPA_PVALUE:.4f} (LAB_MULTITEST_GATE)")
+        return result
+
     if not dry_run:
         check_registration_target(session.get_bind().url, confirm_database)
     champion = model_registry.get_champion(session)

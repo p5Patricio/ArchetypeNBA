@@ -37,6 +37,7 @@ from app.models import (
     StakingStrategy,
 )
 from app.services import market_close, model_registry
+from app.services.clv_report import PinnacleClvReport, build_pinnacle_clv_report
 from app.services.league_report import League, build_league, format_league
 
 _SETTLED = (BetStatus.won, BetStatus.lost, BetStatus.push)
@@ -110,6 +111,7 @@ class PaperReport:
     now: datetime
     strategies: List[StrategyPerformance] = field(default_factory=list)
     clv: ClvCoverage = field(default_factory=ClvCoverage)
+    pinnacle_clv: Optional[PinnacleClvReport] = None
     skill: ModelSkill = field(default_factory=ModelSkill)
     models: List[ActiveModel] = field(default_factory=list)
     league: Optional[League] = None
@@ -121,6 +123,7 @@ def build_report(session: Session, now: Optional[datetime] = None) -> PaperRepor
         now=now,
         strategies=_performance(session),
         clv=_clv_coverage(session, now),
+        pinnacle_clv=build_pinnacle_clv_report(session, now),
         skill=_model_skill(session),
         models=_active_models(session),
         league=build_league(session, now),
@@ -303,7 +306,7 @@ def format_report(report: PaperReport) -> str:
         lines.append("  No paper bets recorded yet.")
     for perf in report.strategies:
         lines.append(
-            f"  {perf.strategy:<17} bets {perf.bets} (settled {perf.settled}, pending {perf.pending}) | "
+            f"  {perf.strategy:<18} bets {perf.bets} (settled {perf.settled}, pending {perf.pending}) | "
             f"win rate {_pct(perf.win_rate)} | P/L {perf.pnl_units:+.2f}u | ROI {_pct(perf.roi)} | "
             f"avg CLV {_pct(perf.avg_clv, 2)} | beat close {_pct(perf.beat_close_rate)} (over {perf.clv_bets} bets with CLV)"
         )
@@ -323,6 +326,30 @@ def format_report(report: PaperReport) -> str:
         "(those closing lines cannot be recovered)."
     )
     lines.append("")
+
+    pclv = report.pinnacle_clv
+    if pclv is not None:
+        lines.append("CLV vs Pinnacle close (per game)")
+        if pclv.games_count:
+            mean_str = _pct(pclv.stats.mean_clv, 2)
+            se_str = _pct(pclv.stats.std_err, 2)
+            t_str = f"{pclv.stats.t_stat:.2f}" if pclv.stats.t_stat is not None else "n/a"
+            sd_str = _pct(pclv.stats.std_dev, 2)
+            needed = pclv.stats.bets_needed_for(0.01)
+            needed_str = f"{needed:.0f}" if needed is not None else "n/a"
+            lines.append(
+                f"  games {pclv.games_count} | mean CLV {mean_str} | SE {se_str} | t {t_str} | "
+                f"sd {sd_str} | bets needed for +1% {needed_str}"
+            )
+        else:
+            lines.append("  No independent games with Pinnacle closing data yet.")
+        exc = pclv.exclusions
+        lines.append(
+            f"  Exclusions: {exc.total} bets (no closing marker {exc.no_closing_marker}, "
+            f"no Pinnacle quote {exc.no_pinnacle_quote}, line moved {exc.line_moved}, "
+            f"one-sided {exc.one_sided_quote}, closing before bet {exc.closing_before_bet})"
+        )
+        lines.append("")
 
     skill = report.skill
     title = f"Model skill of the champion ({skill.model})" if skill.model else "Model skill (no champion registered)"
@@ -358,5 +385,5 @@ def format_report(report: PaperReport) -> str:
 
     lines.append("Bankroll (start + settled P/L)")
     for perf in report.strategies:
-        lines.append(f"  {perf.strategy:<17} {perf.bankroll:.2f}u")
+        lines.append(f"  {perf.strategy:<18} {perf.bankroll:.2f}u")
     return "\n".join(lines)

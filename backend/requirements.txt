@@ -18,3 +18,4 @@ nba-api>=1.11.0
 tenacity>=9.0.0
 tqdm>=4.67.0
 redis>=7.0.0
+pypdf>=6.0.0

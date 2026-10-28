@@ -115,3 +115,70 @@ def test_edge_threshold_is_inclusive_despite_float_noise():
 
     assert d.raw_edge >= 0.02 - 1e-12
     assert d.eligible
+
+
+def test_shrink_factor_monotonic_in_edge():
+    edges = [0.005, 0.01, 0.02, 0.05, 0.10, 0.20]
+    factors = [bp.shrink_factor(e) for e in edges]
+    assert all(f > 0.0 for f in factors)
+    assert factors == sorted(factors)
+    assert all(0.0 <= f <= 1.0 for f in factors)
+
+
+def test_shrink_factor_zero_and_negative_edge():
+    assert bp.shrink_factor(0.0) == 0.0
+    assert bp.shrink_factor(-0.05) == 0.0
+    assert bp.shrink_factor(-1.0) == 0.0
+
+
+def test_shrink_factor_exact_half_at_noise_sd():
+    assert bp.shrink_factor(0.05, noise_sd=0.05) == pytest.approx(0.5)
+    assert bp.shrink_factor(0.10, noise_sd=0.10) == pytest.approx(0.5)
+
+
+def test_kelly_shrunk_stake_applies_shrinkage():
+    # At edge == noise_sd (0.05): shrink_factor is 0.5.
+    # Base multiplier is 0.5, so effective multiplier = 0.5 * 0.5 = 0.25.
+    # 100 bankroll * 0.04 f_star * 0.25 = 1.0u.
+    assert bp.kelly_shrunk_stake(100.0, 0.04, edge=0.05) == pytest.approx(1.0)
+
+
+def test_kelly_shrunk_stake_respects_caps_and_min_stake():
+    # Per-bet cap: 2% of 100 = 2.0u
+    assert bp.kelly_shrunk_stake(100.0, 0.50, edge=0.20) == pytest.approx(2.0)
+    # Daily room and game room
+    assert bp.kelly_shrunk_stake(100.0, 0.04, edge=0.05, daily_room=0.6) == pytest.approx(0.6)
+    assert bp.kelly_shrunk_stake(100.0, 0.04, edge=0.05, game_room=0.4) == pytest.approx(0.4)
+    # Zero edge -> multiplier 0 -> stake 0
+    assert bp.kelly_shrunk_stake(100.0, 0.04, edge=0.0) == 0.0
+    # Under min stake (< 0.05)
+    assert bp.kelly_shrunk_stake(100.0, 0.001, edge=0.05) == 0.0
+
+
+def test_evaluate_market_edge_eligible_when_soft_beats_sharp_prob():
+    # Pinnacle fair prob is 0.50 (fair decimal 2.00). Soft book offers 2.10.
+    # ev = 0.50 * 2.10 - 1.0 = +0.05 >= 0.02
+    d = bp.evaluate_market_edge(p_fair=0.50, decimal_price=2.10)
+
+    assert d.eligible and d.reason == "ok"
+    assert d.p_cond == pytest.approx(0.50)
+    assert d.p_blend == pytest.approx(0.50)
+    assert d.raw_edge == 0.0
+    assert d.ev == pytest.approx(0.05)
+    assert d.f_star > 0.0
+
+
+def test_evaluate_market_edge_rejected_when_ev_below_min():
+    # Pinnacle fair 0.50, soft book offers 2.02 -> ev = 0.50 * 2.02 - 1.0 = +0.01 < 0.02
+    d = bp.evaluate_market_edge(p_fair=0.50, decimal_price=2.02)
+
+    assert not d.eligible and d.reason == "ev_below_min"
+    assert d.ev == pytest.approx(0.01)
+
+
+def test_evaluate_market_edge_invalid_inputs():
+    assert bp.evaluate_market_edge(0.0, 2.0).reason == "invalid_input"
+    assert bp.evaluate_market_edge(1.0, 2.0).reason == "invalid_input"
+    assert bp.evaluate_market_edge(0.5, 1.0).reason == "invalid_input"
+    assert bp.evaluate_market_edge(0.5, -1.0).reason == "invalid_input"
+

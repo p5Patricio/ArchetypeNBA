@@ -261,11 +261,15 @@ def test_both_strategies_of_one_prediction_settle_independently(world):
     game = final_game(world, 99, 100)
     flat = place_bet(world, game, MarketType.h2h, BetSide.away, stake="1.000", strategy=StakingStrategy.flat)
     kelly = place_bet(world, game, MarketType.h2h, BetSide.away, stake="1.750", price="1.9090", strategy=StakingStrategy.kelly_fractional)
+    shrunk = place_bet(world, game, MarketType.h2h, BetSide.away, stake="0.800", price="1.9090", strategy=StakingStrategy.kelly_shrunk)
+    market = place_bet(world, game, MarketType.h2h, BetSide.away, stake="1.000", price="2.0000", strategy=StakingStrategy.market_edge)
 
     settle_bets(world, NOW)
 
     assert reload(world, flat).profit_units == Decimal("0.909")
     assert reload(world, kelly).profit_units == Decimal("1.591")  # 1.75 * 0.909 = 1.59075
+    assert reload(world, shrunk).profit_units == Decimal("0.727")  # 0.80 * 0.909 = 0.7272
+    assert reload(world, market).profit_units == Decimal("1.000")  # 1.00 * (2.0 - 1.0) = 1.000
 
 
 def test_dry_run_settles_nothing(world):

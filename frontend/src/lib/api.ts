@@ -1227,6 +1227,15 @@ export interface TodayPropsResponse {
   total_props: number;
   value_picks_count: number;
   items: PropItem[];
+  injury_report?: {
+    available: boolean;
+    reason?: string | null;
+  } | null;
+  baselines_available?: boolean;
+  stale?: boolean;
+  generated_at?: string;
+  age?: string;
+  age_seconds?: number;
 }
 
 export async function getTodayProps(params?: {
@@ -1260,5 +1269,186 @@ export interface ShutdownResponse {
 export async function shutdownServices(): Promise<ShutdownResponse> {
   return postJson<ShutdownResponse>(`${API_BASE}/system/shutdown`, {});
 }
+
+// ============================================================================
+// WP78: Model League & Paper Trading APIs
+// ============================================================================
+
+// Model League Types (from backend/app/api/v1/league.py)
+export interface GainResponse {
+  mean: number;
+  ci_low?: number | null;
+  ci_high?: number | null;
+  bound_low?: number | null;
+  bound_high?: number | null;
+}
+
+export interface ChampionResponse {
+  model_id: number;
+  label: string;
+  role: string;
+  predictions: number;
+  final_games: number;
+  days_live?: number | null;
+}
+
+export interface ChallengerResponse {
+  model_id: number;
+  label: string;
+  role: string;
+  predictions: number;
+  final_games: number;
+  days_live?: number | null;
+  paired_n: number;
+  target_n: number;
+  champion_log_loss?: number | null;
+  challenger_log_loss?: number | null;
+  log_loss_gain?: GainResponse | null;
+  margin_nll_gain?: GainResponse | null;
+  market_brier_gap?: number | null;
+  gate_text: string;
+  decision: string;
+  last_decision?: string | null;
+  last_evaluated_at?: string | null;
+  last_reason?: string | null;
+}
+
+export interface RoleChangeResponse {
+  at?: string | null;
+  decision: string;
+  model: string;
+  reason: string;
+}
+
+export interface LeagueResponse {
+  now: string;
+  min_games: number;
+  champion?: ChampionResponse | null;
+  challengers: ChallengerResponse[];
+  changes: RoleChangeResponse[];
+  last_proposal?: string | null;
+  last_proposal_summary?: string | null;
+}
+
+// Paper Trading Types (from backend/app/api/v1/paper.py)
+export interface StrategySummary {
+  strategy: string;
+  bets: number;
+  settled: number;
+  pending: number;
+  win_rate?: number | null;
+  pnl_units: number;
+  roi?: number | null;
+  bankroll: number;
+  avg_clv?: number | null;
+  beat_close_rate?: number | null;
+  clv_bets: number;
+}
+
+export interface PinnacleClvExclusionsResponse {
+  total: number;
+  no_closing_marker: number;
+  no_pinnacle_quote: number;
+  line_moved: number;
+  one_sided_quote: number;
+  closing_before_bet: number;
+  unsupported_market: number;
+}
+
+export interface PinnacleClvSummaryResponse {
+  games: number;
+  mean_clv?: number | null;
+  std_err?: number | null;
+  t_stat?: number | null;
+  std_dev?: number | null;
+  bets_needed_1pct?: number | null;
+  exclusions: PinnacleClvExclusionsResponse;
+  same_book_avg_clv?: number | null;
+  same_book_clv_bets: number;
+}
+
+export interface ChampionSkillResponse {
+  model?: string | null;
+  sharp_book?: string | null;
+  games_compared: number;
+  brier_model?: number | null;
+  brier_market?: number | null;
+  difference?: number | null;
+}
+
+export interface PaperSummaryResponse {
+  strategies: StrategySummary[];
+  pinnacle_clv: PinnacleClvSummaryResponse;
+  champion_model?: string | null;
+  brier: ChampionSkillResponse;
+}
+
+export interface BetGameInfo {
+  id: number;
+  home_team: string;
+  away_team: string;
+  commence_time: string;
+}
+
+export interface PaperBetItem {
+  id: number;
+  game: BetGameInfo;
+  market: string;
+  side: string;
+  line?: number | null;
+  price_taken: number;
+  stake_units: number;
+  status: string;
+  profit_units?: number | null;
+  clv_pct?: number | null;
+  book?: string | null;
+  placed_at?: string | null;
+  strategy: string;
+}
+
+export interface PaperBetsListResponse {
+  total: number;
+  bets: PaperBetItem[];
+}
+
+export interface BankrollPoint {
+  settled_at: string;
+  cumulative_profit_units: number;
+  bankroll: number;
+}
+
+export interface PaperBankrollResponse {
+  series: Record<string, BankrollPoint[]>;
+}
+
+// Client Functions
+export async function getLeague(): Promise<LeagueResponse> {
+  return getJson<LeagueResponse>(`${API_BASE}/league`);
+}
+
+export async function getPaperSummary(): Promise<PaperSummaryResponse> {
+  return getJson<PaperSummaryResponse>(`${API_BASE}/paper/summary`);
+}
+
+export async function getPaperBets(params?: {
+  strategy?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<PaperBetsListResponse> {
+  const query = new URLSearchParams();
+  if (params?.strategy && params.strategy !== "all") query.set("strategy", params.strategy);
+  if (params?.status && params.status !== "all") query.set("status", params.status);
+  if (params?.limit !== undefined) query.set("limit", String(params.limit));
+  if (params?.offset !== undefined) query.set("offset", String(params.offset));
+
+  const qs = query.toString() ? `?${query.toString()}` : "";
+  return getJson<PaperBetsListResponse>(`${API_BASE}/paper/bets${qs}`);
+}
+
+export async function getPaperBankroll(): Promise<PaperBankrollResponse> {
+  return getJson<PaperBankrollResponse>(`${API_BASE}/paper/bankroll`);
+}
+
 
 

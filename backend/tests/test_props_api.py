@@ -7,7 +7,7 @@ from app.analytics.props_engine import PropBetLine, PropsEngine
 from app.api.v1 import props as props_module
 from app.main import app
 from app.services.gemini_analyzer import GeminiAnalyzerService, SlateAnalysisResult
-from app.services.injury_scraper import InjuryScraperService
+from app.services.injury_scraper import InjuryReport, InjuryScraperService
 from app.services.odds_api_service import OddsApiService
 
 client = TestClient(app)
@@ -19,7 +19,11 @@ def isolated_props(monkeypatch, tmp_path):
     monkeypatch.setattr(props_module, "CACHE_FILE", tmp_path / "last_props_cache.json")
     monkeypatch.setattr(props_module, "_cached_response", None)
     monkeypatch.setattr(props_module, "_last_computed_time", None)
-    monkeypatch.setattr(InjuryScraperService, "fetch_injury_report", lambda self: [])
+    monkeypatch.setattr(
+        InjuryScraperService,
+        "fetch_injury_report",
+        lambda self: InjuryReport(available=False, reason="test: no official report", rows=[]),
+    )
     monkeypatch.setattr(
         GeminiAnalyzerService,
         "analyze_injuries_and_news",
@@ -31,7 +35,7 @@ def isolated_props(monkeypatch, tmp_path):
 
 
 def _no_live_lines(monkeypatch):
-    def fake(self):
+    def fake(self, *args, **kwargs):
         self.last_fetch_live = False
         return {}
 
@@ -39,7 +43,7 @@ def _no_live_lines(monkeypatch):
 
 
 def _live_lines(monkeypatch, lines):
-    def fake(self):
+    def fake(self, *args, **kwargs):
         self.last_fetch_live = True
         return lines
 
@@ -58,6 +62,27 @@ def test_refresh_without_live_lines_returns_an_honest_empty_slate(monkeypatch):
     assert data["value_picks_count"] == 0
     assert "Sin líneas en vivo" in data["odds_source"]
     assert "Consenso" not in data["odds_source"]
+    assert data["injury_report"] is not None
+    assert data["injury_report"]["available"] is False
+    assert data["injury_report"]["reason"] == "test: no official report"
+
+
+def test_props_api_injury_report_unavailable_skips_qualitative_layer(monkeypatch):
+    _no_live_lines(monkeypatch)
+    qualitative_called = []
+
+    def fake_analyze(self, items):
+        qualitative_called.append(items)
+        return SlateAnalysisResult(modifiers=[], slate_summary="Fake")
+
+    monkeypatch.setattr(GeminiAnalyzerService, "analyze_injuries_and_news", fake_analyze)
+
+    response = client.get("/api/v1/props/today?refresh=true")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(qualitative_called) == 0  # skipped because injury report is unavailable
+    assert data["injury_report"]["available"] is False
+    assert "Omitido" in data["ai_engine"]
 
 
 def test_run_analysis_without_live_lines_never_invents_picks(monkeypatch):
@@ -217,3 +242,100 @@ def test_telegram_report_shows_chosen_side_price_probability_and_bookmaker(monke
     assert "Cuota Under: +120 · bravo" in message
     assert f"Prob. Under:* `{item.prob_under * 100:.1f}%`" in message
     assert "Cuota Over" not in message
+
+
+def test_refresh_with_no_baselines_reports_baselines_available_false(monkeypatch):
+    _live_lines(
+        monkeypatch,
+        {
+            "Luka Doncic": {
+                "PTS": PropBetLine(stat_type="PTS", line=30.5, over_odds=-110, under_odds=-110),
+            }
+        },
+    )
+    monkeypatch.setattr(PropsEngine, "load_baselines_from_db", lambda self, *a, **k: [])
+
+    response = client.get("/api/v1/props/today?refresh=true")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["baselines_available"] is False
+    assert data["items"] == []
+    assert data["total_props"] == 0
+
+
+def test_credit_guard_blocks_refresh_when_quota_below_floor(monkeypatch):
+    from app.services.odds_api_service import InsufficientQuotaError
+
+    def fake_get_slate(self, *args, **kwargs):
+        raise InsufficientQuotaError("Credit guard refused props fetch: 20 credits remaining, call costs 6, floor is 25")
+
+    monkeypatch.setattr(OddsApiService, "get_slate_props_map", fake_get_slate)
+
+    response = client.get("/api/v1/props/today?refresh=true")
+
+    assert response.status_code == 429
+    assert "Credit guard refused props fetch" in response.json()["detail"]
+
+
+def test_credit_guard_blocks_run_analysis_when_quota_below_floor(monkeypatch):
+    from app.services.odds_api_service import InsufficientQuotaError
+
+    def fake_get_slate(self, *args, **kwargs):
+        raise InsufficientQuotaError("Credit guard refused props fetch: 20 credits remaining, call costs 6, floor is 25")
+
+    monkeypatch.setattr(OddsApiService, "get_slate_props_map", fake_get_slate)
+
+    response = client.post("/api/v1/props/run-analysis")
+
+    assert response.status_code == 429
+    assert "Credit guard refused props fetch" in response.json()["detail"]
+
+
+def test_cache_freshness_from_today_is_not_stale(monkeypatch):
+    _live_lines(
+        monkeypatch,
+        {
+            "Luka Doncic": {
+                "PTS": PropBetLine(stat_type="PTS", line=30.5, over_odds=-110, under_odds=-110),
+            }
+        },
+    )
+    refresh_resp = client.get("/api/v1/props/today?refresh=true")
+    assert refresh_resp.status_code == 200
+
+    # Clear in-memory cache to force reading from the on-disk cache file
+    monkeypatch.setattr(props_module, "_cached_response", None)
+
+    response = client.get("/api/v1/props/today")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["stale"] is False
+    assert data["generated_at"] is not None
+    assert data["age"] is not None
+    assert data["age_seconds"] is not None
+
+
+def test_cache_freshness_from_yesterday_is_stale_with_age(monkeypatch, tmp_path):
+    stale_cache = {
+        "date": "2026-10-25",
+        "ai_engine": "Modo Heurístico Local",
+        "odds_source": "The Odds API (En Vivo)",
+        "slate_summary": "Yesterday slate.",
+        "total_props": 0,
+        "value_picks_count": 0,
+        "items": [],
+        "baselines_available": True,
+        "stale": False,
+        "generated_at": "2026-10-25T10:00:00+00:00",
+    }
+    with open(props_module.CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(stale_cache, f)
+
+    response = client.get("/api/v1/props/today")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["stale"] is True
+    assert data["age_seconds"] is not None and data["age_seconds"] > 86400
+    assert data["age"] is not None
+

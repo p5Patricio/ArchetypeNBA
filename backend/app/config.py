@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     THE_ODDS_API_KEY: str = ""
     PROPS_SIMULATION_RUNS: int = 10000
 
+    # Official NBA Injury Report PDF automated download (disabled until owner clears NBA terms)
+    INJURY_PDF_ENABLED: bool = False
+
     # Model learning loop (app.services.model_evaluation / model_promotion). The defaults mirror the module
     # constants in model_evaluation; LEARNING_AUTOPROMOTE is the kill switch (off = evaluate and report only).
     LEARNING_MIN_GAMES: int = 150
@@ -53,6 +56,11 @@ class Settings(BaseSettings):
     LEARNING_LOOK_INTERVAL_DAYS: int = 7
     LEARNING_MAX_LOOKS: int = 12
     LEARNING_MAX_AGE_DAYS: int = 150
+
+    # Candidate lab multiple-testing control (app.analytics.multiple_testing).
+    # When True, a candidate must also pass the SPA multiple-testing gate (selection_pvalue_spa < 0.2)
+    # on the selection window to be eligible for registration as a challenger. Default False (report only).
+    LAB_MULTITEST_GATE: bool = False
 
 
 settings = Settings()

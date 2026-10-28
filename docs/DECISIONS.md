@@ -525,6 +525,14 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Consequences**: The cutover followed D-54: tick paused, final export, verified restore (all 21 tables matched), WSL tick registered, Windows task removed; the gap was about five minutes, at night. The tick only runs while the distro is alive. The shutdown endpoint became cross-platform. A bare `pytest` hangs in this network mode, so the documented command is `python -m pytest tests -q`.
 - **Source**: [`WSL.md`](WSL.md); [`DB_TRANSFER.md`](DB_TRANSFER.md).
 
+### D-56 Judge the paper system by Pinnacle-referenced CLV per game; add two staking arms and a report-only selection test
+- **Date**: 2026-10-28
+- **Decision**: The evidence of skill is the mean log-odds CLV against Pinnacle's de-vigged close with one observation per game (flat and Kelly bet the same selections), reported with its standard error and the sample still needed; same-book CLV stays as a labelled optimistic figure. Two strategies are added next to the existing ones: `kelly_shrunk` (stake multiplier scaled by edge^2 / (edge^2 + sd^2), sd an estimate of the model's probability error) and `market_edge` (no model: bet when the best price beats Pinnacle's fair probability by the minimum EV). The candidate lab records Reality Check, SPA and DM-HLN p-values but only gates on them when `LAB_MULTITEST_GATE` is on.
+- **Context**: A research pass (`RESEARCH_BETTING_IMPROVEMENTS.md`, claims checked against registries, primary pages and our own data) found that the same-book CLV (+3.7%) was an artefact: against Pinnacle it was +0.34% (t 0.27, 23 games), and a +1% edge needs about 220 independent bets.
+- **Alternatives rejected**: Judging by ROI (needs about 15,000 bets for +2%); replacing the fixed quarter-Kelly outright (rule 8: a new strategy keeps the old bankroll comparable); a hard multiple-testing gate by default (a silent policy change).
+- **Consequences**: New enum values need the lockstep deploy; the two arms are hypotheses and carry no weight until their CLV against Pinnacle is positive with t above 2.
+- **Source**: [`RESEARCH_BETTING_IMPROVEMENTS.md`](RESEARCH_BETTING_IMPROVEMENTS.md); [`betting-improvements.md`](../odd/tasks/betting-improvements.md).
+
 ## Next step
 
 Planned work and the reasons behind it: [`ROADMAP.md`](ROADMAP.md).

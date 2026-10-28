@@ -138,6 +138,24 @@ One `FeatureState` class serves training and serving. A single chronological pas
 |----------|-------|------|
 | `flat` | 1 unit | Per bet 2% of bankroll, daily 10%, per game 4% |
 | `kelly_fractional` | `bankroll * f* * 0.25` (quarter Kelly), with `f*` computed from `p'` | Same caps |
+| `kelly_shrunk` | `bankroll * f* * multiplier`, where `multiplier = 0.5 * shrink_factor(edge, noise_sd)` | Same caps |
+| `market_edge` | 1 unit (flat) when `EV(p_fair, price) >= 0.02`, ignoring model edge | Same caps |
+
+#### Kelly shrinkage (Baker & McHale 2013)
+Fixed quarter-Kelly assumes parameter certainty, but in sports betting model estimation error dominates the uncertainty. The `kelly_shrunk` strategy applies the shrinkage factor:
+$$k = \frac{\text{edge}^2}{\text{edge}^2 + \sigma_{\text{noise}}^2} \in [0, 1]$$
+where:
+* $\text{edge} = p_{\text{blend}} - \frac{1}{\text{price}}$ is the edge of the blended win probability over the break-even probability.
+* $\sigma_{\text{noise}} = 0.05$ (`MODEL_PROB_NOISE_SD`): an **estimate** of the standard error of the model's win probability, to be calibrated from the model league rather than treated as a known constant.
+* Multiplier: $\text{multiplier} = 0.5 \times k$ (`KELLY_MULTIPLIER_SHRUNK_BASE = 0.5`). When edge is large compared to noise, the multiplier approaches half-Kelly; when edge is small or noisy, the stake shrinks smoothly towards zero.
+
+#### Market-edge benchmark arm
+`market_edge` serves as an un-modeled benchmark arm:
+* Eligibility: takes a price whenever Pinnacle's sharp de-vigged fair probability gives an expected value $\text{EV} = p_{\text{fair}} \times \text{price} - 1 \ge 0.02$ (`MIN_EV`), completely independent of what the model predicts.
+* Purpose: separates "the model has skill" from "line shopping the soft book against Pinnacle's fair quote pays".
+* Staking: flat 1 unit, subject to the same bankroll, per-bet (2%), daily (10%), and per-game (4%) exposure caps.
+
+Both `kelly_shrunk` and `market_edge` are research hypotheses to be judged by **CLV against Pinnacle's closing line**, not by raw paper ROI (which requires tens of thousands of bets to separate signal from luck).
 
 Other constants: starting bankroll 100 units per strategy; a stake under 0.05 units is not placed; the bankroll is **100 plus settled P/L** (pending stakes are not subtracted); "daily" means the machine-local calendar day.
 
@@ -245,6 +263,18 @@ Details that matter:
 | Time budget | The learn step allows 4 minutes in total; the lab stops gracefully and the report is marked partial |
 
 First real run (2026-10-20, seed 42, 29,642 games): on the 2,631 hold-out games (2024-25 and 2025-26) the champion scored log loss 0.6071, the best Elo from the search 0.6084 (gain -0.0013, rejected) and `margin_features` 0.6045 (gain +0.0026, 95% interval -0.0009 to +0.0063, passes the historical gate). It was registered as the first challenger.
+
+### Multiple-comparison control on the selection window
+
+Evaluating ~40 Elo configurations inflates the apparent outperformance on the selection window (data snooping / selection bias). `analytics/multiple_testing.py` implements three statistical controls:
+
+| Statistic | Method | Definition & Purpose |
+|-----------|--------|----------------------|
+| `selection_pvalue_rc` | White's Reality Check (White 2000) | Paired bootstrap testing whether the maximum gain across evaluated candidates exceeds what chance produces under the null ($E[d_k] \le 0$). Conservative when inferior models are included. |
+| `selection_pvalue_spa` | Hansen's SPA (Hansen 2005) | Studentized statistic ($t_k = \bar{d}_k / \text{se}(\bar{d}_k)$) that recenters only non-clearly-inferior candidates ($t_k \ge -\sqrt{2 \ln(\ln N)}$), avoiding the power loss of Reality Check. |
+| `selection_pvalue_dm_hln` | Diebold-Mariano with HLN correction (1997) | Paired forecast test comparing the selected candidate directly with the champion, using the Harvey-Leybourne-Newbold small-sample correction and a Student-t reference ($h=1$). |
+
+By default, these metrics are **report-only** (recorded in `LabReport` and persisted in `model_version.params` / `notes`, with registration behavior unchanged, obeying rule 8). When `LAB_MULTITEST_GATE=true` in `backend/app/config.py` (or `--multitest-gate`), a candidate must additionally achieve `selection_pvalue_spa < 0.20` on the selection window to pass the gate and register as a challenger.
 
 ## 11. Simulated error rates
 

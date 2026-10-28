@@ -430,6 +430,8 @@ class BetStatus(str, enum.Enum):
 class StakingStrategy(str, enum.Enum):
     flat = "flat"
     kelly_fractional = "kelly_fractional"
+    kelly_shrunk = "kelly_shrunk"
+    market_edge = "market_edge"
 
 
 def _pg_enum(py_enum: type[enum.Enum], name: str) -> SAEnum:

@@ -50,6 +50,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--register", action="store_true", help="insert the gate-passing candidates as challengers")
     parser.add_argument("--dry-run", action="store_true", help="with --register: print what would be registered, write nothing")
     parser.add_argument("--confirm-database", default=None, help="database name to confirm a --register on PostgreSQL")
+    parser.add_argument(
+        "--multitest-gate",
+        dest="multitest_gate",
+        action="store_true",
+        default=None,
+        help="require selection_pvalue_spa < 0.2 for candidate to pass gate (default: use LAB_MULTITEST_GATE setting)",
+    )
+    parser.add_argument(
+        "--no-multitest-gate",
+        dest="multitest_gate",
+        action="store_false",
+        help="disable multiple-testing gate even if enabled in settings",
+    )
     return parser
 
 
@@ -91,6 +104,14 @@ def format_report(report: LabReport) -> str:
     margin = next((c for c in report.candidates if c.kind != model_registry.ELO_FAMILY_NAME and c.selection), None)
     if margin is not None:
         lines.append(_metrics_row("margin_features (wf)", margin.selection, margin.selection_gain))
+
+    p_rc = f"{report.selection_pvalue_rc:.4f}" if report.selection_pvalue_rc is not None else "n/a"
+    p_spa = f"{report.selection_pvalue_spa:.4f}" if report.selection_pvalue_spa is not None else "n/a"
+    p_dm = f"{report.selection_pvalue_dm_hln:.4f}" if report.selection_pvalue_dm_hln is not None else "n/a"
+    lines += [
+        "",
+        f"Multiple-testing control (selection window): Reality Check p={p_rc}, SPA p={p_spa}, selected candidate DM-HLN p={p_dm}",
+    ]
 
     lines += ["", "Hold-out (never used for selection)", _HEADER, _metrics_row("champion", report.champion_holdout, None)]
     for candidate in report.candidates:
@@ -150,6 +171,7 @@ def main(argv: Optional[List[str]] = None, session_factory=None) -> int:
                 seed=args.seed,
                 n_configs=args.configs,
                 deadline=started + args.max_seconds,
+                multitest_gate=args.multitest_gate,
             )
             if baseline_note:
                 report.notes.append(baseline_note)
@@ -163,7 +185,11 @@ def main(argv: Optional[List[str]] = None, session_factory=None) -> int:
         if args.register:
             try:
                 result = register_candidates(
-                    session, report, dry_run=args.dry_run, confirm_database=args.confirm_database
+                    session,
+                    report,
+                    dry_run=args.dry_run,
+                    confirm_database=args.confirm_database,
+                    multitest_gate=args.multitest_gate,
                 )
             except RegistrationRefused as exc:
                 print(f"\nnot registering: {exc}", file=sys.stderr)

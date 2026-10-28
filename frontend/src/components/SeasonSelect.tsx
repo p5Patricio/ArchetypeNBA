@@ -39,7 +39,7 @@ export function SeasonSelect({ value, onChange, className = "" }: SeasonSelectPr
 
   return (
     <div className={`inline-flex items-center gap-2 ${className}`}>
-      <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+      <label className="hidden sm:inline text-xs font-semibold uppercase tracking-wider text-slate-400">
         Temporada:
       </label>
       <select
@@ -50,7 +50,7 @@ export function SeasonSelect({ value, onChange, className = "" }: SeasonSelectPr
           onChange(sId, item?.season_label);
         }}
         disabled={loading || seasons.length === 0}
-        className="rounded-lg border border-sky-500/30 bg-slate-900/90 px-3 py-1.5 text-sm font-medium text-sky-300 shadow-inner outline-none transition hover:border-sky-400 focus:border-sky-400 focus:ring-1 focus:ring-sky-400 disabled:opacity-50"
+        className="max-w-[6.5rem] sm:max-w-none rounded-lg border border-sky-500/30 bg-slate-900/90 px-3 py-1.5 text-sm font-medium text-sky-300 shadow-inner outline-none transition hover:border-sky-400 focus:border-sky-400 focus:ring-1 focus:ring-sky-400 disabled:opacity-50"
       >
         {loading ? (
           <option value="">Cargando temporadas...</option>

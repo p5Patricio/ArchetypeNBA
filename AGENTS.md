@@ -12,7 +12,7 @@ Context for any AI coding agent (or human) picking this project up. **Snapshot d
 | Repo | `github.com/p5Patricio/ArchetypeNBA` (`main` is the only long-lived branch; PRs #1–#19 merged as of this snapshot). |
 | Production | Since 2026-10-27 everything runs in **WSL2 Ubuntu** on the owner's Windows 11 PC: PostgreSQL 18 on port 5433, the web services on 38920/38921 and a systemd user timer (`nba-tick.timer`) that runs the tick every 15 minutes. **That checkout executes `main`**, so unmerged code must never live there. See [`docs/WSL.md`](docs/WSL.md). |
 | State | Pipeline live since the 2026-10-20 opener. Baseline Elo champion + one shadow challenger. Too little data to judge anything yet (see §9). |
-| Next task | Replace the broken injury scraper with a real free source of injuries/lineups and test it as a model signal (see §10). |
+| Next task | Injuries/lineups as a model signal (see §10): the fabricated fallback is gone and the NBA PDF parser exists behind `INJURY_PDF_ENABLED=false`; it needs the owner's answer on the NBA terms. Meanwhile judge the system by the Pinnacle-referenced CLV in `paper_report.py` / `/paper` (research: `docs/RESEARCH_BETTING_IMPROVEMENTS.md`; plan: `odd/tasks/betting-improvements.md`). |
 
 First five commands on a fresh machine (details in [`docs/SETUP.md`](docs/SETUP.md)):
 
@@ -21,7 +21,7 @@ cd backend && python -m pytest tests -q                   # ~760 tests, all offl
 python scripts/run_tick.py --dry-run                      # what the scheduled tick would do (no network, no writes)
 python scripts/paper_report.py                            # performance, CLV, model skill, model league
 python scripts/model_league.py status                     # champion/challenger table
-python -m alembic current                                 # must equal the head (d7a2f5b81c39 as of this snapshot)
+python -m alembic current                                 # must equal the head (e3f8b1a4c9d2 as of this snapshot)
 ```
 
 ## 2. Non-negotiable rules
@@ -56,7 +56,7 @@ backend/
     analytics/         # pure math: elo.py, features.py, betting_policy.py, props_engine.py
     services/          # business logic (see §5); tick.py orchestrates the pipeline
     repositories/, etl/
-  alembic/versions/    # 001 → ad04e02dc85c → 4125a71b06bf → 9c3e5a7d1f42 → b7d41e9a2c85 → c4e8a1d63f27 → d7a2f5b81c39 (head)
+  alembic/versions/    # 001 → ad04e02dc85c → 4125a71b06bf → 9c3e5a7d1f42 → b7d41e9a2c85 → c4e8a1d63f27 → d7a2f5b81c39 → e3f8b1a4c9d2 (head)
   scripts/             # CLIs: run_tick, paper_report, model_league, model_lab, backfill_elo, record_predictions, capture_odds_snapshot, bulk_ingest_nba, ...
   tests/               # pytest suite (offline); tests/synthetic_league.py generates fake leagues
 frontend/              # Next.js app (props page, shutdown modal, scouting modules); npm run dev | build | start
@@ -149,8 +149,8 @@ Rejected/not done: paid odds feeds (OpticOdds ~$5k/mo), scraping ESPN/OddsPortal
 
 | Metric | Value |
 |--------|-------|
-| Tests | 757 backend tests pass (2026-10-26, includes the db_transfer tests); frontend `tsc --noEmit` clean |
-| Database | PostgreSQL 18.4, 229 MB, Alembic head `d7a2f5b81c39`; 23 seasons of game logs (2003-04..2025-26), 59k Elo rows per model |
+| Tests | 843 backend tests pass (2026-10-28, integrated betting-improvements branch); frontend `tsc --noEmit` clean |
+| Database | PostgreSQL 18.4, 229 MB, Alembic head `e3f8b1a4c9d2`; 23 seasons of game logs (2003-04..2025-26), 59k Elo rows per model |
 | Capture | Since 2026-10-06 (opening lines) and 2026-10-20 (full tick); Odds API credits left: 371 (resets on the 1st of each month); task healthy, 0 failed ticks |
 | Paper trading (2026-10-20 → 10-26) | flat: 56 bets (49 settled), P/L −5.28 u, ROI −11.4%; ¼ Kelly: 44 bets, −13.34 u. Bankrolls 94.7 u / 86.7 u. **Tiny samples, not evidence of anything.** |
 | CLV | average +3.5% flat / +4.8% Kelly over 18 / 12 bets with a comparable close (35% coverage; survivorship toward unchanged lines) — treat as noise |

@@ -220,7 +220,7 @@ Table count: the models define 20 tables (11 platform, 9 quant: `sportsbook`, `g
 
 ### Migration chain
 
-`001` -> `ad04e02dc85c` (game logs, shots, advanced stats, similarity, Elo table) -> `4125a71b06bf` (contracts, matchups) -> `9c3e5a7d1f42` (quant schema and views) -> `b7d41e9a2c85` (capture markers) -> `c4e8a1d63f27` (unique bet per prediction and strategy) -> `d7a2f5b81c39` (roles, `model_evaluation`, per-model Elo; **head**). The migrations are hand-written for PostgreSQL; `alembic current` must print the head after every deploy.
+`001` -> `ad04e02dc85c` (game logs, shots, advanced stats, similarity, Elo table) -> `4125a71b06bf` (contracts, matchups) -> `9c3e5a7d1f42` (quant schema and views) -> `b7d41e9a2c85` (capture markers) -> `c4e8a1d63f27` (unique bet per prediction and strategy) -> `d7a2f5b81c39` (roles, `model_evaluation`, per-model Elo) -> `e3f8b1a4c9d2` (add kelly_shrunk and market_edge staking strategies; **head**). The migrations are hand-written for PostgreSQL; `alembic current` must print the head after every deploy.
 
 ## 4. Module map
 
