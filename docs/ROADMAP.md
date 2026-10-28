@@ -12,17 +12,17 @@ What to build next and why, in priority order. Each item states the reason, how 
 
 | # | Item | Size | Why now |
 |---|------|------|---------|
-| 1 | Injuries and lineups as a model signal | L | The one thing the baseline cannot see and the market can; also removes fabricated data |
+| 1 | Injuries and lineups as a model signal (partly done: fabrication removed, parser and lineup logger built; downloads disabled until the owner clears the NBA terms) | L | The one thing the baseline cannot see and the market can |
 | 2 | Totals and props models, with settlement | L | The data is already captured and paid for |
-| 3 | Frontend model-league page | M | The league is invisible outside a terminal |
-| 4 | Promotion notifications | S | A champion change should not go unnoticed |
+| 3 | Frontend model-league page (done) | M | The league is invisible outside a terminal |
+| 4 | Promotion notifications (done) | S | A champion change should not go unnoticed |
 | 5 | Shutdown endpoint CSRF and origin hardening (done) | S | An unauthenticated endpoint can stop the services |
 | 6 | Closing-quote presence record | M | Stale closes bias CLV |
-| 7 | Postponed-game polling | S | Wasted calls and noise for up to 14 days |
+| 7 | Postponed-game polling (done) | S | Wasted calls and noise for up to 14 days |
 | 8 | Second odds feed | M | Redundancy and more props; no sharp book |
 | 9 | CI that runs the test suite (done) | S | No automated check exists |
 | 10 | Legacy cleanup | M | Dead code and confusing duplicates |
-| 11 | Fix `props_engine.load_baselines_from_db` | S | It reads a SQLite file that does not exist |
+| 11 | Fix `props_engine.load_baselines_from_db` (done) | S | It reads a SQLite file that does not exist |
 
 Small fixes found while writing these docs are listed at the end ([hygiene](#hygiene-fixes)).
 
@@ -235,6 +235,21 @@ Small items found while documenting (2026-10-26). Each is a few lines.
 | Dumps were not git-ignored and there was no backup tool | PR #19: `scripts/db_transfer.py` (export, verify, import with exact row-count checks), `docs/DB_TRANSFER.md`, `.gitignore` entries for `*.dump`, `*.manifest.json` and `backups/` |
 | Shutdown endpoint CSRF and origin hardening (item 5) | `verify_shutdown_safety` guard on `POST /system/shutdown` rejecting missing/unlisted Origin/Referer and foreign Host (403); covered by offline tests |
 | CI that runs the test suite (item 9) | `.github/workflows/tests.yml` runs backend pytest on Python 3.12 and frontend typecheck (`tsc --noEmit`) on Node 22 for PRs and push to `main` |
+| Pinnacle-referenced CLV (research item 1) | `services/clv_report.py` + `analytics/clv_stats.py`: log-odds CLV against Pinnacle's de-vigged close, one observation per game, with standard error, t and the sample needed; shown in `paper_report.py` and `GET /api/v1/paper/summary`. First reading on real data (2026-10-28): +0.34% (SE 1.27%, t 0.27, 23 games) against +3.7% same-book |
+| Staking arms (research items 2 and 3) | `kelly_shrunk` (Baker-McHale-style shrinkage) and `market_edge` (no model, best price vs Pinnacle's fair probability) as new strategies; migration `e3f8b1a4c9d2` adds the enum values. Hypotheses to judge by CLV, not ROI |
+| Model league page and promotion notifications (items 3 and 4) | `GET /api/v1/league` (5-minute cache), the `/league` and `/paper` pages, Telegram messages on promote, rollback, retire and new challenger (opt-in, at most once per change, failures never fail the tick) |
+| Postponed games and props baselines (items 7 and 11) | Games 48 h past tip-off with no result become `postponed` and are no longer polled; a new commence time returns them to `scheduled`. Props baselines come from the database ordered by season label; no static fallback. Props refresh respects the credit floor (HTTP 429) and the cached slate reports its age |
+| Fabricated injuries removed (part of item 1) | `fetch_injury_report()` returns `available=false` with a reason; the NBA PDF download is behind `INJURY_PDF_ENABLED` (default off), the parser works on text and is tested offline; `scripts/log_lineups.py` measures how early `nba_api` publishes starters |
+| Multiple-comparison control in the lab (research item 4) | Reality Check, SPA and DM-HLN p-values recorded for every lab run; `LAB_MULTITEST_GATE` (default off) makes SPA p < 0.2 a registration condition |
+
+### Found while doing this work (2026-10-28)
+
+| Item | Detail |
+|------|--------|
+| Hardcoded player filter in props | `_compute_today_props` analyses only 8 named star players; it limits credit use but is static data standing in for a rule |
+| Backend strings in English on Spanish pages | The league gate sentence and audit reason come from the backend untranslated |
+| `balldontlie` is not a free source of injuries | Injuries need the ALL-STAR tier ($9.99/month), lineups the GOAT tier; free tier is 5 requests/minute with basic data |
+| Items still open | 2 (totals and props models: measure first with `scripts/market_audit.py`), 6 (closing-quote presence, schema plus capture path), 8 (second odds feed, terms), 10 (legacy cleanup) |
 
 ## Next step
 
