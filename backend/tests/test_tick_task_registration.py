@@ -11,7 +11,11 @@ SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "register_tick_task.p
 NS = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
 POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
 
-pytestmark = pytest.mark.skipif(POWERSHELL is None, reason="PowerShell is not available")
+# The script reads the Windows identity and builds Task Scheduler XML, so it only runs on Windows: pwsh on a Linux
+# runner (GitHub ubuntu images ship it) fails on [Security.Principal.WindowsIdentity]::GetCurrent().
+pytestmark = pytest.mark.skipif(
+    POWERSHELL is None or sys.platform != "win32", reason="needs Windows PowerShell (Task Scheduler APIs)"
+)
 
 
 @functools.lru_cache(maxsize=None)  # PowerShell start-up is slow; the output is deterministic
