@@ -248,3 +248,80 @@ def test_market_audit_totals_shadow_30_games_shows_full_ci(world):
     assert "n = 30 games" in text
     assert "95% CI" in text
     assert "insufficient data" not in text
+
+
+def test_market_audit_props_shadow_30_predictions_shows_full_ci(world):
+    from app.models import ModelPrediction, Player, PlayerGameLog
+    from app.services.model_registry import ensure_props_shadow_model
+
+    shadow = ensure_props_shadow_model(world)
+    book = world.books["pinnacle"]
+    preds = []
+    quotes = []
+
+    for i in range(30):
+        t_start = TIPOFF + timedelta(days=i + 1)
+        t_closing = t_start - timedelta(minutes=15)
+        g = final_game(world, 110, 100, home="BOS", away="LAC", start=t_start)
+        g.nba_game_id = f"00226{i:05d}"
+        world.add(g)
+
+        p = Player(full_name=f"Player Prop {i}")
+        world.add(p)
+        world.commit()
+
+        log = PlayerGameLog(
+            player_id=p.id,
+            team_id=world.teams["BOS"].id,
+            season_id=world.season.id,
+            game_id=g.nba_game_id,
+            min=30,
+            pts=25,
+            reb=6,
+            ast=4,
+        )
+        world.add(log)
+
+        line = Decimal("20.5")
+        q_over = OddsHistory(
+            game_id=g.id,
+            sportsbook_id=book.id,
+            market=MarketType.player_points,
+            side=BetSide.over,
+            line=line,
+            price_american=-110,
+            player_id=p.id,
+            captured_at=t_closing,
+            book_last_update=t_closing,
+        )
+        q_under = OddsHistory(
+            game_id=g.id,
+            sportsbook_id=book.id,
+            market=MarketType.player_points,
+            side=BetSide.under,
+            line=line,
+            price_american=-110,
+            player_id=p.id,
+            captured_at=t_closing,
+            book_last_update=t_closing,
+        )
+        pred_over = ModelPrediction(
+            model_version_id=shadow.id,
+            game_id=g.id,
+            market=MarketType.player_points,
+            player_id=p.id,
+            side=BetSide.over,
+            line=line,
+            model_prob=Decimal("0.60000"),
+        )
+        quotes.extend([q_over, q_under])
+        preds.append(pred_over)
+
+    world.add_all(quotes + preds)
+    world.commit()
+
+    text = format_market_audit(run_market_audit(world))
+    assert "4. Props shadow model vs book close:" in text
+    assert "n = 30 predictions" in text
+    assert "95% CI" in text
+    assert "insufficient data" not in text.split("4. Props shadow model vs book close:")[1]

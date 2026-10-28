@@ -87,12 +87,29 @@ class ChampionSkillResponse(BaseModel):
     difference: Optional[float] = None
 
 
+class PropsShadowSummaryResponse(BaseModel):
+    n: int = 0
+    brier_model: Optional[float] = None
+    brier_book: Optional[float] = None
+    brier_diff: Optional[float] = None
+    brier_diff_ci_low: Optional[float] = None
+    brier_diff_ci_high: Optional[float] = None
+    log_loss_model: Optional[float] = None
+    log_loss_book: Optional[float] = None
+    log_loss_diff: Optional[float] = None
+    log_loss_diff_ci_low: Optional[float] = None
+    log_loss_diff_ci_high: Optional[float] = None
+    void_count: int = 0
+    unmatched_name_count: int = 0
+
+
 class PaperSummaryResponse(BaseModel):
     strategies: List[StrategySummary]
     markets: Optional[List[MarketSummary]] = None
     pinnacle_clv: PinnacleClvSummaryResponse
     champion_model: Optional[str] = None
     brier: ChampionSkillResponse
+    props_shadow: Optional[PropsShadowSummaryResponse] = None
 
 
 class BetGameInfo(BaseModel):
@@ -211,12 +228,36 @@ def get_paper_summary(session: Session = Depends(get_db_session)) -> PaperSummar
         for m in report.markets
     ]
 
+    props_shadow_resp = None
+    if report.props_shadow is not None and (
+        report.props_shadow.n > 0
+        or report.props_shadow.void_count > 0
+        or report.props_shadow.unmatched_name_count > 0
+    ):
+        ps = report.props_shadow
+        props_shadow_resp = PropsShadowSummaryResponse(
+            n=ps.n,
+            brier_model=ps.brier_model,
+            brier_book=ps.brier_book,
+            brier_diff=ps.brier_diff,
+            brier_diff_ci_low=ps.brier_diff_ci_low,
+            brier_diff_ci_high=ps.brier_diff_ci_high,
+            log_loss_model=ps.log_loss_model,
+            log_loss_book=ps.log_loss_book,
+            log_loss_diff=ps.log_loss_diff,
+            log_loss_diff_ci_low=ps.log_loss_diff_ci_low,
+            log_loss_diff_ci_high=ps.log_loss_diff_ci_high,
+            void_count=ps.void_count,
+            unmatched_name_count=ps.unmatched_name_count,
+        )
+
     return PaperSummaryResponse(
         strategies=strategies_resp,
         markets=markets_resp,
         pinnacle_clv=pinnacle_resp,
         champion_model=report.skill.model,
         brier=brier_resp,
+        props_shadow=props_shadow_resp,
     )
 
 

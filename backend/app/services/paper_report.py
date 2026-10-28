@@ -137,10 +137,11 @@ class PaperReport:
     models: List[ActiveModel] = field(default_factory=list)
     league: Optional[League] = None
     totals_shadow: Optional[Any] = None
+    props_shadow: Optional[Any] = None
 
 
 def build_report(session: Session, now: Optional[datetime] = None) -> PaperReport:
-    from app.services.market_audit import audit_totals_shadow
+    from app.services.market_audit import audit_props_shadow, audit_totals_shadow
 
     now = _aware_utc(now) if now is not None else datetime.now(timezone.utc)
     return PaperReport(
@@ -153,6 +154,7 @@ def build_report(session: Session, now: Optional[datetime] = None) -> PaperRepor
         models=_active_models(session),
         league=build_league(session, now),
         totals_shadow=audit_totals_shadow(session),
+        props_shadow=audit_props_shadow(session),
     )
 
 
@@ -529,6 +531,36 @@ def format_report(report: PaperReport) -> str:
             )
             sd_str = f"{shadow.sd_total_error:.2f} pts" if shadow.sd_total_error is not None else "n/a"
             lines.append(f"  Model total error (actual - mu): mean {shadow.mean_total_error:+.2f} pts | sd {sd_str}")
+        lines.append("")
+
+    if report.props_shadow is not None:
+        lines.append("Props shadow model vs book close")
+        ps = report.props_shadow
+        if ps.n == 0:
+            lines.append("  No settled games with props prediction and book close.")
+            if ps.void_count > 0 or ps.unmatched_name_count > 0:
+                lines.append(f"  voids = {ps.void_count} | unmatched names = {ps.unmatched_name_count}")
+        elif ps.n < 30:
+            lines.append(f"  insufficient data (n = {ps.n} < 30)")
+            if ps.brier_model is not None and ps.brier_book is not None:
+                lines.append(
+                    f"  Brier model {ps.brier_model:.4f} | book {ps.brier_book:.4f} | diff {ps.brier_diff:+.4f}"
+                )
+                lines.append(
+                    f"  Log loss model {ps.log_loss_model:.4f} | book {ps.log_loss_book:.4f} | diff {ps.log_loss_diff:+.4f}"
+                )
+            lines.append(f"  voids = {ps.void_count} | unmatched names = {ps.unmatched_name_count}")
+        else:
+            lines.append(f"  n = {ps.n} predictions")
+            lines.append(
+                f"  Brier: model {ps.brier_model:.4f} | book {ps.brier_book:.4f} | "
+                f"diff {ps.brier_diff:+.4f} (95% CI [{ps.brier_diff_ci_low:+.4f}, {ps.brier_diff_ci_high:+.4f}])"
+            )
+            lines.append(
+                f"  Log loss: model {ps.log_loss_model:.4f} | book {ps.log_loss_book:.4f} | "
+                f"diff {ps.log_loss_diff:+.4f} (95% CI [{ps.log_loss_diff_ci_low:+.4f}, {ps.log_loss_diff_ci_high:+.4f}])"
+            )
+            lines.append(f"  voids = {ps.void_count} | unmatched names = {ps.unmatched_name_count}")
         lines.append("")
 
     lines.append("Bankroll (start + settled P/L)")

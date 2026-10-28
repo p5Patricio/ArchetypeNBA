@@ -328,3 +328,73 @@ def test_paper_report_totals_shadow_section_with_data(world):
     assert "Brier model" in text
     assert "Log loss model" in text
 
+
+def test_paper_report_props_shadow_section_with_data(world):
+    from app.models import ModelPrediction, OddsHistory, Player, PlayerGameLog
+    from app.services.model_registry import ensure_props_shadow_model
+
+    shadow = ensure_props_shadow_model(world)
+    g = final_game(world, 110, 100, home="BOS", away="LAC", start=TIPOFF)
+    g.nba_game_id = "0022600099"
+    world.add(g)
+
+    p = Player(full_name="Jayson Tatum")
+    world.add(p)
+    world.commit()
+
+    world.add(
+        PlayerGameLog(
+            player_id=p.id,
+            team_id=world.teams["BOS"].id,
+            season_id=world.season.id,
+            game_id=g.nba_game_id,
+            min=35,
+            pts=30,
+            reb=8,
+            ast=6,
+        )
+    )
+
+    book = world.books["pinnacle"]
+    world.add_all([
+        OddsHistory(
+            game_id=g.id,
+            sportsbook_id=book.id,
+            market=MarketType.player_points,
+            side=BetSide.over,
+            line=Decimal("26.5"),
+            price_american=-110,
+            player_id=p.id,
+            captured_at=CLOSING_AT,
+            book_last_update=CLOSING_AT,
+        ),
+        OddsHistory(
+            game_id=g.id,
+            sportsbook_id=book.id,
+            market=MarketType.player_points,
+            side=BetSide.under,
+            line=Decimal("26.5"),
+            price_american=-110,
+            player_id=p.id,
+            captured_at=CLOSING_AT,
+            book_last_update=CLOSING_AT,
+        ),
+        ModelPrediction(
+            model_version_id=shadow.id,
+            game_id=g.id,
+            market=MarketType.player_points,
+            player_id=p.id,
+            side=BetSide.over,
+            line=Decimal("26.5"),
+            model_prob=Decimal("0.62000"),
+        ),
+    ])
+    world.commit()
+
+    report = build_report(world, NOW)
+    text = format_report(report)
+    assert "Props shadow model vs book close" in text
+    assert "insufficient data (n = 1 < 30)" in text
+    assert "Brier model" in text
+    assert "Log loss model" in text
+

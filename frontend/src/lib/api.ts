@@ -1384,12 +1384,29 @@ export interface MarketSummary {
   avg_clv?: number | null;
 }
 
+export interface PropsShadowSummaryResponse {
+  n: number;
+  brier_model?: number | null;
+  brier_book?: number | null;
+  brier_diff?: number | null;
+  brier_diff_ci_low?: number | null;
+  brier_diff_ci_high?: number | null;
+  log_loss_model?: number | null;
+  log_loss_book?: number | null;
+  log_loss_diff?: number | null;
+  log_loss_diff_ci_low?: number | null;
+  log_loss_diff_ci_high?: number | null;
+  void_count: number;
+  unmatched_name_count: number;
+}
+
 export interface PaperSummaryResponse {
   strategies: StrategySummary[];
   markets?: MarketSummary[] | null;
   pinnacle_clv: PinnacleClvSummaryResponse;
   champion_model?: string | null;
   brier: ChampionSkillResponse;
+  props_shadow?: PropsShadowSummaryResponse | null;
 }
 
 export interface BetGameInfo {

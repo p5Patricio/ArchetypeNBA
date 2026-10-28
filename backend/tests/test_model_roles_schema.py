@@ -128,6 +128,7 @@ def test_shadow_and_benchmark_models_are_ignored_by_league_and_promotion(db_sess
     challenger = _model(db_session, "elo_538", "2.0", role="challenger")
     benchmark = _model(db_session, "market_pinnacle", "1", role="benchmark")
     shadow = _model(db_session, "totals_pace", "1", role="shadow")
+    props_shadow = _model(db_session, "props_nb", "1", role="shadow")
 
     # list_active should return ONLY champion and challenger
     active = model_registry.list_active(db_session)
@@ -135,6 +136,7 @@ def test_shadow_and_benchmark_models_are_ignored_by_league_and_promotion(db_sess
     assert active_ids == [champion.id, challenger.id]
     assert benchmark.id not in active_ids
     assert shadow.id not in active_ids
+    assert props_shadow.id not in active_ids
 
     # league_rows should NOT include benchmark or shadow
     rows = model_promotion.league_rows(db_session)
@@ -143,6 +145,7 @@ def test_shadow_and_benchmark_models_are_ignored_by_league_and_promotion(db_sess
     assert challenger.id in row_ids
     assert benchmark.id not in row_ids
     assert shadow.id not in row_ids
+    assert props_shadow.id not in row_ids
 
     # Manual promote / retire should refuse benchmark and shadow models
     now = datetime(2026, 10, 28, tzinfo=timezone.utc)
@@ -150,10 +153,14 @@ def test_shadow_and_benchmark_models_are_ignored_by_league_and_promotion(db_sess
         model_promotion.manual_promote(db_session, benchmark.id, "test", now)
     with pytest.raises(model_promotion.ManualOverrideRefused, match="is a shadow model"):
         model_promotion.manual_promote(db_session, shadow.id, "test", now)
+    with pytest.raises(model_promotion.ManualOverrideRefused, match="is a shadow model"):
+        model_promotion.manual_promote(db_session, props_shadow.id, "test", now)
     with pytest.raises(model_promotion.ManualOverrideRefused, match="is a benchmark model"):
         model_promotion.manual_retire(db_session, benchmark.id, "test", now)
     with pytest.raises(model_promotion.ManualOverrideRefused, match="is a shadow model"):
         model_promotion.manual_retire(db_session, shadow.id, "test", now)
+    with pytest.raises(model_promotion.ManualOverrideRefused, match="is a shadow model"):
+        model_promotion.manual_retire(db_session, props_shadow.id, "test", now)
 
 
 def test_migration_downgrade_check_raises_when_benchmark_rows_exist(db_session):

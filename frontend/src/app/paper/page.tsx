@@ -291,6 +291,7 @@ export default function PaperTradingPage() {
             <EvidenceCard
               pinnacleClv={summary?.pinnacle_clv}
               brier={summary?.brier}
+              propsShadow={summary?.props_shadow}
               loading={loadingSummary}
             />
           </section>

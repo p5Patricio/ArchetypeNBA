@@ -4,6 +4,7 @@ import React from "react";
 import {
   type PinnacleClvSummaryResponse,
   type ChampionSkillResponse,
+  type PropsShadowSummaryResponse,
 } from "@/lib/api";
 import { usePreferences } from "@/context/PreferencesContext";
 import {
@@ -20,12 +21,14 @@ import {
 interface EvidenceCardProps {
   pinnacleClv?: PinnacleClvSummaryResponse | null;
   brier?: ChampionSkillResponse | null;
+  propsShadow?: PropsShadowSummaryResponse | null;
   loading?: boolean;
 }
 
 export function EvidenceCard({
   pinnacleClv,
   brier,
+  propsShadow,
   loading,
 }: EvidenceCardProps) {
   const { language } = usePreferences();
@@ -321,6 +324,62 @@ export function EvidenceCard({
           </div>
         </div>
       </div>
+
+      {/* Optional: Props Shadow Model vs Book Close */}
+      {propsShadow && (propsShadow.n > 0 || propsShadow.void_count > 0 || propsShadow.unmatched_name_count > 0) && (
+        <div className="mt-6 pt-6 border-t border-slate-100">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <Activity className="h-4 w-4 text-indigo-600" />
+                <span>{isEs ? "Modelo Shadow Props (props_nb) vs Cierre de Casas" : "Props Shadow Model (props_nb) vs Book Close"}</span>
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                {propsShadow.n < 30 ? (isEs ? "Muestra insuficiente (n < 30)" : "Insufficient data (n < 30)") : `${propsShadow.n} ${isEs ? "predicciones" : "predictions"}`}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+              <div>
+                <span className="text-slate-500 text-xs block">{isEs ? "Predicciones evaluadas:" : "Evaluated predictions:"}</span>
+                <span className="text-lg font-black text-slate-900 tabular-nums">{propsShadow.n}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 text-xs block">{isEs ? "Brier (Modelo vs Casa):" : "Brier (Model vs Book):"}</span>
+                <span className="text-sm font-bold text-slate-900 tabular-nums">
+                  {propsShadow.brier_model != null && propsShadow.brier_book != null
+                    ? `${propsShadow.brier_model.toFixed(4)} vs ${propsShadow.brier_book.toFixed(4)}`
+                    : "—"}
+                </span>
+                {propsShadow.brier_diff != null && (
+                  <span className={`text-xs font-bold block ${propsShadow.brier_diff > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                    diff {propsShadow.brier_diff > 0 ? "+" : ""}{propsShadow.brier_diff.toFixed(4)}
+                  </span>
+                )}
+              </div>
+              <div>
+                <span className="text-slate-500 text-xs block">{isEs ? "Log Loss (Modelo vs Casa):" : "Log Loss (Model vs Book):"}</span>
+                <span className="text-sm font-bold text-slate-900 tabular-nums">
+                  {propsShadow.log_loss_model != null && propsShadow.log_loss_book != null
+                    ? `${propsShadow.log_loss_model.toFixed(4)} vs ${propsShadow.log_loss_book.toFixed(4)}`
+                    : "—"}
+                </span>
+                {propsShadow.log_loss_diff != null && (
+                  <span className={`text-xs font-bold block ${propsShadow.log_loss_diff > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                    diff {propsShadow.log_loss_diff > 0 ? "+" : ""}{propsShadow.log_loss_diff.toFixed(4)}
+                  </span>
+                )}
+              </div>
+              <div>
+                <span className="text-slate-500 text-xs block">{isEs ? "Voids / Nombres no asignados:" : "Voids / Unmatched names:"}</span>
+                <span className="text-sm font-bold text-slate-800 tabular-nums">
+                  {propsShadow.void_count} voids | {propsShadow.unmatched_name_count} unmatched
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
