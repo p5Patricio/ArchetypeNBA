@@ -232,6 +232,8 @@ class OddsIngestionService:
             changed = False
             if _aware_utc(game.commence_time) != commence:
                 game.commence_time = commence
+                if game.status == "postponed":
+                    game.status = "scheduled"
                 changed = True
             season_id = self.resolve_season_id(commence)
             if game.season_id != season_id:  # rows created before the season existed point at the wrong one

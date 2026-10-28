@@ -461,3 +461,122 @@ def test_elo_catch_up_ignores_game_types_elo_never_rates(db_session):
 
     # only the regular-season game is waiting for ratings
     assert count_final_games_without_ratings(db_session) == 1
+
+
+# --- postponed game handling ----------------------------------------------------------------------------------
+
+def test_merely_late_game_stays_scheduled(world):
+    # Tipped off 10 hours ago: past the 3h grace, but well before the 48h postponed threshold
+    game = add_game(world, "BOS", "LAC", NOW - timedelta(hours=10))
+    provider = FakeProvider()
+
+    summary = sync_results(world, provider, NOW)
+
+    game = refreshed(world, game)
+    assert game.status == "scheduled"
+    assert summary.games_pending == 1
+    assert summary.games_postponed == 0
+    assert summary.games_finalized == 0
+    assert summary.unmatched != []
+
+
+def test_stale_game_without_result_becomes_postponed(world):
+    # Tipped off 50 hours ago: past the 48h POSTPONED_AGE threshold, inside 14d lookback
+    game = add_game(world, "BOS", "LAC", NOW - timedelta(hours=50))
+    provider = FakeProvider()
+
+    summary = sync_results(world, provider, NOW)
+
+    game = refreshed(world, game)
+    assert game.status == "postponed"
+    assert summary.games_postponed == 1
+    assert summary.did_work is True
+
+    # Next call: the game is postponed, so it is no longer chased (pending is 0, 0 provider calls)
+    provider_next = FakeProvider()
+    summary_next = sync_results(world, provider_next, NOW)
+    assert summary_next.games_pending == 0
+    assert provider_next.calls == []
+
+
+def test_rescheduled_game_returns_to_scheduled_and_is_chased_again(world):
+    from app.services.odds_ingestion import OddsIngestionService
+
+    past_tip = NOW - timedelta(hours=50)
+    game = add_game(world, "BOS", "LAC", past_tip, status="postponed", event="resched-event")
+
+    ingestion = OddsIngestionService(world)
+    new_tip = NOW + timedelta(hours=24)
+    upserted = ingestion.upsert_game("resched-event-BOS-LAC-" + past_tip.isoformat(), new_tip, "BOS", "LAC")
+
+    assert upserted is not None
+    assert upserted.id == game.id
+    assert upserted.status == "scheduled"
+    assert upserted.commence_time == new_tip
+
+    # When time advances past the new tip-off + grace, it is in pending again
+    future_now = new_tip + timedelta(hours=4)
+    pending, _ = find_pending_games(world, future_now)
+    assert any(g.id == game.id for g in pending)
+
+
+def test_settlement_never_touches_postponed_game(world):
+    from decimal import Decimal
+    from app.models import (
+        BetSide,
+        BetStatus,
+        MarketType,
+        ModelPrediction,
+        ModelVersion,
+        OddsHistory,
+        SimulatedBet,
+        Sportsbook,
+        StakingStrategy,
+    )
+    from app.services.settlement import settle_bets
+
+    book = Sportsbook(key="draftkings", name="DraftKings", region="us", is_sharp=False)
+    model = ModelVersion(name="test_model", version="1.0", params={})
+    world.add_all([book, model])
+    world.commit()
+
+    game = add_game(world, "BOS", "LAC", NOW - timedelta(hours=50), status="postponed")
+    quote = OddsHistory(
+        game_id=game.id,
+        sportsbook_id=book.id,
+        market=MarketType.h2h,
+        side=BetSide.home,
+        price_american=-110,
+        book_last_update=NOW - timedelta(hours=52),
+        captured_at=NOW - timedelta(hours=52),
+    )
+    prediction = ModelPrediction(
+        model_version_id=model.id,
+        game_id=game.id,
+        market=MarketType.h2h,
+        side=BetSide.home,
+        model_prob=Decimal("0.60000"),
+    )
+    world.add_all([quote, prediction])
+    world.commit()
+
+    bet = SimulatedBet(
+        prediction_id=prediction.id,
+        odds_taken_id=quote.id,
+        strategy=StakingStrategy.flat,
+        price_taken=Decimal("1.909"),
+        stake_units=Decimal("1.0"),
+        bankroll_before=Decimal("100.0"),
+        ev_per_unit=Decimal("0.05"),
+        status=BetStatus.pending,
+        placed_at=NOW - timedelta(hours=52),
+    )
+    world.add(bet)
+    world.commit()
+
+    settled_summary = settle_bets(world, NOW)
+    assert settled_summary.total_settled == 0
+
+    world.refresh(bet)
+    assert bet.status == BetStatus.pending
+
