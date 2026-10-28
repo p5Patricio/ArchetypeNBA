@@ -1,0 +1,17 @@
+# SYNTHETIC TEST INPUT - Not real data, used exclusively for offline deterministic unit tests.
+NBA INJURY REPORT
+Report Date: 10/28/2026 05:00 PM (ET)
+Game Date Game Time Matchup Team Player Name Current Status Reason
+10/28/2026 07:00 (ET) BOS@DET Boston Celtics Brown, Jaylen Available Injury/Illness - Hamstring; strain
+Porzingis, Kristaps Out Injury/Illness - Left posterior tibialis;
+dislocation
+Detroit Pistons Cunningham, Cade Questionable Injury/Illness - Left knee; contusion
+Stewart, Isaiah Out Injury/Illness - Right ankle; sprain
+07:30 (ET) LAL@MIA Miami Heat Butler, Jimmy Doubtful Injury/Illness - Illness; flu
+Los Angeles Lakers Davis, Anthony Probable Injury/Illness - Bilateral Achilles;
+tendinitis
+James, LeBron Available Injury/Illness - Right foot; soreness
+10/29/2026 08:00 (ET) DEN@GSW Denver Nuggets Jokic, Nikola Available Injury/Illness - Rest
+Golden State Warriors Curry, Stephen Questionable Injury/Illness - Knee; soreness
+Green, Draymond Available Injury/Illness - Back
+NOT YET SUBMITTED
