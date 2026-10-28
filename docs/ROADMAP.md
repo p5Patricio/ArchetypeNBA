@@ -78,7 +78,7 @@ Props models are deliberately deferred: player prop bets are not recorded anywhe
 
 - [x] `settlement.grade_bet` handles `totals` (over and under, with pushes on integer lines); CLV works for it; the paper report shows it.
 - [x] Pinnacle-referenced CLV supports totals (`_devig_totals` at matching line).
-- [x] Totals considered and paper-bet exclusively by the `market_edge` benchmark arm against Pinnacle de-vigged quotes; zero pollution of the model league.
+- [x] Totals considered and paper-bet exclusively by the `market_edge` benchmark arm against Pinnacle de-vigged quotes, attached to benchmark model `market_pinnacle` (role `benchmark`); zero pollution of the model league or champion attribution.
 - [x] Per-market breakdown in `paper_report` and `/paper` bets table UI localized.
 - [ ] Props models and props grading (deferred: insufficient sample size at 1 event/tick).
 

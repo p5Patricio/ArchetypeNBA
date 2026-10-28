@@ -575,7 +575,13 @@ class OddsHistory(SQLModel, table=True):
 MODEL_ROLE_CHAMPION = "champion"  # drives the paper bets; exactly one at a time
 MODEL_ROLE_CHALLENGER = "challenger"  # shadow predictions only
 MODEL_ROLE_RETIRED = "retired"
-MODEL_ROLES = (MODEL_ROLE_CHAMPION, MODEL_ROLE_CHALLENGER, MODEL_ROLE_RETIRED)
+MODEL_ROLE_BENCHMARK = "benchmark"
+MODEL_ROLES = (
+    MODEL_ROLE_CHAMPION,
+    MODEL_ROLE_CHALLENGER,
+    MODEL_ROLE_RETIRED,
+    MODEL_ROLE_BENCHMARK,
+)
 
 EVALUATION_DECISIONS = (
     "insufficient_data", "keep", "promote", "retire", "rollback", "proposal", "dry_run",

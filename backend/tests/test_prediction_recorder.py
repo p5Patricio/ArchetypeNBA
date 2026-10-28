@@ -23,6 +23,7 @@ from app.models import (
     TeamEloRating,
 )
 from app.services.elo_service import MODEL_NAME, MODEL_VERSION
+from app.services import model_registry
 from app.services.prediction_recorder import PredictionRecorder, RecorderError
 
 NOW = datetime(2026, 10, 20, 18, 0, tzinfo=timezone.utc)
@@ -639,6 +640,21 @@ def test_totals_are_bet_only_by_market_edge_and_never_model_strategies(world, db
     assert float(pred.model_prob) == pytest.approx(0.5, abs=1e-5)
     assert pred.projection is None
 
+    # Benchmark model verification: totals attach to market_pinnacle, never champion
+    champ = model_registry.get_champion(db_session)
+    assert champ is not None
+    assert pred.model_version_id != champ.id
+    benchmark = db_session.get(ModelVersion, pred.model_version_id)
+    assert benchmark.name == "market_pinnacle"
+    assert benchmark.version == "1"
+    assert benchmark.role == "benchmark"
+    assert benchmark.params == {"family": "market"}
+    assert benchmark.notes == "Pinnacle's de-vigged probability, not a forecasting model"
+    # Champion stats in recorder summary must not be inflated by totals
+    champ_stats = summary.models[champ.id]
+    # In world, 1 game was predicted: 2 h2h predictions (home & away) stored, 0 totals attributed to champion
+    assert champ_stats.predictions_written == 2
+
 
 def test_totals_best_price_across_books_is_taken(world, db_session):
     game = world.game()
@@ -688,7 +704,13 @@ def test_totals_no_edge_no_bet(world, db_session):
 
 def test_totals_predictions_do_not_pollute_model_league(world, db_session):
     from app.services.league_report import build_league
-    from app.services.model_promotion import league_rows
+    from app.services.model_promotion import (
+        ManualOverrideRefused,
+        league_rows,
+        manual_promote,
+        manual_retire,
+    )
+    from app.services.paper_report import _active_models
 
     game = world.game()
     world.total(game, "pinnacle", 220.5, -110, -110)
@@ -698,7 +720,12 @@ def test_totals_predictions_do_not_pollute_model_league(world, db_session):
     world.recorder().run()
 
     # Verify model league and promotion queries
-    rows = {r.label: r for r in league_rows(db_session)}
+    all_league_rows = league_rows(db_session)
+    # The benchmark model MUST NOT appear in league_rows
+    assert not any(r.role == "benchmark" for r in all_league_rows)
+    assert not any("market_pinnacle" in r.label for r in all_league_rows)
+
+    rows = {r.label: r for r in all_league_rows}
     champ_row = rows[f"{MODEL_NAME} {MODEL_VERSION}"]
     # league_rows strictly counts h2h home predictions:
     # Game had no h2h quotes so 1 h2h home prediction was recorded for AAA vs BBB
@@ -707,4 +734,29 @@ def test_totals_predictions_do_not_pollute_model_league(world, db_session):
     league = build_league(db_session, NOW)
     assert league.champion is not None
     assert league.champion.predictions == 1
+    assert not any(c.role == "benchmark" for c in league.challengers)
+
+    # Active models in paper_report must not list benchmark model
+    active = _active_models(db_session)
+    assert not any(a.role == "benchmark" for a in active)
+    champ_active = next(a for a in active if a.role == "champion")
+    # Champion has 2 predictions (home and away h2h), totals prediction is NOT counted
+    assert champ_active.predictions == 2
+
+    # Verify no totals prediction or bet is attached to champion
+    champ = model_registry.get_champion(db_session)
+    champ_totals_preds = db_session.exec(
+        select(ModelPrediction).where(
+            ModelPrediction.model_version_id == champ.id,
+            ModelPrediction.market == MarketType.totals,
+        )
+    ).all()
+    assert champ_totals_preds == []
+
+    # Manual override refusal on benchmark model
+    bench = db_session.exec(select(ModelVersion).where(ModelVersion.role == "benchmark")).one()
+    with pytest.raises(ManualOverrideRefused, match="is a benchmark model"):
+        manual_promote(db_session, bench.id, "try promote", NOW)
+    with pytest.raises(ManualOverrideRefused, match="is a benchmark model"):
+        manual_retire(db_session, bench.id, "try retire", NOW)
 

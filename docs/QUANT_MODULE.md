@@ -130,7 +130,7 @@ One `FeatureState` class serves training and serving. A single chronological pas
 | Never | At or after tip-off |
 | Stale ratings guard | A game is skipped while either team has an earlier game that is not settled |
 | Uniqueness | One bet per (strategy, game, market, side) across all runs |
-| Markets | h2h and spreads are model-driven. Totals are evaluated and bet strictly by the model-free `market_edge` arm against Pinnacle's de-vigged over/under lines (champion model strategies `flat`, `kelly_fractional`, `kelly_shrunk` never bet totals). Props are not modelled or paper-bet |
+| Markets | h2h and spreads are model-driven (champion and shadow challengers). Totals are evaluated and bet strictly by the model-free `market_edge` arm against Pinnacle's de-vigged over/under lines and attached to the benchmark model `market_pinnacle` (`role = benchmark`; champion model strategies `flat`, `kelly_fractional`, `kelly_shrunk` never bet totals). Props are not modelled or paper-bet |
 
 ### Staking
 

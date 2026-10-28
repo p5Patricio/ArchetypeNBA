@@ -22,10 +22,20 @@ from sqlalchemy import select
 from sqlmodel import Session
 
 from app.analytics.elo import EloParams
-from app.models import MODEL_ROLE_CHALLENGER, MODEL_ROLE_CHAMPION, MODEL_ROLE_RETIRED, ModelVersion
+from app.models import (
+    MODEL_ROLE_BENCHMARK,
+    MODEL_ROLE_CHALLENGER,
+    MODEL_ROLE_CHAMPION,
+    MODEL_ROLE_RETIRED,
+    ModelVersion,
+)
 
 ELO_FAMILY_NAME = "elo_538"
 LEGACY_CHAMPION_VERSION = "1.1"  # 1.1: home advantage 60 (538 original: 100)
+BENCHMARK_FAMILY_NAME = "market_pinnacle"
+BENCHMARK_VERSION = "1"
+BENCHMARK_FAMILY = "market"
+BENCHMARK_NOTES = "Pinnacle's de-vigged probability, not a forecasting model"
 
 
 class ModelRegistryError(RuntimeError):
@@ -148,6 +158,36 @@ def ensure_default_champion(session: Session) -> ModelVersion:
             params={},
             role=MODEL_ROLE_CHAMPION,
             promoted_at=datetime.now(timezone.utc),
+        )
+        session.add(row)
+        session.flush()
+    return row
+
+
+def get_market_benchmark(session: Session) -> Optional[ModelVersion]:
+    """The model-free benchmark model version (role='benchmark'), or None."""
+    return session.execute(
+        select(ModelVersion).where(
+            ModelVersion.name == BENCHMARK_FAMILY_NAME,
+            ModelVersion.version == BENCHMARK_VERSION,
+        )
+    ).scalar_one_or_none()
+
+
+def ensure_market_benchmark(session: Session) -> ModelVersion:
+    """
+    Get or create the model-free benchmark model version (role='benchmark') representing
+    Pinnacle's de-vigged fair probabilities.
+    Flushes, never commits: the caller owns the transaction.
+    """
+    row = get_market_benchmark(session)
+    if row is None:
+        row = ModelVersion(
+            name=BENCHMARK_FAMILY_NAME,
+            version=BENCHMARK_VERSION,
+            params={"family": BENCHMARK_FAMILY},
+            role=MODEL_ROLE_BENCHMARK,
+            notes=BENCHMARK_NOTES,
         )
         session.add(row)
         session.flush()

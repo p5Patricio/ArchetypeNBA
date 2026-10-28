@@ -182,6 +182,7 @@ class PredictionRecorder:
         self.now = _aware_utc(now) if now is not None else datetime.now(timezone.utc)
         self.horizon = timedelta(hours=horizon_hours)
         self.max_quote_age = timedelta(minutes=max_quote_age_minutes)
+        self._benchmark: Optional[ModelVersion] = None
 
     # ------------------------------------------------------------------ entry point
 
@@ -189,6 +190,7 @@ class PredictionRecorder:
         summary = RecorderSummary(now=self.now, dry_run=dry_run)
         models = self._load_models(summary)
         champion, challengers = models[0], models[1:]
+        self._benchmark = model_registry.ensure_market_benchmark(self.session)
 
         games = self._window_games()
         summary.games_considered = len(games)
@@ -196,7 +198,7 @@ class PredictionRecorder:
             return summary
 
         self._dry_run = dry_run
-        self._load_ledger(games, [model.row.id for model in models])
+        self._load_ledger(games, [model.row.id for model in models] + [self._benchmark.id])
 
         game_ids = [g.id for g in games]
         quotes = self._load_quotes(game_ids)
@@ -554,7 +556,7 @@ class PredictionRecorder:
                 same_line = [q for q in totals if q.side == side.value and q.line == total_line]
                 best = self._best_quote(same_line)
                 self._consider_totals(
-                    game, model, side, total_line, best, p_fair, summary,
+                    game, side, total_line, best, p_fair, summary,
                 )
 
     @staticmethod
@@ -748,7 +750,6 @@ class PredictionRecorder:
     def _consider_totals(
         self,
         game: Game,
-        model: _ActiveModel,
         side: BetSide,
         line: Decimal,
         quote: Optional[_Quote],
@@ -798,8 +799,8 @@ class PredictionRecorder:
             summary.skipped["stake_below_min"] += 1
             return
 
-        prediction_id = self._store_prediction(
-            model, game, MarketType.totals, side, line, p_fair, None, summary
+        prediction_id = self._store_totals_prediction(
+            game, side, line, p_fair, summary
         )
 
         summary.bets_placed[name] += 1
@@ -824,3 +825,40 @@ class PredictionRecorder:
                 placed_at=self.now,
             )
         )
+
+    def _store_totals_prediction(
+        self,
+        game: Game,
+        side: BetSide,
+        line: Optional[Decimal],
+        model_prob: float,
+        summary: RecorderSummary,
+    ) -> int:
+        norm_line = _line(line)
+        benchmark_id = self._benchmark.id if self._benchmark is not None else None
+        key = (benchmark_id, game.id, MarketType.totals.value, side.value, norm_line)
+        existing = self._predictions.get(key)
+        if existing is not None:
+            summary.predictions_existing += 1
+            return existing
+
+        summary.predictions_written += 1
+        if self._dry_run:
+            pid = -len(self._predictions) - 1
+            self._predictions[key] = pid
+            return pid
+
+        row = ModelPrediction(
+            model_version_id=benchmark_id,
+            game_id=game.id,
+            market=MarketType.totals,
+            player_id=None,
+            side=side,
+            line=line,
+            model_prob=Decimal(f"{model_prob:.5f}"),
+            projection=None,
+        )
+        self.session.add(row)
+        self.session.flush()
+        self._predictions[key] = row.id
+        return row.id
