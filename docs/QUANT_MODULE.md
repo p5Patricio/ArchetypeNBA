@@ -264,6 +264,18 @@ Details that matter:
 
 First real run (2026-10-20, seed 42, 29,642 games): on the 2,631 hold-out games (2024-25 and 2025-26) the champion scored log loss 0.6071, the best Elo from the search 0.6084 (gain -0.0013, rejected) and `margin_features` 0.6045 (gain +0.0026, 95% interval -0.0009 to +0.0063, passes the historical gate). It was registered as the first challenger.
 
+### Multiple-comparison control on the selection window
+
+Evaluating ~40 Elo configurations inflates the apparent outperformance on the selection window (data snooping / selection bias). `analytics/multiple_testing.py` implements three statistical controls:
+
+| Statistic | Method | Definition & Purpose |
+|-----------|--------|----------------------|
+| `selection_pvalue_rc` | White's Reality Check (White 2000) | Paired bootstrap testing whether the maximum gain across evaluated candidates exceeds what chance produces under the null ($E[d_k] \le 0$). Conservative when inferior models are included. |
+| `selection_pvalue_spa` | Hansen's SPA (Hansen 2005) | Studentized statistic ($t_k = \bar{d}_k / \text{se}(\bar{d}_k)$) that recenters only non-clearly-inferior candidates ($t_k \ge -\sqrt{2 \ln(\ln N)}$), avoiding the power loss of Reality Check. |
+| `selection_pvalue_dm_hln` | Diebold-Mariano with HLN correction (1997) | Paired forecast test comparing the selected candidate directly with the champion, using the Harvey-Leybourne-Newbold small-sample correction and a Student-t reference ($h=1$). |
+
+By default, these metrics are **report-only** (recorded in `LabReport` and persisted in `model_version.params` / `notes`, with registration behavior unchanged, obeying rule 8). When `LAB_MULTITEST_GATE=true` in `backend/app/config.py` (or `--multitest-gate`), a candidate must additionally achieve `selection_pvalue_spa < 0.20` on the selection window to pass the gate and register as a challenger.
+
 ## 11. Simulated error rates
 
 The look budget was designed after an independent statistical attack on the first version. With **equal-skill** models and 8 games a day:
