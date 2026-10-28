@@ -6,7 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from app.models import BetSide, BetStatus, MarketType, ModelPrediction, ModelVersion, StakingStrategy
+from app.models import (
+    CAPTURE_CLOSING,
+    BetSide,
+    BetStatus,
+    MarketType,
+    ModelPrediction,
+    ModelVersion,
+    StakingStrategy,
+)
 from app.services.paper_report import build_report, format_report
 from tests.test_settlement import (  # noqa: F401  (world is a fixture)
     CLOSING_AT,
@@ -281,4 +289,42 @@ def test_market_breakdown_reports_h2h_spreads_and_totals(world):
     assert "h2h                bets 1 (settled 1) | ROI 100.0%" in text
     assert "spreads            bets 1 (settled 1) | ROI 0.0%" in text
     assert "totals             bets 1 (settled 1) | ROI 95.0%" in text
+
+
+def test_paper_report_totals_shadow_section_empty(world):
+    report = build_report(world, NOW)
+    text = format_report(report)
+    assert "Totals shadow model vs Pinnacle's close" in text
+    assert "No settled games with totals prediction and Pinnacle close." in text
+
+
+def test_paper_report_totals_shadow_section_with_data(world):
+    from app.models import ModelPrediction
+    from app.services.model_registry import ensure_totals_shadow_model
+
+    shadow = ensure_totals_shadow_model(world)
+    g = final_game(world, 110, 100, home="BOS", away="LAC", start=TIPOFF)
+    add_marker(world, g, kind=CAPTURE_CLOSING, at=CLOSING_AT)
+    add_quote(world, g, "pinnacle", MarketType.totals, BetSide.over, -110, line=205.5, captured_at=CLOSING_AT)
+    add_quote(world, g, "pinnacle", MarketType.totals, BetSide.under, -110, line=205.5, captured_at=CLOSING_AT)
+
+    world.add(
+        ModelPrediction(
+            model_version_id=shadow.id,
+            game_id=g.id,
+            market=MarketType.totals,
+            side=BetSide.over,
+            line=Decimal("205.5"),
+            model_prob=Decimal("0.58000"),
+            projection=Decimal("212.00"),
+        )
+    )
+    world.commit()
+
+    report = build_report(world, NOW)
+    text = format_report(report)
+    assert "Totals shadow model vs Pinnacle's close" in text
+    assert "insufficient data (n = 1 < 30)" in text
+    assert "Brier model" in text
+    assert "Log loss model" in text
 

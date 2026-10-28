@@ -183,6 +183,8 @@ class PredictionRecorder:
         self.horizon = timedelta(hours=horizon_hours)
         self.max_quote_age = timedelta(minutes=max_quote_age_minutes)
         self._benchmark: Optional[ModelVersion] = None
+        self._totals_shadow: Optional[ModelVersion] = None
+        self._totals_state: Optional[Any] = None
 
     # ------------------------------------------------------------------ entry point
 
@@ -191,6 +193,7 @@ class PredictionRecorder:
         models = self._load_models(summary)
         champion, challengers = models[0], models[1:]
         self._benchmark = model_registry.ensure_market_benchmark(self.session)
+        self._totals_shadow = model_registry.ensure_totals_shadow_model(self.session)
 
         games = self._window_games()
         summary.games_considered = len(games)
@@ -198,7 +201,7 @@ class PredictionRecorder:
             return summary
 
         self._dry_run = dry_run
-        self._load_ledger(games, [model.row.id for model in models] + [self._benchmark.id])
+        self._load_ledger(games, [model.row.id for model in models] + [self._benchmark.id, self._totals_shadow.id])
 
         game_ids = [g.id for g in games]
         quotes = self._load_quotes(game_ids)
@@ -217,7 +220,7 @@ class PredictionRecorder:
                     summary.skipped["missing_ratings"] += 1
                 else:
                     summary.games_processed += 1
-                    self._record_game(game, champion, prediction, quotes.get(game.id, []), summary)
+                    self._record_game(game, champion, prediction, quotes.get(game.id, []), summary, season_id=season_id)
             if not dry_run:
                 self.session.commit()  # the champion's work is durable before any challenger runs
         except Exception:
@@ -476,7 +479,13 @@ class PredictionRecorder:
             self._store_prediction(model, game, MarketType.spreads, BetSide.away, -home_line, p_away_win, projection, summary)
 
     def _record_game(
-        self, game: Game, model: _ActiveModel, prediction: Prediction, quotes: List[_Quote], summary: RecorderSummary
+        self,
+        game: Game,
+        model: _ActiveModel,
+        prediction: Prediction,
+        quotes: List[_Quote],
+        summary: RecorderSummary,
+        season_id: int = UNKNOWN_SEASON_ID,
     ) -> None:
         """The champion's predictions and paper bets for the game."""
         model.stats.games_predicted += 1
@@ -558,6 +567,7 @@ class PredictionRecorder:
                 self._consider_totals(
                     game, side, total_line, best, p_fair, summary,
                 )
+            self._record_totals_shadow(game, total_line, season_id, summary)
 
     @staticmethod
     def _best_quote(quotes: Sequence[_Quote]) -> Optional[_Quote]:
@@ -857,6 +867,71 @@ class PredictionRecorder:
             line=line,
             model_prob=Decimal(f"{model_prob:.5f}"),
             projection=None,
+        )
+        self.session.add(row)
+        self.session.flush()
+        self._predictions[key] = row.id
+        return row.id
+
+    def _get_totals_state(self):
+        if self._totals_state is None:
+            from app.analytics.totals_model import TotalsParams, build_totals_feature_set
+            from app.services.elo_service import EloRatingService
+
+            params = TotalsParams.from_dict((self._totals_shadow.params or {}) if self._totals_shadow else None)
+            games = EloRatingService(self.session).load_games()
+            _, self._totals_state = build_totals_feature_set(games, params=params)
+        return self._totals_state
+
+    def _record_totals_shadow(
+        self,
+        game: Game,
+        total_line: Decimal,
+        season_id: int,
+        summary: RecorderSummary,
+    ) -> None:
+        from app.analytics.totals_model import p_over, p_under
+
+        state = self._get_totals_state()
+        mu, sigma = state.predict(game.home_team_id, game.away_team_id, season_id)
+        line_f = float(total_line)
+        prob_over = p_over(line_f, mu, sigma)
+        prob_under = p_under(line_f, mu, sigma)
+        self._store_totals_shadow_prediction(game, BetSide.over, total_line, prob_over, mu, summary)
+        self._store_totals_shadow_prediction(game, BetSide.under, total_line, prob_under, mu, summary)
+
+    def _store_totals_shadow_prediction(
+        self,
+        game: Game,
+        side: BetSide,
+        line: Optional[Decimal],
+        model_prob: float,
+        mu: float,
+        summary: RecorderSummary,
+    ) -> int:
+        norm_line = _line(line)
+        shadow_id = self._totals_shadow.id if self._totals_shadow is not None else None
+        key = (shadow_id, game.id, MarketType.totals.value, side.value, norm_line)
+        existing = self._predictions.get(key)
+        if existing is not None:
+            summary.predictions_existing += 1
+            return existing
+
+        summary.predictions_written += 1
+        if self._dry_run:
+            pid = -len(self._predictions) - 1
+            self._predictions[key] = pid
+            return pid
+
+        row = ModelPrediction(
+            model_version_id=shadow_id,
+            game_id=game.id,
+            market=MarketType.totals,
+            player_id=None,
+            side=side,
+            line=line,
+            model_prob=Decimal(f"{model_prob:.5f}"),
+            projection=Decimal(f"{mu:.2f}"),
         )
         self.session.add(row)
         self.session.flush()

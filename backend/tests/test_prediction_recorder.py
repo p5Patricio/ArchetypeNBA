@@ -656,6 +656,59 @@ def test_totals_are_bet_only_by_market_edge_and_never_model_strategies(world, db
     assert champ_stats.predictions_written == 2
 
 
+def test_totals_shadow_model_predictions_recorded_and_no_bets_created(world, db_session):
+    game = world.game()
+    world.total(game, "pinnacle", 220.5, -110, -110)
+
+    summary1 = world.recorder().run()
+
+    # Model row totals_pace v1 exists with role='shadow'
+    shadow_model = db_session.exec(
+        select(ModelVersion).where(
+            ModelVersion.name == "totals_pace",
+            ModelVersion.version == "1",
+        )
+    ).one()
+    assert shadow_model.role == "shadow"
+    assert shadow_model.params == {"family": "totals", "window": 10, "prior_weight": 5.0}
+
+    # Predictions under totals_pace
+    shadow_preds = db_session.exec(
+        select(ModelPrediction).where(
+            ModelPrediction.model_version_id == shadow_model.id,
+            ModelPrediction.game_id == game.id,
+            ModelPrediction.market == MarketType.totals,
+        )
+    ).all()
+    assert len(shadow_preds) == 2
+    by_side = {p.side: p for p in shadow_preds}
+    assert BetSide.over in by_side and BetSide.under in by_side
+    pred_over, pred_under = by_side[BetSide.over], by_side[BetSide.under]
+    assert float(pred_over.line) == 220.5
+    assert float(pred_under.line) == 220.5
+    assert pred_over.projection is not None
+    assert float(pred_over.projection) == pytest.approx(220.0, abs=1.0)
+    assert float(pred_over.model_prob) + float(pred_under.model_prob) == pytest.approx(1.0, abs=1e-4)
+
+    # NO bets of any kind come from totals_pace
+    bets_from_shadow = db_session.exec(
+        select(SimulatedBet).join(ModelPrediction).where(
+            ModelPrediction.model_version_id == shadow_model.id
+        )
+    ).all()
+    assert bets_from_shadow == []
+
+    # Re-running is idempotent: 0 new predictions written for totals_pace
+    summary2 = world.recorder().run()
+    shadow_preds_after = db_session.exec(
+        select(ModelPrediction).where(
+            ModelPrediction.model_version_id == shadow_model.id,
+            ModelPrediction.game_id == game.id,
+        )
+    ).all()
+    assert len(shadow_preds_after) == 2
+
+
 def test_totals_best_price_across_books_is_taken(world, db_session):
     game = world.game()
     world.total(game, "pinnacle", 220.5, -110, -110)

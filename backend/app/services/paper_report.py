@@ -20,7 +20,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import func, select
 from sqlmodel import Session
@@ -136,9 +136,12 @@ class PaperReport:
     skill: ModelSkill = field(default_factory=ModelSkill)
     models: List[ActiveModel] = field(default_factory=list)
     league: Optional[League] = None
+    totals_shadow: Optional[Any] = None
 
 
 def build_report(session: Session, now: Optional[datetime] = None) -> PaperReport:
+    from app.services.market_audit import audit_totals_shadow
+
     now = _aware_utc(now) if now is not None else datetime.now(timezone.utc)
     return PaperReport(
         now=now,
@@ -149,6 +152,7 @@ def build_report(session: Session, now: Optional[datetime] = None) -> PaperRepor
         skill=_model_skill(session),
         models=_active_models(session),
         league=build_league(session, now),
+        totals_shadow=audit_totals_shadow(session),
     )
 
 
@@ -494,6 +498,37 @@ def format_report(report: PaperReport) -> str:
 
     if report.league is not None:
         lines.append(format_league(report.league))
+        lines.append("")
+
+    if report.totals_shadow is not None:
+        lines.append("Totals shadow model vs Pinnacle's close")
+        shadow = report.totals_shadow
+        if shadow.n_games == 0:
+            lines.append("  No settled games with totals prediction and Pinnacle close.")
+        elif shadow.n_games < 30:
+            lines.append(f"  insufficient data (n = {shadow.n_games} < 30)")
+            if shadow.brier_model is not None and shadow.brier_pinnacle is not None:
+                lines.append(
+                    f"  Brier model {shadow.brier_model:.4f} | Pinnacle {shadow.brier_pinnacle:.4f} | diff {shadow.brier_diff:+.4f}"
+                )
+                lines.append(
+                    f"  Log loss model {shadow.log_loss_model:.4f} | Pinnacle {shadow.log_loss_pinnacle:.4f} | diff {shadow.log_loss_diff:+.4f}"
+                )
+            if shadow.mean_total_error is not None:
+                sd_str = f"{shadow.sd_total_error:.2f} pts" if shadow.sd_total_error is not None else "n/a"
+                lines.append(f"  Model total error (actual - mu): mean {shadow.mean_total_error:+.2f} pts | sd {sd_str}")
+        else:
+            lines.append(f"  n = {shadow.n_games} games")
+            lines.append(
+                f"  Brier: model {shadow.brier_model:.4f} | Pinnacle {shadow.brier_pinnacle:.4f} | "
+                f"diff {shadow.brier_diff:+.4f} (95% CI [{shadow.brier_diff_ci_low:+.4f}, {shadow.brier_diff_ci_high:+.4f}])"
+            )
+            lines.append(
+                f"  Log loss: model {shadow.log_loss_model:.4f} | Pinnacle {shadow.log_loss_pinnacle:.4f} | "
+                f"diff {shadow.log_loss_diff:+.4f} (95% CI [{shadow.log_loss_diff_ci_low:+.4f}, {shadow.log_loss_diff_ci_high:+.4f}])"
+            )
+            sd_str = f"{shadow.sd_total_error:.2f} pts" if shadow.sd_total_error is not None else "n/a"
+            lines.append(f"  Model total error (actual - mu): mean {shadow.mean_total_error:+.2f} pts | sd {sd_str}")
         lines.append("")
 
     lines.append("Bankroll (start + settled P/L)")
