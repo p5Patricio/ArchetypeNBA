@@ -219,6 +219,10 @@ class OddsApiService:
         self.last_call_ok: bool = False
 
     @property
+    def name(self) -> str:
+        return "the_odds_api"
+
+    @property
     def is_configured(self) -> bool:
         return bool(self.api_key and "your_" not in self.api_key)
 
