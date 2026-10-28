@@ -128,7 +128,7 @@ Raising the props events per run from 1 to 3 would cost up to 3 + 3 x (3 + 3 x 2
 
 ## 2.1 Second odds feed: SportsGameOdds (optional)
 
-An integrated second odds feed from SportsGameOdds (https://sportsgameodds.com) provides game lines (moneyline, spreads, totals) across additional US bookmakers (Caesars, ESPN BET, BetMGM, DraftKings, FanDuel, Bovada, Unibet, PointsBet, William Hill). It is completely disabled until the owner configures an API key.
+An integrated second odds feed from SportsGameOdds (https://sportsgameodds.com) provides game lines (moneyline, spreads, totals) across additional US bookmakers (Caesars, ESPN BET, BetMGM, DraftKings, FanDuel, Bovada, Unibet, PointsBet, William Hill). The client and parser have been validated against official documentation example responses (`tests/test_sgo_docs_validation.py`), but remain unverified against a real live network response until an API key is configured. It is completely disabled until the owner configures an API key.
 
 ### How to enable it
 1. Register for an API key at https://sportsgameodds.com (the free "Amateur" plan provides 2,500 objects/month, 10 requests/minute, update interval 10 min, NBA included; **no Pinnacle**).
