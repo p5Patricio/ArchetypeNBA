@@ -150,7 +150,7 @@ Rejected/not done: paid odds feeds (OpticOdds ~$5k/mo), scraping ESPN/OddsPortal
 
 | Metric | Value |
 |--------|-------|
-| Tests | 843 backend tests pass (2026-10-28, integrated betting-improvements branch); frontend `tsc --noEmit` clean |
+| Tests | 893 backend tests pass (2026-10-28, with the betting-improvements work and the rest of the roadmap); frontend `tsc --noEmit` clean |
 | Database | PostgreSQL 18.4, 229 MB, Alembic head `e3f8b1a4c9d2`; 23 seasons of game logs (2003-04..2025-26), 59k Elo rows per model |
 | Capture | Since 2026-10-06 (opening lines) and 2026-10-20 (full tick); Odds API credits left: 371 (resets on the 1st of each month); task healthy, 0 failed ticks |
 | Paper trading (2026-10-20 → 10-26) | flat: 56 bets (49 settled), P/L −5.28 u, ROI −11.4%; ¼ Kelly: 44 bets, −13.34 u. Bankrolls 94.7 u / 86.7 u. **Tiny samples, not evidence of anything.** |
