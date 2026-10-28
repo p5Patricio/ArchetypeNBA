@@ -68,10 +68,10 @@ Dead code, confusing duplicates between root and `backend/`, and non-package imp
 
 ## Tasks
 - [x] T1 Complete inventory table and plan in `odd/tasks/legacy-cleanup.md`.
-- [ ] T2 Move scouting report logic into `app/services/scouting_report/`, update `report.py`, write failing test in `backend/tests/test_report.py`, verify pass.
-- [ ] T3 Delete root legacy files and tracked root `.pyc` files; verify test suite and module imports.
-- [ ] T4 Delete backend legacy duplicates and tracked backend `.pyc` files; verify test suite and module imports.
-- [ ] T5 Update `README.md`, `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`; run dangling-reference grep and verify clean.
+- [x] T2 Move scouting report logic into `app/services/scouting_report/`, update `report.py`, write failing test in `backend/tests/test_report.py`, verify pass.
+- [x] T3 Delete root legacy files and tracked root `.pyc` files; verify test suite and module imports.
+- [x] T4 Delete backend legacy duplicates and tracked backend `.pyc` files; verify test suite and module imports.
+- [x] T5 Update `README.md`, `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`; run dangling-reference grep and verify clean.
 
 ## Acceptance criteria
 - Full test suite green (all 843+ tests pass).
@@ -83,13 +83,17 @@ Dead code, confusing duplicates between root and `backend/`, and non-package imp
 
 ## Checks
 - Baseline pytest: 843 passed, 4 skipped.
+- Final pytest: 847 passed, 4 skipped (added offline report tests in `test_report.py`).
 - AST import check: zero unresolved imports.
 
 ## Progress
 - 2026-10-28: Inventory completed and verified via AST and full repo scan.
+- 2026-10-28: Extracted scouting report logic to `backend/app/services/scouting_report/`, updated `report.py`, added offline tests.
+- 2026-10-28: Removed dead prototype files and pycache from root and `backend/`.
+- 2026-10-28: Updated documentation (`README.md`, `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`). Full test suite passes (847 passed, 4 skipped).
 
 ## Follow-ups (out of scope)
 - Migrating `backend/app/etl/pipeline.py` and `nba_active_player_stats_*.xlsx` from Excel to direct NBA API or database dumps (if desired in a future refactor).
 
 ## Next step
-Execute T2: Create `backend/app/services/scouting_report/` and add `test_report.py`.
+All tasks completed. Ready for review.

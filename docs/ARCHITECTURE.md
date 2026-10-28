@@ -256,7 +256,7 @@ Table count: the models define 20 tables (11 platform, 9 quant: `sportsbook`, `g
 
 Adjacent, not part of the loop: `injury_scraper.py` (broken, fabricates data: see [`ROADMAP.md`](ROADMAP.md) item 1), `gemini_analyzer.py` and `telegram_service.py` (props pipeline), and `db_transfer.py` (the export, verify and import logic behind `scripts/db_transfer.py`, see [`DB_TRANSFER.md`](DB_TRANSFER.md)).
 
-Platform services (not documented here): `cache`, `clustering`, `data_update`, `doppelgangers`, `elo` (a legacy, unrelated `EloService`), `financial`, `historical`, `lineup`, `matchup_service`, `parallel_zones`, `pizza_chart`, `player`, `real_shotchart`, `report`, `similarity`, `team`, `training`, `versus`.
+Platform services (not documented here): `cache`, `clustering`, `data_update`, `doppelgangers`, `elo` (a legacy, unrelated `EloService`), `financial`, `historical`, `lineup`, `matchup_service`, `parallel_zones`, `pizza_chart`, `player`, `real_shotchart`, `report` (and `scouting_report/`), `similarity`, `team`, `training`, `versus`.
 
 ### Scripts
 
