@@ -533,6 +533,17 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Consequences**: New enum values need the lockstep deploy; the two arms are hypotheses and carry no weight until their CLV against Pinnacle is positive with t above 2.
 - **Source**: [`RESEARCH_BETTING_IMPROVEMENTS.md`](RESEARCH_BETTING_IMPROVEMENTS.md); [`betting-improvements.md`](../odd/tasks/betting-improvements.md).
 
+### D-57 Totals paper bets via model-free market-edge arm without database migration
+- **Date**: 2026-10-28
+- **Decision**: Totals (over/under) paper bets are evaluated and placed strictly by the model-free `market_edge` strategy (comparing best sportsbook odds against Pinnacle's de-vigged fair over/under at the exact same total line). The champion model and model-driven strategies (`flat`, `kelly_fractional`, `kelly_shrunk`) never bet totals. To satisfy the `simulated_bet.prediction_id` NOT NULL foreign key without altering the database schema or adding an Alembic migration, totals predictions are attached directly to the active champion's `model_version_id` with `model_prob = p_fair` and `projection = None`. The model league evaluation, promotion gates, and paired log loss filters strictly isolate `market == MarketType.h2h` and `side == BetSide.home`, ensuring that totals predictions have zero impact on champion vs challenger model evaluation.
+- **Context**: `simulated_bet` requires a NOT NULL `prediction_id` referencing `model_prediction`, which requires `model_version_id`. Creating a dedicated pseudo-model role (e.g. `market`) would require an Alembic schema migration to alter `ck_model_version_role`. The work package specified: "Prefer designs that need no migration" and ensure the model league is not polluted.
+- **Alternatives rejected**:
+  1. Creating a new role in `ck_model_version_role`: requires an Alembic migration (`a2c4e6f8b1d3`), higher deployment risk.
+  2. Making `prediction_id` nullable in `simulated_bet`: requires schema migration.
+  3. Model-driven totals predictions: market audit (`scripts/market_audit.py`) demonstrated closing totals error sd ~17.7 points across 39 games and no verified evidence of model edge.
+- **Consequences**: No schema migration required. Model league evaluation and promotion remain 100% untouched and pure h2h. Totals paper bets are recorded and tracked seamlessly under `market_edge`.
+- **Source**: WP-T; [`QUANT_MODULE.md`](QUANT_MODULE.md); [`tests/test_prediction_recorder.py`](../backend/tests/test_prediction_recorder.py).
+
 ## Next step
 
 Planned work and the reasons behind it: [`ROADMAP.md`](ROADMAP.md).

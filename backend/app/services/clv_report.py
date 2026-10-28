@@ -6,6 +6,8 @@ Pinnacle's two-way de-vigged closing price:
   - h2h: Pinnacle's de-vigged closing price of the same side.
   - spreads: only when Pinnacle's closing line equals the bet's line_taken (otherwise
     excluded as line moved).
+  - totals: only when Pinnacle's closing line equals the bet's line_taken (otherwise
+    excluded as line moved).
 
 Games are the independent sampling unit: multiple bets on the same game (e.g. flat and Kelly)
 are averaged first.
@@ -169,9 +171,9 @@ def build_pinnacle_clv_report(
             report.exclusions.no_closing_marker += 1
             continue
 
-        # Check market support (h2h and spreads only)
+        # Check market support (h2h, spreads and totals)
         m_str = _enum_value(market)
-        if m_str not in (MarketType.h2h.value, MarketType.spreads.value):
+        if m_str not in (MarketType.h2h.value, MarketType.spreads.value, MarketType.totals.value):
             report.exclusions.unsupported_market += 1
             continue
 
@@ -209,6 +211,24 @@ def build_pinnacle_clv_report(
         elif m_str == MarketType.spreads.value:
             taken_line = _line(bet.line_taken)
             fair_result, reason = _devig_spread(pre_tipoff, side, taken_line)
+            if fair_result is None:
+                if reason == "line_moved":
+                    report.exclusions.line_moved += 1
+                elif reason == "one_sided":
+                    report.exclusions.one_sided_quote += 1
+                else:
+                    report.exclusions.no_pinnacle_quote += 1
+                continue
+            fair_prob, fair_price = fair_result
+            rec = BetClvRecord(game_id=game_id, price_taken=float(bet.price_taken), fair_closing_price=fair_price)
+            valid_records.append(rec)
+            game_bet_details[game_id].append(
+                (float(bet.price_taken), fair_price, fair_prob, rec.log_clv, commence)
+            )
+
+        elif m_str == MarketType.totals.value:
+            taken_line = _line(bet.line_taken)
+            fair_result, reason = _devig_totals(pre_tipoff, side, taken_line)
             if fair_result is None:
                 if reason == "line_moved":
                     report.exclusions.line_moved += 1
@@ -329,6 +349,47 @@ def _devig_spread(
     opp_line = -taken_line
     matching_opp = [
         q for q in spread_quotes if _enum_value(q.side) == opp_side and _line(q.line) == opp_line
+    ]
+    if not matching_opp:
+        return None, "one_sided"
+
+    latest_opp = max(matching_opp, key=_recency)
+    d_own = american_to_decimal(latest_own.price_american)
+    d_opp = american_to_decimal(latest_opp.price_american)
+    p_own, _ = devig_two_way(d_own, d_opp)
+
+    fair_price = 1.0 / p_own
+    return (p_own, fair_price), "ok"
+
+
+def _devig_totals(
+    quotes: List[OddsHistory], bet_side, taken_line: Optional[Decimal]
+) -> Tuple[Optional[Tuple[float, float]], str]:
+    """
+    Finds latest total quote for bet_side.
+    Only proceeds if Pinnacle's closing line == taken_line.
+    Returns ((fair_prob, fair_price), status_reason).
+    """
+    if taken_line is None:
+        return None, "invalid_line"
+
+    totals_quotes = [q for q in quotes if _enum_value(q.market) == MarketType.totals.value]
+    if not totals_quotes:
+        return None, "no_quote"
+
+    own_quotes = [q for q in totals_quotes if _enum_value(q.side) == _enum_value(bet_side)]
+    if not own_quotes:
+        return None, "no_quote"
+
+    latest_own = max(own_quotes, key=_recency)
+    pinnacle_closing_line = _line(latest_own.line)
+    if pinnacle_closing_line != taken_line:
+        return None, "line_moved"
+
+    # Opponent side at the SAME line
+    opp_side = BetSide.under.value if _enum_value(bet_side) == BetSide.over.value else BetSide.over.value
+    matching_opp = [
+        q for q in totals_quotes if _enum_value(q.side) == opp_side and _line(q.line) == taken_line
     ]
     if not matching_opp:
         return None, "one_sided"

@@ -1376,8 +1376,17 @@ export interface ChampionSkillResponse {
   difference?: number | null;
 }
 
+export interface MarketSummary {
+  market: string;
+  bets: number;
+  settled: number;
+  roi?: number | null;
+  avg_clv?: number | null;
+}
+
 export interface PaperSummaryResponse {
   strategies: StrategySummary[];
+  markets?: MarketSummary[] | null;
   pinnacle_clv: PinnacleClvSummaryResponse;
   champion_model?: string | null;
   brier: ChampionSkillResponse;

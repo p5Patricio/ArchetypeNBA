@@ -140,3 +140,38 @@ def test_pinnacle_clv_exclusions(world):
     assert report.exclusions.line_moved == 1
     assert report.exclusions.one_sided_quote == 1
     assert report.exclusions.total == 5
+
+
+def test_pinnacle_clv_totals_bet_and_line_moved(world):
+    # Game 1: Matching totals line 220.5
+    g1 = add_game(world, "BOS", "LAC", start=TIPOFF)
+    add_marker(world, g1, at=CLOSING_AT)
+    place_bet(world, g1, MarketType.totals, BetSide.over, line=220.5, price="2.0500", placed_at=PLACED)
+    add_quote(world, g1, "pinnacle", MarketType.totals, BetSide.over, -110, line=220.5, captured_at=CLOSING_AT)
+    add_quote(world, g1, "pinnacle", MarketType.totals, BetSide.under, -110, line=220.5, captured_at=CLOSING_AT)
+
+    # Game 2: Totals line moved from 220.5 to 222.0
+    g2 = add_game(world, "NYK", "LAL", start=TIPOFF)
+    add_marker(world, g2, at=CLOSING_AT)
+    place_bet(world, g2, MarketType.totals, BetSide.under, line=220.5, price="1.9500", placed_at=PLACED)
+    add_quote(world, g2, "pinnacle", MarketType.totals, BetSide.under, -110, line=222.0, captured_at=CLOSING_AT)
+    add_quote(world, g2, "pinnacle", MarketType.totals, BetSide.over, -110, line=222.0, captured_at=CLOSING_AT)
+
+    # Game 3: Totals one-sided quote at 220.5
+    g3 = add_game(world, "LAC", "NYK", start=TIPOFF)
+    add_marker(world, g3, at=CLOSING_AT)
+    place_bet(world, g3, MarketType.totals, BetSide.over, line=220.5, price="1.9000", placed_at=PLACED)
+    add_quote(world, g3, "pinnacle", MarketType.totals, BetSide.over, -110, line=220.5, captured_at=CLOSING_AT)
+
+    report = build_pinnacle_clv_report(world, NOW)
+    assert report.total_bets == 3
+    assert report.games_count == 1
+    assert report.exclusions.line_moved == 1
+    assert report.exclusions.one_sided_quote == 1
+
+    fair_price = 2.0  # -110 / -110 devigged
+    expected_clv = math.log(2.05 / fair_price)
+    assert report.stats.mean_clv == pytest.approx(expected_clv)
+    assert len(report.game_rows) == 1
+    assert report.game_rows[0].game_id == g1.id
+    assert report.game_rows[0].fair_closing_price == pytest.approx(fair_price)
