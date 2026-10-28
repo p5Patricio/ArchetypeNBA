@@ -94,7 +94,7 @@ Each step is isolated (a failure never blocks `record`); a lock file prevents ov
 | Promotion | `services/model_promotion.py`, `scripts/model_league.py` | Gates in §6. Audit trail in `model_evaluation`. Kill switch `LEARNING_AUTOPROMOTE`. |
 | Candidate lab | `services/model_lab.py`, `scripts/model_lab.py` | Time-split: select on seasons [T-9, T-2], hold-out [T-1, T]; Elo random search (40 configs, seed) + `margin_features`; historical gate: hold-out log-loss gain ≥ 0.0005 and materially different. |
 
-Database (20 model tables + `alembic_version`; PostgreSQL): platform tables (`season`, `team`, `player`, `player_season_stats`, `team_season_stats`, `player_game_log`, `player_shot`, `player_advanced_stats`, `player_similarity`, `player_contract`, `player_matchup_stats`) and quant tables (`sportsbook`, `game`, `odds_history`, `odds_snapshot_capture`, `team_elo_rating` (per model), `model_version`, `model_prediction`, `simulated_bet`, `model_evaluation`) plus views `v_closing_odds`, `v_paper_performance`.
+Database (21 model tables + `alembic_version`; PostgreSQL): platform tables (`season`, `team`, `player`, `player_season_stats`, `team_season_stats`, `player_game_log`, `player_shot`, `player_advanced_stats`, `player_similarity`, `player_contract`, `player_matchup_stats`) and quant tables (`sportsbook`, `game`, `odds_history`, `odds_snapshot_capture`, `odds_capture_presence`, `team_elo_rating` (per model), `model_version`, `model_prediction`, `simulated_bet`, `model_evaluation`) plus views `v_closing_odds`, `v_paper_performance`.
 
 ## 6. Decisions that shaped the system (why, not just what)
 
