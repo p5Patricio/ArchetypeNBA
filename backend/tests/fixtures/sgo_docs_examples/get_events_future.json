@@ -1,0 +1,5062 @@
+{
+  "nextCursor": "n.1765568700000.xhnJqYBn15iogRYEHUlI",
+  "success": true,
+  "data": [
+    {
+      "eventID": "IWYZfq3CzbMNV4bbIpR2",
+      "sportID": "SOCCER",
+      "leagueID": "BUNDESLIGA",
+      "type": "match",
+      "teams": {
+        "home": {
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "names": {
+            "long": "1. FC Union Berlin",
+            "medium": "Union Berlin",
+            "short": "FCU"
+          },
+          "colors": {
+            "primary": "#FF0000",
+            "secondary": "#FFFFFF",
+            "primaryContrast": "#000000",
+            "secondaryContrast": "#FF0000"
+          },
+          "statEntityID": "home"
+        },
+        "away": {
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "names": {
+            "long": "RB Leipzig",
+            "medium": "Leipzig",
+            "short": "RBL"
+          },
+          "colors": {
+            "primary": "#DD0000",
+            "secondary": "",
+            "primaryContrast": "#FFFFFF",
+            "secondaryContrast": ""
+          },
+          "statEntityID": "away"
+        }
+      },
+      "status": {
+        "started": false,
+        "completed": false,
+        "cancelled": false,
+        "ended": false,
+        "live": false,
+        "delayed": false,
+        "currentPeriodID": "",
+        "previousPeriodID": "",
+        "displayShort": "",
+        "displayLong": "Upcoming",
+        "inBreak": false,
+        "hardStart": true,
+        "periods": {
+          "started": [],
+          "ended": []
+        },
+        "oddsPresent": true,
+        "oddsAvailable": true,
+        "finalized": false,
+        "startsAt": "2025-12-12T19:30:00.000Z",
+        "previousStartsAt": [
+          "2025-12-13T14:30:00.000Z",
+          "2025-12-13T15:00:00.000Z"
+        ]
+      },
+      "info": {
+        "seasonWeek": "Bundesliga 25/26"
+      },
+      "links": {
+        "bookmakers": {
+          "pinnacle": "https://www.pinnacle.com/en/soccer/germany-bundesliga/rb-leipzig-vs-union-berlin/1620344967",
+          "boylesports": "https://www.boylesports.com/sports/football/event/germany-bundesliga/union-berlin-v-rb-leipzig",
+          "coolbet": "https://www.coolbet.com/en/sports/match/4734862",
+          "1xbet": "https://1xbet.com/en/line/football/96463-germany-bundesliga/290170097-union-berlin-rasenballsport-leipzig",
+          "nordicbet": "https://www.nordicbet.com/en/sportsbook/football/germany/germany-bundesliga/union-berlin-rb-leipzig",
+          "sportsbet": "https://www.sportsbet.com.au/betting/soccer/german-bundesliga/union-berlin-v-rb-leipzig-9902529",
+          "fanduel": "https://sportsbook.fanduel.com/soccer/-/35016395",
+          "paddypower": "https://www.paddypower.com/football/german-bundesliga/union-berlin-v-rb-leipzig-35016395",
+          "betway": "https://betway.com/en/sports/evt/16090492",
+          "pointsbet": "https://pointsbet.com.au/sports/soccer/German%20Bundesliga/2525492",
+          "hardrockbet": "https://app.hardrock.bet/home/competition/bundesliga/4063070701202702597",
+          "888sport": "https://www.888sport.com/football/germany/german-bundesliga/union-berlin-vs-rb-leipzig-e-6789959",
+          "williamhill": "https://sports.williamhill.com/betting/en-gb/football/OB_EV37882192/union-berlin-vs-rb-leipzig",
+          "betonline": "https://sports.betonline.ag/sportsbook/soccer/bundesliga/game/490898515",
+          "lowvig": "https://sports.lowvig.ag/sportsbook/soccer/bundesliga/game/490898515",
+          "fliff": "https://sports.getfliff.com/markets/319167_c_p_499_prematch",
+          "draftkings": "https://sportsbook.draftkings.com/event/33235655",
+          "leovegas": "https://www.leovegas.co.uk/betting#event/1024136722",
+          "ballybet": "https://play.ballybet.com/sports#event/1024136722",
+          "betparx": "https://nj.betparx.com/kambi#event/1024136722",
+          "betrivers": "https://nj.betrivers.com/?page=sportsbook#event/1024136722",
+          "casumo": "https://www.casumo.com/en-gb/sports#event/1024136722",
+          "grosvenor": "https://www.grosvenorcasinos.com/sport#event/1024136722",
+          "livescorebet": "https://www.livescorebet.com/uk/sports/football/germany-1.bundesliga/1.-fc-union-berlin-rb-leipzig/SBTE_2_1024136722",
+          "tabtouch": "https://www.tabtouch.mobi/tabtouch-sports/event/1024136722",
+          "unibet": "https://www.unibet.com/betting/sports/event/1024136722",
+          "virginbet": "https://www.virginbet.com/sports/football/germany-1.bundesliga/1.-fc-union-berlin-rb-leipzig/SBTE_2_1024136722",
+          "bovada": "https://www.bovada.lv/sports/soccer/europe/germany/1-bundesliga/union-berlin-rb-leipzig-202512121430",
+          "coral": "https://sports.coral.co.uk/event/football/football-germany/german-bundesliga/union-berlin-v-rb-leipzig/40531965",
+          "neds": "https://www.neds.com.au/sports/-/-/-/ac4c0744-41ae-4c0e-b539-20d7376da356",
+          "ladbrokes": "https://www.ladbrokes.com.au/sports/-/-/-/ac4c0744-41ae-4c0e-b539-20d7376da356",
+          "betmgm": "https://sports.nj.betmgm.com/en/sports/events/union-berlin---rb-leipzig-2:7716083",
+          "betsson": "https://www.betsson.com/en/sportsbook/football/germany/germany-bundesliga?eventId=f-DraNtuzsNUGkqFNAtVC2SA",
+          "playup": "https://www.playup.com.au/betting/sports/germany-bundesliga-1/union-berlin-v-rb-leipzig/1732363",
+          "tab": "https://www.tab.com.au/sports/betting/Soccer/competitions/German%20Bundesliga/matches/Union%20Berlin%20v%20RB%20Leipzig",
+          "betrsportsbook": "https://www.betr.com.au/sports/Soccer/100/Germany/Bundesliga/1.-FC-Union-Berlin-v-RB-Leipzig/1925936/All-Markets",
+          "betfairsportsbook": "https://www.betfair.com/betting/football/german-bundesliga/union-berlin-v-rb-leipzig/e-35016395",
+          "matchbook": "https://www.matchbook.com/events/soccer/germany/germany-bundesliga/31857747966800053",
+          "everygame": "https://sports.everygame.eu/en/Bets/Soccer/German-1st-Bundesliga/1-FC-Union-Berlin-v-RB-Leipzig/2761502",
+          "espnbet": "https://espnbet.com/sport/soccer/organization/germany/competition/bundesliga/event/853acc43-6419-449a-9760-187331937390",
+          "caesars": "https://sportsbook.caesars.com/us/nj/bet/football/f9d4fd6b-04f2-4076-8714-611a20740f81/union-berlin-vs-rb-leipzig"
+        }
+      },
+      "odds": {
+        "points-home-reg-ml3way-home+draw": {
+          "oddID": "points-home-reg-ml3way-home+draw",
+          "opposingOddID": "points-away-reg-ml3way-away",
+          "marketName": "3-Way Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "reg",
+          "betTypeID": "ml3way",
+          "sideID": "home+draw",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": true,
+          "fairOdds": "-143",
+          "openFairOdds": "-143",
+          "scoringSupported": true
+        },
+        "points-away-reg-ml3way-away": {
+          "oddID": "points-away-reg-ml3way-away",
+          "opposingOddID": "points-home-reg-ml3way-home+draw",
+          "marketName": "3-Way Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "reg",
+          "betTypeID": "ml3way",
+          "sideID": "away",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+143",
+          "bookOdds": "+130",
+          "openFairOdds": "+143",
+          "openBookOdds": "+130",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+133",
+              "lastUpdatedAt": "2025-12-12T14:59:33.774Z",
+              "available": true
+            },
+            "boylesports": {
+              "odds": "+125",
+              "lastUpdatedAt": "2025-12-12T14:57:57.000Z",
+              "available": true
+            },
+            "unibet": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:58:53.000Z",
+              "available": true
+            },
+            "unknown": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "1xbet": {
+              "odds": "+141",
+              "lastUpdatedAt": "2025-12-12T14:58:39.000Z",
+              "available": true
+            },
+            "nordicbet": {
+              "odds": "+138",
+              "lastUpdatedAt": "2025-12-12T14:57:16.000Z",
+              "available": true
+            },
+            "sportsbet": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:58:40.000Z",
+              "available": true
+            },
+            "coolbet": {
+              "odds": "+135",
+              "lastUpdatedAt": "2025-12-12T14:58:18.000Z",
+              "available": true
+            },
+            "fanduel": {
+              "odds": "+135",
+              "lastUpdatedAt": "2025-12-12T14:58:51.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543800868&selectionId=5340398"
+            },
+            "paddypower": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:58:13.000Z",
+              "available": true
+            },
+            "betway": {
+              "odds": "+138",
+              "lastUpdatedAt": "2025-12-12T14:57:27.000Z",
+              "available": true
+            },
+            "skybet": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "pointsbet": {
+              "odds": "+135",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "fanatics": {
+              "odds": "+135",
+              "lastUpdatedAt": "2025-12-12T14:57:31.000Z",
+              "available": true
+            },
+            "betfairexchange": {
+              "odds": "+148",
+              "lastUpdatedAt": "2025-12-12T14:59:06.000Z",
+              "available": true,
+              "deeplink": "https://betfair.com/exchange/plus/football/market/1.251205616"
+            },
+            "tipico": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:58:28.000Z",
+              "available": true
+            },
+            "hardrockbet": {
+              "odds": "+135",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "888sport": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:58:26.000Z",
+              "available": true
+            },
+            "williamhill": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:59:04.000Z",
+              "available": true
+            },
+            "betonline": {
+              "odds": "+140",
+              "lastUpdatedAt": "2025-12-12T14:58:30.000Z",
+              "available": true
+            },
+            "lowvig": {
+              "odds": "+133",
+              "lastUpdatedAt": "2025-12-12T14:58:29.000Z",
+              "available": true
+            },
+            "marathonbet": {
+              "odds": "+139",
+              "lastUpdatedAt": "2025-12-12T14:58:15.000Z",
+              "available": true
+            },
+            "fliff": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:58:28.000Z",
+              "available": true
+            },
+            "draftkings": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:58:39.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235655?outcomes=0ML82446033_3"
+            },
+            "bovada": {
+              "odds": "+133",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "leovegas": {
+              "odds": "+125",
+              "lastUpdatedAt": "2025-12-12T14:58:55.000Z",
+              "available": true
+            },
+            "ballybet": {
+              "odds": "+125",
+              "lastUpdatedAt": "2025-12-12T14:58:14.000Z",
+              "available": true
+            },
+            "betparx": {
+              "odds": "+125",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+125",
+              "lastUpdatedAt": "2025-12-12T14:58:40.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1024136722?coupon=single|3974164772|0"
+            },
+            "casumo": {
+              "odds": "+125",
+              "lastUpdatedAt": "2025-12-12T14:58:27.000Z",
+              "available": true
+            },
+            "grosvenor": {
+              "odds": "+125",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "livescorebet": {
+              "odds": "+123",
+              "lastUpdatedAt": "2025-12-12T14:58:27.000Z",
+              "available": true
+            },
+            "tabtouch": {
+              "odds": "+125",
+              "lastUpdatedAt": "2025-12-12T14:58:45.000Z",
+              "available": true
+            },
+            "virginbet": {
+              "odds": "+123",
+              "lastUpdatedAt": "2025-12-12T14:58:14.000Z",
+              "available": true
+            },
+            "coral": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:58:14.000Z",
+              "available": true
+            },
+            "neds": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:58:23.000Z",
+              "available": true
+            },
+            "ladbrokes": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:58:28.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:58:52.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7716083-190814890-698929676"
+            },
+            "bet365": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:44:12.000Z",
+              "available": true
+            },
+            "betvictor": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:55:00.000Z",
+              "available": true
+            },
+            "betsson": {
+              "odds": "+132",
+              "lastUpdatedAt": "2025-12-12T14:58:58.000Z",
+              "available": true
+            },
+            "suprabets": {
+              "odds": "+131",
+              "lastUpdatedAt": "2025-12-12T14:57:50.000Z",
+              "available": true
+            },
+            "playup": {
+              "odds": "+128",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "tab": {
+              "odds": "+125",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "betrsportsbook": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:58:29.000Z",
+              "available": true
+            },
+            "betfairsportsbook": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:58:53.000Z",
+              "available": true
+            },
+            "gtbets": {
+              "odds": "+128",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "matchbook": {
+              "odds": "+146",
+              "lastUpdatedAt": "2025-12-12T14:58:41.000Z",
+              "available": true
+            },
+            "everygame": {
+              "odds": "+135",
+              "lastUpdatedAt": "2025-12-12T14:57:59.000Z",
+              "available": true
+            },
+            "espnbet": {
+              "odds": "+130",
+              "lastUpdatedAt": "2025-12-12T14:58:54.000Z",
+              "available": true,
+              "deeplink": "https://espnbet.com/sport/soccer/organization/germany/competition/bundesliga/event/853acc43-6419-449a-9760-187331937390/section/lines"
+            },
+            "caesars": {
+              "odds": "+135",
+              "lastUpdatedAt": "2025-12-12T14:53:56.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.caesars.com/us/nj/bet/betslip?selectionIds=9dc72c90-b2e2-3194-8265-8a9f65905e09"
+            },
+            "betus": {
+              "odds": "+137",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            }
+          }
+        },
+        "points-home-reg-ml3way-home": {
+          "oddID": "points-home-reg-ml3way-home",
+          "opposingOddID": "points-away-reg-ml3way-away+draw",
+          "marketName": "3-Way Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "reg",
+          "betTypeID": "ml3way",
+          "sideID": "home",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+226",
+          "bookOdds": "+205",
+          "openFairOdds": "+226",
+          "openBookOdds": "+205",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+206",
+              "lastUpdatedAt": "2025-12-12T14:59:33.774Z",
+              "available": true
+            },
+            "boylesports": {
+              "odds": "+188",
+              "lastUpdatedAt": "2025-12-12T14:57:57.000Z",
+              "available": true
+            },
+            "unibet": {
+              "odds": "+205",
+              "lastUpdatedAt": "2025-12-12T14:58:53.000Z",
+              "available": true
+            },
+            "unknown": {
+              "odds": "+205",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "1xbet": {
+              "odds": "+217",
+              "lastUpdatedAt": "2025-12-12T14:58:39.000Z",
+              "available": true
+            },
+            "nordicbet": {
+              "odds": "+198",
+              "lastUpdatedAt": "2025-12-12T14:57:16.000Z",
+              "available": true
+            },
+            "sportsbet": {
+              "odds": "+190",
+              "lastUpdatedAt": "2025-12-12T14:58:40.000Z",
+              "available": true
+            },
+            "coolbet": {
+              "odds": "+215",
+              "lastUpdatedAt": "2025-12-12T14:58:18.000Z",
+              "available": true
+            },
+            "fanduel": {
+              "odds": "+200",
+              "lastUpdatedAt": "2025-12-12T14:58:51.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543800868&selectionId=50347"
+            },
+            "paddypower": {
+              "odds": "+200",
+              "lastUpdatedAt": "2025-12-12T14:58:13.000Z",
+              "available": true
+            },
+            "betway": {
+              "odds": "+200",
+              "lastUpdatedAt": "2025-12-12T14:57:27.000Z",
+              "available": true
+            },
+            "skybet": {
+              "odds": "+190",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "pointsbet": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "fanatics": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:57:31.000Z",
+              "available": true
+            },
+            "betfairexchange": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:59:06.000Z",
+              "available": true,
+              "deeplink": "https://betfair.com/exchange/plus/football/market/1.251205616"
+            },
+            "tipico": {
+              "odds": "+220",
+              "lastUpdatedAt": "2025-12-12T14:58:28.000Z",
+              "available": true
+            },
+            "hardrockbet": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "888sport": {
+              "odds": "+200",
+              "lastUpdatedAt": "2025-12-12T14:58:26.000Z",
+              "available": true
+            },
+            "williamhill": {
+              "odds": "+190",
+              "lastUpdatedAt": "2025-12-12T14:59:04.000Z",
+              "available": true
+            },
+            "betonline": {
+              "odds": "+198",
+              "lastUpdatedAt": "2025-12-12T14:58:30.000Z",
+              "available": true
+            },
+            "lowvig": {
+              "odds": "+214",
+              "lastUpdatedAt": "2025-12-12T14:58:29.000Z",
+              "available": true
+            },
+            "marathonbet": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:58:15.000Z",
+              "available": true
+            },
+            "fliff": {
+              "odds": "+195",
+              "lastUpdatedAt": "2025-12-12T14:58:28.000Z",
+              "available": true
+            },
+            "draftkings": {
+              "odds": "+190",
+              "lastUpdatedAt": "2025-12-12T14:58:39.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235655?outcomes=0ML82446033_1"
+            },
+            "bovada": {
+              "odds": "+205",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "leovegas": {
+              "odds": "+205",
+              "lastUpdatedAt": "2025-12-12T14:58:55.000Z",
+              "available": true
+            },
+            "ballybet": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:58:14.000Z",
+              "available": true
+            },
+            "betparx": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+205",
+              "lastUpdatedAt": "2025-12-12T14:58:40.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1024136722?coupon=single|3974164770|0"
+            },
+            "casumo": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:58:27.000Z",
+              "available": true
+            },
+            "grosvenor": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "livescorebet": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:58:27.000Z",
+              "available": true
+            },
+            "tabtouch": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:58:45.000Z",
+              "available": true
+            },
+            "virginbet": {
+              "odds": "+205",
+              "lastUpdatedAt": "2025-12-12T14:58:14.000Z",
+              "available": true
+            },
+            "coral": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:58:14.000Z",
+              "available": true
+            },
+            "neds": {
+              "odds": "+200",
+              "lastUpdatedAt": "2025-12-12T14:58:23.000Z",
+              "available": true
+            },
+            "ladbrokes": {
+              "odds": "+200",
+              "lastUpdatedAt": "2025-12-12T14:58:28.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:58:52.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7716083-190814890-698929674"
+            },
+            "bet365": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:44:12.000Z",
+              "available": true
+            },
+            "betvictor": {
+              "odds": "+200",
+              "lastUpdatedAt": "2025-12-12T14:55:00.000Z",
+              "available": true
+            },
+            "betsson": {
+              "odds": "+205",
+              "lastUpdatedAt": "2025-12-12T14:58:58.000Z",
+              "available": true
+            },
+            "suprabets": {
+              "odds": "+207",
+              "lastUpdatedAt": "2025-12-12T14:57:50.000Z",
+              "available": true
+            },
+            "playup": {
+              "odds": "+190",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "tab": {
+              "odds": "+200",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "betrsportsbook": {
+              "odds": "+205",
+              "lastUpdatedAt": "2025-12-12T14:58:29.000Z",
+              "available": true
+            },
+            "betfairsportsbook": {
+              "odds": "+188",
+              "lastUpdatedAt": "2025-12-12T14:58:53.000Z",
+              "available": true
+            },
+            "gtbets": {
+              "odds": "+206",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "matchbook": {
+              "odds": "+215",
+              "lastUpdatedAt": "2025-12-12T14:58:41.000Z",
+              "available": true
+            },
+            "everygame": {
+              "odds": "+195",
+              "lastUpdatedAt": "2025-12-12T14:57:59.000Z",
+              "available": true
+            },
+            "espnbet": {
+              "odds": "+200",
+              "lastUpdatedAt": "2025-12-12T14:58:54.000Z",
+              "available": true,
+              "deeplink": "https://espnbet.com/sport/soccer/organization/germany/competition/bundesliga/event/853acc43-6419-449a-9760-187331937390/section/lines"
+            },
+            "caesars": {
+              "odds": "+200",
+              "lastUpdatedAt": "2025-12-12T14:53:56.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.caesars.com/us/nj/bet/betslip?selectionIds=dfca932c-3c5a-3357-98e3-028d06bad8c6"
+            },
+            "betus": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            }
+          }
+        },
+        "points-away-reg-ml3way-away+draw": {
+          "oddID": "points-away-reg-ml3way-away+draw",
+          "opposingOddID": "points-home-reg-ml3way-home",
+          "marketName": "3-Way Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "reg",
+          "betTypeID": "ml3way",
+          "sideID": "away+draw",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": true,
+          "fairOdds": "-226",
+          "openFairOdds": "-226",
+          "scoringSupported": true
+        },
+        "points-away-reg-ml-away": {
+          "oddID": "points-away-reg-ml-away",
+          "opposingOddID": "points-home-reg-ml-home",
+          "marketName": "Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "reg",
+          "betTypeID": "ml",
+          "sideID": "away",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-129",
+          "bookOdds": "-150",
+          "openFairOdds": "-129",
+          "openBookOdds": "-150",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "fanduel": {
+              "odds": "-145",
+              "lastUpdatedAt": "2025-12-12T14:58:52.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543800782&selectionId=5340398"
+            },
+            "betrivers": {
+              "odds": "-165",
+              "lastUpdatedAt": "2025-12-12T14:57:43.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1024136722?coupon=single|3974179572|0"
+            },
+            "bovada": {
+              "odds": "-138",
+              "lastUpdatedAt": "2025-12-12T14:58:59.000Z",
+              "available": true
+            },
+            "draftkings": {
+              "odds": "-145",
+              "lastUpdatedAt": "2025-12-12T14:58:46.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235655?outcomes=0QA294967942%23423045353_13L40481Q12Q21"
+            },
+            "ballybet": {
+              "odds": "-165",
+              "lastUpdatedAt": "2025-12-12T14:58:19.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "-160",
+              "lastUpdatedAt": "2025-12-12T14:58:59.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7716083-190814898-698929743"
+            },
+            "bet365": {
+              "odds": "-150",
+              "lastUpdatedAt": "2025-12-12T14:44:12.000Z",
+              "available": true
+            }
+          }
+        },
+        "points-home-reg-ml-home": {
+          "oddID": "points-home-reg-ml-home",
+          "opposingOddID": "points-away-reg-ml-away",
+          "marketName": "Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "reg",
+          "betTypeID": "ml",
+          "sideID": "home",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+129",
+          "bookOdds": "+115",
+          "openFairOdds": "+129",
+          "openBookOdds": "+115",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "fanduel": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:52.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543800782&selectionId=50347"
+            },
+            "betrivers": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:57:43.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1024136722?coupon=single|3974179571|0"
+            },
+            "bovada": {
+              "odds": "+114",
+              "lastUpdatedAt": "2025-12-12T14:58:59.000Z",
+              "available": true
+            },
+            "draftkings": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:46.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235655?outcomes=0QA294967942%23423045352_13L40481Q11Q20"
+            },
+            "ballybet": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:19.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:59.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7716083-190814898-698929742"
+            },
+            "bet365": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:44:12.000Z",
+              "available": true
+            }
+          }
+        },
+        "points-home-reg-sp-home": {
+          "oddID": "points-home-reg-sp-home",
+          "opposingOddID": "points-away-reg-sp-away",
+          "marketName": "Spread (Regulation)",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "reg",
+          "betTypeID": "sp",
+          "sideID": "home",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-111",
+          "bookOdds": "-122",
+          "fairSpread": "+0.5",
+          "bookSpread": "+0.5",
+          "openFairOdds": "-111",
+          "openBookOdds": "-122",
+          "openFairSpread": "+0.5",
+          "openBookSpread": "+0.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bovada": {
+              "odds": "-122",
+              "spread": "+0.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            }
+          }
+        },
+        "points-away-reg-sp-away": {
+          "oddID": "points-away-reg-sp-away",
+          "opposingOddID": "points-home-reg-sp-home",
+          "marketName": "Spread (Regulation)",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "reg",
+          "betTypeID": "sp",
+          "sideID": "away",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+111",
+          "bookOdds": "+102",
+          "fairSpread": "-0.5",
+          "bookSpread": "-0.5",
+          "openFairOdds": "+111",
+          "openBookOdds": "+102",
+          "openFairSpread": "-0.5",
+          "openBookSpread": "-0.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bovada": {
+              "odds": "+102",
+              "spread": "-0.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            }
+          }
+        },
+        "points-all-reg-ou-under": {
+          "oddID": "points-all-reg-ou-under",
+          "opposingOddID": "points-all-reg-ou-over",
+          "marketName": "Over/Under (Regulation)",
+          "statID": "points",
+          "statEntityID": "all",
+          "periodID": "reg",
+          "betTypeID": "ou",
+          "sideID": "under",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-108",
+          "bookOdds": "-124",
+          "fairOverUnder": "2.5",
+          "bookOverUnder": "2.5",
+          "openFairOdds": "-108",
+          "openBookOdds": "-124",
+          "openFairOverUnder": "2.5",
+          "openBookOverUnder": "2.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "betparx": {
+              "odds": "-123",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "-125",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "-125",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "-118",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            }
+          }
+        },
+        "points-all-reg-ou-over": {
+          "oddID": "points-all-reg-ou-over",
+          "opposingOddID": "points-all-reg-ou-under",
+          "marketName": "Over/Under (Regulation)",
+          "statID": "points",
+          "statEntityID": "all",
+          "periodID": "reg",
+          "betTypeID": "ou",
+          "sideID": "over",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+108",
+          "bookOdds": "-105",
+          "fairOverUnder": "2.5",
+          "bookOverUnder": "2.5",
+          "openFairOdds": "+108",
+          "openBookOdds": "-105",
+          "openFairOverUnder": "2.5",
+          "openBookOverUnder": "2.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "betparx": {
+              "odds": "-105",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "-106",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "-111",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "-102",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            }
+          }
+        },
+        "points-home-1h-ml3way-home+draw": {
+          "oddID": "points-home-1h-ml3way-home+draw",
+          "opposingOddID": "points-away-1h-ml3way-away",
+          "marketName": "1st Half 3-Way Moneyline",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "1h",
+          "betTypeID": "ml3way",
+          "sideID": "home+draw",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": true,
+          "fairOdds": "-204",
+          "openFairOdds": "-204",
+          "scoringSupported": true
+        },
+        "points-away-1h-ml3way-away": {
+          "oddID": "points-away-1h-ml3way-away",
+          "opposingOddID": "points-home-1h-ml3way-home+draw",
+          "marketName": "1st Half 3-Way Moneyline",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "1h",
+          "betTypeID": "ml3way",
+          "sideID": "away",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+204",
+          "bookOdds": "+185",
+          "openFairOdds": "+204",
+          "openBookOdds": "+185",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+202",
+              "lastUpdatedAt": "2025-12-12T14:59:33.774Z",
+              "available": true
+            },
+            "fanduel": {
+              "odds": "+185",
+              "lastUpdatedAt": "2025-12-12T14:58:52.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543800738&selectionId=5340398"
+            },
+            "unknown": {
+              "odds": "+189",
+              "lastUpdatedAt": "2025-12-12T14:57:05.000Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "+205",
+              "lastUpdatedAt": "2025-12-12T14:58:59.000Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+180",
+              "lastUpdatedAt": "2025-12-12T14:57:43.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1024136722?coupon=single|3974179530|0"
+            },
+            "draftkings": {
+              "odds": "+185",
+              "lastUpdatedAt": "2025-12-12T14:58:46.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235655?outcomes=0ML82446048_3"
+            },
+            "ballybet": {
+              "odds": "+180",
+              "lastUpdatedAt": "2025-12-12T14:58:19.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+180",
+              "lastUpdatedAt": "2025-12-12T14:58:59.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7716083-190814889-698929672"
+            },
+            "bet365": {
+              "odds": "+200",
+              "lastUpdatedAt": "2025-12-12T14:55:22.000Z",
+              "available": true
+            }
+          }
+        },
+        "weightedCards-all-game-ou-over": {
+          "oddID": "weightedCards-all-game-ou-over",
+          "opposingOddID": "weightedCards-all-game-ou-under",
+          "marketName": "Total Cards (Weighted) Over/Under (Full Match)",
+          "statID": "weightedCards",
+          "statEntityID": "all",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "over",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+102",
+          "bookOdds": "-115",
+          "fairOverUnder": "4.5",
+          "bookOverUnder": "4.5",
+          "openFairOdds": "+102",
+          "openBookOdds": "-115",
+          "openFairOverUnder": "4.5",
+          "openBookOverUnder": "4.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bet365": {
+              "odds": "-120",
+              "overUnder": "4.5",
+              "lastUpdatedAt": "2025-12-12T14:50:52.000Z",
+              "available": true
+            },
+            "draftkings": {
+              "odds": "+100",
+              "overUnder": "4.5",
+              "lastUpdatedAt": "2025-12-12T14:58:46.000Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "-115",
+              "overUnder": "4.5",
+              "lastUpdatedAt": "2025-12-12T14:58:59.000Z",
+              "available": true
+            }
+          }
+        },
+        "weightedCards-all-game-ou-under": {
+          "oddID": "weightedCards-all-game-ou-under",
+          "opposingOddID": "weightedCards-all-game-ou-over",
+          "marketName": "Total Cards (Weighted) Over/Under (Full Match)",
+          "statID": "weightedCards",
+          "statEntityID": "all",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "under",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-102",
+          "bookOdds": "-120",
+          "fairOverUnder": "4.5",
+          "bookOverUnder": "4.5",
+          "openFairOdds": "-102",
+          "openBookOdds": "-120",
+          "openFairOverUnder": "4.5",
+          "openBookOverUnder": "4.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bet365": {
+              "odds": "-120",
+              "overUnder": "4.5",
+              "lastUpdatedAt": "2025-12-12T14:50:52.000Z",
+              "available": true
+            },
+            "draftkings": {
+              "odds": "-140",
+              "overUnder": "4.5",
+              "lastUpdatedAt": "2025-12-12T14:58:46.000Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "-115",
+              "overUnder": "4.5",
+              "lastUpdatedAt": "2025-12-12T14:58:59.000Z",
+              "available": true
+            }
+          }
+        },
+        "weightedCards-home-game-ou-under": {
+          "oddID": "weightedCards-home-game-ou-under",
+          "opposingOddID": "weightedCards-home-game-ou-over",
+          "marketName": "1. FC Union Berlin Cards (Weighted) Over/Under (Full Match)",
+          "statID": "weightedCards",
+          "statEntityID": "home",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "under",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": false,
+          "fairOdds": "+100",
+          "bookOdds": "-120",
+          "fairOverUnder": "2.5",
+          "bookOverUnder": "2.5",
+          "openFairOdds": "+100",
+          "openBookOdds": "-120",
+          "openFairOverUnder": "2.5",
+          "openBookOverUnder": "2.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bet365": {
+              "odds": "-120",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:03:43.000Z",
+              "available": false
+            }
+          }
+        },
+        "weightedCards-home-game-ou-over": {
+          "oddID": "weightedCards-home-game-ou-over",
+          "opposingOddID": "weightedCards-home-game-ou-under",
+          "marketName": "1. FC Union Berlin Cards (Weighted) Over/Under (Full Match)",
+          "statID": "weightedCards",
+          "statEntityID": "home",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "over",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": false,
+          "fairOdds": "+100",
+          "bookOdds": "-120",
+          "fairOverUnder": "2.5",
+          "bookOverUnder": "2.5",
+          "openFairOdds": "+100",
+          "openBookOdds": "-120",
+          "openFairOverUnder": "2.5",
+          "openBookOverUnder": "2.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bet365": {
+              "odds": "-120",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:03:43.000Z",
+              "available": false
+            }
+          }
+        },
+        "firstToScore-DMYTRO_BOGDANOV_1_BUNDESLIGA-game-yn-yes": {
+          "oddID": "firstToScore-DMYTRO_BOGDANOV_1_BUNDESLIGA-game-yn-yes",
+          "opposingOddID": "firstToScore-DMYTRO_BOGDANOV_1_BUNDESLIGA-game-yn-no",
+          "marketName": "Dmytro Bogdanov To Record First Goal Yes/No (Full Match)",
+          "statID": "firstToScore",
+          "statEntityID": "DMYTRO_BOGDANOV_1_BUNDESLIGA",
+          "periodID": "game",
+          "betTypeID": "yn",
+          "sideID": "yes",
+          "playerID": "DMYTRO_BOGDANOV_1_BUNDESLIGA",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+825",
+          "bookOdds": "+750",
+          "openFairOdds": "+825",
+          "openBookOdds": "+750",
+          "scoringSupported": false,
+          "byBookmaker": {
+            "bet365": {
+              "odds": "+750",
+              "lastUpdatedAt": "2025-12-12T14:58:44.000Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "+750",
+              "lastUpdatedAt": "2025-12-12T14:58:59.000Z",
+              "available": true
+            }
+          }
+        },
+        "firstToScore-DMYTRO_BOGDANOV_1_BUNDESLIGA-game-yn-no": {
+          "oddID": "firstToScore-DMYTRO_BOGDANOV_1_BUNDESLIGA-game-yn-no",
+          "opposingOddID": "firstToScore-DMYTRO_BOGDANOV_1_BUNDESLIGA-game-yn-yes",
+          "marketName": "Dmytro Bogdanov To Record First Goal Yes/No (Full Match)",
+          "statID": "firstToScore",
+          "statEntityID": "DMYTRO_BOGDANOV_1_BUNDESLIGA",
+          "periodID": "game",
+          "betTypeID": "yn",
+          "sideID": "no",
+          "playerID": "DMYTRO_BOGDANOV_1_BUNDESLIGA",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": true,
+          "fairOdds": "-825",
+          "openFairOdds": "-825",
+          "scoringSupported": false
+        }
+      },
+      "results": {},
+      "players": {
+        "NICOLAS_SEIWALD_1_BUNDESLIGA": {
+          "playerID": "NICOLAS_SEIWALD_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Nicolas",
+          "lastName": "Seiwald",
+          "name": "Nicolas Seiwald"
+        },
+        "ANDREJ_ILIC_1_BUNDESLIGA": {
+          "playerID": "ANDREJ_ILIC_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Andrej",
+          "lastName": "Ili\u0107",
+          "name": "Andrej Ili\u0107"
+        },
+        "XAVER_SCHLAGER_1_BUNDESLIGA": {
+          "playerID": "XAVER_SCHLAGER_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Xaver",
+          "lastName": "Schlager",
+          "name": "Xaver Schlager"
+        },
+        "WILLI_ORBAN_1_BUNDESLIGA": {
+          "playerID": "WILLI_ORBAN_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Willi",
+          "lastName": "Orb\u00e1n",
+          "name": "Willi Orb\u00e1n"
+        },
+        "JANIK_HABERER_1_BUNDESLIGA": {
+          "playerID": "JANIK_HABERER_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Janik",
+          "lastName": "Haberer",
+          "name": "Janik Haberer"
+        },
+        "LEOPOLD_QUERFELD_1_BUNDESLIGA": {
+          "playerID": "LEOPOLD_QUERFELD_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Leopold",
+          "lastName": "Querfeld",
+          "name": "Leopold Querfeld"
+        },
+        "CASTELLO_LUKEBA_1_BUNDESLIGA": {
+          "playerID": "CASTELLO_LUKEBA_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Castello",
+          "lastName": "Lukeba",
+          "name": "Castello Lukeba"
+        },
+        "WOOYEONG_JEONG_1_BUNDESLIGA": {
+          "playerID": "WOOYEONG_JEONG_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Woo-Yeong",
+          "lastName": "Jeong",
+          "name": "Woo-Yeong Jeong"
+        },
+        "OLIVER_BURKE_1_BUNDESLIGA": {
+          "playerID": "OLIVER_BURKE_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Oliver",
+          "lastName": "Burke",
+          "name": "Oliver Burke"
+        },
+        "ANTONIO_NUSA_1_BUNDESLIGA": {
+          "playerID": "ANTONIO_NUSA_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Antonio",
+          "lastName": "Nusa",
+          "name": "Antonio Nusa"
+        },
+        "ANDRAS_SCHAFER_1_BUNDESLIGA": {
+          "playerID": "ANDRAS_SCHAFER_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Andr\u00e1s",
+          "lastName": "Sch\u00e4fer",
+          "name": "Andr\u00e1s Sch\u00e4fer"
+        },
+        "CONRAD_HARDER_1_BUNDESLIGA": {
+          "playerID": "CONRAD_HARDER_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Conrad",
+          "lastName": "Harder",
+          "name": "Conrad Harder"
+        },
+        "EL_CHADAILLE_BITSHIABU_1_BUNDESLIGA": {
+          "playerID": "EL_CHADAILLE_BITSHIABU_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "El Chadaille",
+          "lastName": "Bitshiabu",
+          "name": "El Chadaille Bitshiabu"
+        },
+        "CHRISTOPH_BAUMGARTNER_1_BUNDESLIGA": {
+          "playerID": "CHRISTOPH_BAUMGARTNER_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Christoph",
+          "lastName": "Baumgartner",
+          "name": "Christoph Baumgartner"
+        },
+        "TIM_SKARKE_1_BUNDESLIGA": {
+          "playerID": "TIM_SKARKE_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Tim",
+          "lastName": "Skarke",
+          "name": "Tim Skarke"
+        },
+        "ROBERT_SKOV_1_BUNDESLIGA": {
+          "playerID": "ROBERT_SKOV_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Robert",
+          "lastName": "Skov",
+          "name": "Robert Skov"
+        },
+        "JOSIP_JURANOVIC_1_BUNDESLIGA": {
+          "playerID": "JOSIP_JURANOVIC_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Josip",
+          "lastName": "Juranovi\u0107",
+          "name": "Josip Juranovi\u0107"
+        },
+        "YAN_DIOMANDE_1_BUNDESLIGA": {
+          "playerID": "YAN_DIOMANDE_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Yan",
+          "lastName": "Diomande",
+          "name": "Yan Diomande"
+        },
+        "CHRISTOPHER_TRIMMEL_1_BUNDESLIGA": {
+          "playerID": "CHRISTOPHER_TRIMMEL_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Christopher",
+          "lastName": "Trimmel",
+          "name": "Christopher Trimmel"
+        },
+        "JOHAN_BAKAYOKO_1_BUNDESLIGA": {
+          "playerID": "JOHAN_BAKAYOKO_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Johan",
+          "lastName": "Bakayoko",
+          "name": "Johan Bakayoko"
+        },
+        "DIOGO_LEITE_1_BUNDESLIGA": {
+          "playerID": "DIOGO_LEITE_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Diogo Filipe",
+          "lastName": "Monteiro Pinto Leite",
+          "name": "Diogo Leite"
+        },
+        "EZECHIEL_BANZUZI_1_BUNDESLIGA": {
+          "playerID": "EZECHIEL_BANZUZI_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Ezechiel",
+          "lastName": "Banzuzi",
+          "name": "Ezechiel Banzuzi"
+        },
+        "TOM_ROTHE_1_BUNDESLIGA": {
+          "playerID": "TOM_ROTHE_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Tom",
+          "lastName": "Rothe",
+          "name": "Tom Rothe"
+        },
+        "DAVID_RAUM_1_BUNDESLIGA": {
+          "playerID": "DAVID_RAUM_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "David",
+          "lastName": "Raum",
+          "name": "David Raum"
+        },
+        "RANI_KHEDIRA_1_BUNDESLIGA": {
+          "playerID": "RANI_KHEDIRA_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Rani",
+          "lastName": "Khedira",
+          "name": "Rani Khedira"
+        },
+        "DANILHO_DOEKHI_1_BUNDESLIGA": {
+          "playerID": "DANILHO_DOEKHI_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Danilho",
+          "lastName": "Doekhi",
+          "name": "Danilho Doekhi"
+        },
+        "ALEX_KRAL_1_BUNDESLIGA": {
+          "playerID": "ALEX_KRAL_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Alex",
+          "lastName": "Kr\u00e1l",
+          "name": "Alex Kr\u00e1l"
+        },
+        "ILYAS_ANSAH_1_BUNDESLIGA": {
+          "playerID": "ILYAS_ANSAH_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Ilyas",
+          "lastName": "Ansah",
+          "name": "Ilyas Ansah"
+        },
+        "TIMO_WERNER_1_BUNDESLIGA": {
+          "playerID": "TIMO_WERNER_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Timo",
+          "lastName": "Werner",
+          "name": "Timo Werner"
+        },
+        "ALJOSCHA_KEMLEIN_1_BUNDESLIGA": {
+          "playerID": "ALJOSCHA_KEMLEIN_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Aljoscha",
+          "lastName": "Kemlein",
+          "name": "Aljoscha Kemlein"
+        },
+        "AMADOU_HAIDARA_1_BUNDESLIGA": {
+          "playerID": "AMADOU_HAIDARA_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Amadou",
+          "lastName": "Haidara",
+          "name": "Amadou Haidara"
+        },
+        "ANDRIJA_MAKSIMOVIC_1_BUNDESLIGA": {
+          "playerID": "ANDRIJA_MAKSIMOVIC_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Andrija",
+          "lastName": "Maksimovi\u0107",
+          "name": "Andrija Maksimovi\u0107"
+        },
+        "ASSAN_OUEDRAOGO_1_BUNDESLIGA": {
+          "playerID": "ASSAN_OUEDRAOGO_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Assan",
+          "lastName": "Ou\u00e9draogo",
+          "name": "Assan Ou\u00e9draogo"
+        },
+        "BENJAMIN_HENRICHS_1_BUNDESLIGA": {
+          "playerID": "BENJAMIN_HENRICHS_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Benjamin",
+          "lastName": "Henrichs",
+          "name": "Benjamin Henrichs"
+        },
+        "DAVID_PREU_1_BUNDESLIGA": {
+          "playerID": "DAVID_PREU_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "David",
+          "lastName": "Preu",
+          "name": "David Preu"
+        },
+        "DERRICK_KOHN_1_BUNDESLIGA": {
+          "playerID": "DERRICK_KOHN_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Derrick",
+          "lastName": "K\u00f6hn",
+          "name": "Derrick K\u00f6hn"
+        },
+        "DMYTRO_BOGDANOV_1_BUNDESLIGA": {
+          "playerID": "DMYTRO_BOGDANOV_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Dmytro",
+          "lastName": "Bogdanov",
+          "name": "Dmytro Bogdanov"
+        },
+        "KEVIN_KAMPL_1_BUNDESLIGA": {
+          "playerID": "KEVIN_KAMPL_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Kevin",
+          "lastName": "Kampl",
+          "name": "Kevin Kampl"
+        },
+        "KOSTA_NEDELJKOVIC_1_BUNDESLIGA": {
+          "playerID": "KOSTA_NEDELJKOVIC_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Kosta",
+          "lastName": "Nedeljkovic",
+          "name": "Kosta Nedeljkovi\u0107"
+        },
+        "LIVAN_BURCU_1_BUNDESLIGA": {
+          "playerID": "LIVAN_BURCU_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Livan",
+          "lastName": "Burcu",
+          "name": "Livan Burcu"
+        },
+        "LUKAS_KLOSTERMANN_1_BUNDESLIGA": {
+          "playerID": "LUKAS_KLOSTERMANN_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Lukas",
+          "lastName": "Klostermann",
+          "name": "Lukas Klostermann"
+        },
+        "MARIN_LJUBICIC_1_BUNDESLIGA": {
+          "playerID": "MARIN_LJUBICIC_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Marin",
+          "lastName": "Ljubi\u010di\u0107",
+          "name": "Marin Ljubi\u010di\u0107"
+        },
+        "MAX_FINKGRAFE_1_BUNDESLIGA": {
+          "playerID": "MAX_FINKGRAFE_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Max",
+          "lastName": "Finkgr\u00e4fe",
+          "name": "Max Finkgr\u00e4fe"
+        },
+        "OLUWASEUN_OGBEMUDIA_1_BUNDESLIGA": {
+          "playerID": "OLUWASEUN_OGBEMUDIA_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Oluwaseun",
+          "lastName": "Ogbemudia",
+          "name": "Oluwaseun Ogbemudia"
+        },
+        "RIDLE_BAKU_1_BUNDESLIGA": {
+          "playerID": "RIDLE_BAKU_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Ridle",
+          "lastName": "Baku",
+          "name": "Ridle Baku"
+        },
+        "STANLEY_NSOKI_1_BUNDESLIGA": {
+          "playerID": "STANLEY_NSOKI_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Stanley",
+          "lastName": "N'Soki",
+          "name": "Stanley N'Soki"
+        },
+        "TIDIAM_GOMIS_1_BUNDESLIGA": {
+          "playerID": "TIDIAM_GOMIS_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Tidiam",
+          "lastName": "Gomis",
+          "name": "Tidiam Gomis"
+        },
+        "CARL_KLAUS_1_BUNDESLIGA": {
+          "playerID": "CARL_KLAUS_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Carl",
+          "lastName": "Klaus",
+          "name": "Carl Klaus"
+        },
+        "FREDERIK_RONNOW_1_BUNDESLIGA": {
+          "playerID": "FREDERIK_RONNOW_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Frederik",
+          "lastName": "R\u00f8nnow",
+          "name": "Frederik R\u00f8nnow"
+        },
+        "LEOPOLD_ZINGERLE_1_BUNDESLIGA": {
+          "playerID": "LEOPOLD_ZINGERLE_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Leopold",
+          "lastName": "Zingerle",
+          "name": "Leopold Zingerle"
+        },
+        "MAARTEN_VANDEVOORDT_1_BUNDESLIGA": {
+          "playerID": "MAARTEN_VANDEVOORDT_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "Maarten",
+          "lastName": "Vandevoordt",
+          "name": "Maarten Vandevoordt"
+        },
+        "MATHEO_RAAB_1_BUNDESLIGA": {
+          "playerID": "MATHEO_RAAB_1_BUNDESLIGA",
+          "teamID": "UNION_BERLIN_BUNDESLIGA",
+          "firstName": "Matheo",
+          "lastName": "Raab",
+          "name": "Matheo Raab"
+        },
+        "PETER_GULACSI_1_BUNDESLIGA": {
+          "playerID": "PETER_GULACSI_1_BUNDESLIGA",
+          "teamID": "RB_LEIPZIG_BUNDESLIGA",
+          "firstName": "P\u00e9ter",
+          "lastName": "Gul\u00e1csi",
+          "name": "P\u00e9ter Gul\u00e1csi"
+        }
+      }
+    },
+    {
+      "eventID": "trulBe8G1Fwl0n9qV2zF",
+      "sportID": "SOCCER",
+      "leagueID": "FR_LIGUE_1",
+      "type": "match",
+      "teams": {
+        "home": {
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "names": {
+            "long": "Angers",
+            "medium": "Angers",
+            "short": "ANG"
+          },
+          "colors": {
+            "primary": "#FFFFFF",
+            "secondary": "",
+            "primaryContrast": "#000000",
+            "secondaryContrast": ""
+          },
+          "statEntityID": "home"
+        },
+        "away": {
+          "teamID": "NANTES_FR_LIGUE_1",
+          "names": {
+            "long": "Nantes",
+            "medium": "Nantes",
+            "short": "FCN"
+          },
+          "colors": {
+            "primary": "#00A94E",
+            "secondary": "#FFDC12",
+            "primaryContrast": "#000000",
+            "secondaryContrast": "#00A94E"
+          },
+          "statEntityID": "away"
+        }
+      },
+      "status": {
+        "started": false,
+        "completed": false,
+        "cancelled": false,
+        "ended": false,
+        "live": false,
+        "delayed": false,
+        "currentPeriodID": "",
+        "previousPeriodID": "",
+        "displayShort": "",
+        "displayLong": "Upcoming",
+        "inBreak": false,
+        "hardStart": true,
+        "periods": {
+          "started": [],
+          "ended": []
+        },
+        "oddsPresent": true,
+        "oddsAvailable": true,
+        "finalized": false,
+        "startsAt": "2025-12-12T19:45:00.000Z",
+        "previousStartsAt": [
+          "2025-12-14T16:00:00.000Z",
+          "2025-12-14T15:00:00.000Z"
+        ]
+      },
+      "info": {
+        "seasonWeek": "Ligue 1 25/26"
+      },
+      "links": {
+        "bookmakers": {
+          "pinnacle": "https://www.pinnacle.com/en/soccer/france-ligue-1/nantes-vs-angers/1620344971",
+          "betsson": "https://www.betsson.com/en/sportsbook/football/france/france-ligue-1?eventId=f-abxvd0bFQ02xHVfhxVSVNw",
+          "coolbet": "https://www.coolbet.com/en/sports/match/4734848",
+          "nordicbet": "https://www.nordicbet.com/en/sportsbook/football/france/france-ligue-1/angers-nantes",
+          "fanduel": "https://sportsbook.fanduel.com/soccer/-/35016361",
+          "sportsbet": "https://www.sportsbet.com.au/betting/soccer/french-ligue-1/angers-v-nantes-9902501",
+          "boylesports": "https://www.boylesports.com/sports/football/event/france-ligue-1/angers-v-nantes",
+          "paddypower": "https://www.paddypower.com/football/french-ligue-1/angers-v-nantes-35016361",
+          "1xbet": "https://1xbet.com/en/line/football/12821-france-ligue-1/290170006-angers-sco-nantes",
+          "betway": "https://betway.com/en/sports/evt/16090531",
+          "888sport": "https://www.888sport.com/football/france/french-ligue-1/angers-vs-nantes-e-6790013",
+          "williamhill": "https://sports.williamhill.com/betting/en-gb/football/OB_EV37882220/angers-vs-nantes",
+          "fliff": "https://sports.getfliff.com/markets/348655_c_p_499_prematch",
+          "bovada": "https://www.bovada.lv/sports/soccer/europe/france/ligue-1/angers-nantes-202512121445",
+          "draftkings": "https://sportsbook.draftkings.com/event/33235935",
+          "leovegas": "https://www.leovegas.co.uk/betting#event/1024143610",
+          "livescorebet": "https://www.livescorebet.com/uk/sports/football/france-ligue-1/angers-nantes/SBTE_2_1024143610",
+          "tabtouch": "https://www.tabtouch.mobi/tabtouch-sports/event/1024143610",
+          "virginbet": "https://www.virginbet.com/sports/football/france-ligue-1/angers-nantes/SBTE_2_1024143610",
+          "ballybet": "https://play.ballybet.com/sports#event/1024143610",
+          "betparx": "https://nj.betparx.com/kambi#event/1024143610",
+          "betrivers": "https://nj.betrivers.com/?page=sportsbook#event/1024143610",
+          "casumo": "https://www.casumo.com/en-gb/sports#event/1024143610",
+          "grosvenor": "https://www.grosvenorcasinos.com/sport#event/1024143610",
+          "unibet": "https://www.unibet.com/betting/sports/event/1024143610",
+          "playup": "https://www.playup.com.au/betting/sports/france-ligue-1/angers-sco-v-nantes/1732367",
+          "tab": "https://www.tab.com.au/sports/betting/Soccer/competitions/French%20Ligue%201/matches/Angers%20SCO%20v%20Nantes",
+          "betrsportsbook": "https://www.betr.com.au/sports/Soccer/100/France/Ligue-1/Angers-SCO-v-FC-Nantes/1925920/All-Markets",
+          "betfairsportsbook": "https://www.betfair.com/betting/football/french-ligue-1/angers-v-nantes/e-35016361",
+          "matchbook": "https://www.matchbook.com/events/soccer/france/france-ligue-1/31857726546200053",
+          "betonline": "https://sports.betonline.ag/sportsbook/soccer/ligue-1/game/490904932",
+          "lowvig": "https://sports.lowvig.ag/sportsbook/soccer/ligue%201/game/490904932",
+          "everygame": "https://sports.everygame.eu/en/Bets/Soccer/French-Ligue-1/SCO-Angers-v-FC-Nantes/2761484",
+          "ladbrokes": "https://www.ladbrokes.com.au/sports/-/-/-/22b5d745-f3c8-4876-ad89-35965e29bf63",
+          "betmgm": "https://sports.nj.betmgm.com/en/sports/events/angers-sco---fc-nantes-2:7719202",
+          "coral": "https://sports.coral.co.uk/event/football/football-france/french-ligue-1/angers-sco-v-nantes/40646960",
+          "neds": "https://www.neds.com.au/sports/-/-/-/22b5d745-f3c8-4876-ad89-35965e29bf63",
+          "espnbet": "https://espnbet.com/sport/soccer/organization/france/competition/ligue-1/event/01b6e945-85f1-43a3-9554-68c08b7673df",
+          "caesars": "https://sportsbook.caesars.com/us/nj/bet/football/aed6afbb-52f1-4ca9-a63e-6575346e1abc/angers-vs-nantes"
+        }
+      },
+      "odds": {
+        "points-away-reg-sp-away": {
+          "oddID": "points-away-reg-sp-away",
+          "opposingOddID": "points-home-reg-sp-home",
+          "marketName": "Spread (Regulation)",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "reg",
+          "betTypeID": "sp",
+          "sideID": "away",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": false,
+          "fairOdds": "-117",
+          "bookOdds": "-128",
+          "fairSpread": "+0.5",
+          "bookSpread": "+0.5",
+          "openFairOdds": "-117",
+          "openBookOdds": "-128",
+          "openFairSpread": "+0.5",
+          "openBookSpread": "+0.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bovada": {
+              "odds": "-128",
+              "spread": "+0.5",
+              "lastUpdatedAt": "2025-12-12T08:24:07.970Z",
+              "available": false
+            }
+          }
+        },
+        "points-home-reg-sp-home": {
+          "oddID": "points-home-reg-sp-home",
+          "opposingOddID": "points-away-reg-sp-away",
+          "marketName": "Spread (Regulation)",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "reg",
+          "betTypeID": "sp",
+          "sideID": "home",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": false,
+          "fairOdds": "+117",
+          "bookOdds": "+108",
+          "fairSpread": "-0.5",
+          "bookSpread": "-0.5",
+          "openFairOdds": "+117",
+          "openBookOdds": "+108",
+          "openFairSpread": "-0.5",
+          "openBookSpread": "-0.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bovada": {
+              "odds": "+108",
+              "spread": "-0.5",
+              "lastUpdatedAt": "2025-12-12T08:24:07.970Z",
+              "available": false
+            }
+          }
+        },
+        "points-all-reg-ou-over": {
+          "oddID": "points-all-reg-ou-over",
+          "opposingOddID": "points-all-reg-ou-under",
+          "marketName": "Over/Under (Regulation)",
+          "statID": "points",
+          "statEntityID": "all",
+          "periodID": "reg",
+          "betTypeID": "ou",
+          "sideID": "over",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+143",
+          "bookOdds": "+128",
+          "fairOverUnder": "2.5",
+          "bookOverUnder": "2.5",
+          "openFairOdds": "+143",
+          "openBookOdds": "+128",
+          "openFairOverUnder": "2.5",
+          "openBookOverUnder": "2.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "betparx": {
+              "odds": "+128",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+130",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+120",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            }
+          }
+        },
+        "points-all-reg-ou-under": {
+          "oddID": "points-all-reg-ou-under",
+          "opposingOddID": "points-all-reg-ou-over",
+          "marketName": "Over/Under (Regulation)",
+          "statID": "points",
+          "statEntityID": "all",
+          "periodID": "reg",
+          "betTypeID": "ou",
+          "sideID": "under",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-143",
+          "bookOdds": "-167",
+          "fairOverUnder": "2.5",
+          "bookOverUnder": "2.5",
+          "openFairOdds": "-143",
+          "openBookOdds": "-167",
+          "openFairOverUnder": "2.5",
+          "openBookOverUnder": "2.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "betparx": {
+              "odds": "-167",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "-164",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "-167",
+              "overUnder": "2.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            }
+          }
+        },
+        "points-home-reg-ml3way-home": {
+          "oddID": "points-home-reg-ml3way-home",
+          "opposingOddID": "points-away-reg-ml3way-away+draw",
+          "marketName": "3-Way Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "reg",
+          "betTypeID": "ml3way",
+          "sideID": "home",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+127",
+          "bookOdds": "+115",
+          "openFairOdds": "+127",
+          "openBookOdds": "+115",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:59:33.774Z",
+              "available": true
+            },
+            "betsson": {
+              "odds": "+118",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "unknown": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "coolbet": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:57:55.000Z",
+              "available": true
+            },
+            "nordicbet": {
+              "odds": "+118",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "fanduel": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:54.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543798628&selectionId=473963"
+            },
+            "sportsbet": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:58:18.000Z",
+              "available": true
+            },
+            "boylesports": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:59:01.000Z",
+              "available": true
+            },
+            "paddypower": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:57:40.000Z",
+              "available": true
+            },
+            "skybet": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "1xbet": {
+              "odds": "+127",
+              "lastUpdatedAt": "2025-12-12T14:58:41.000Z",
+              "available": true
+            },
+            "fanatics": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:04.000Z",
+              "available": true
+            },
+            "betway": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:58:05.000Z",
+              "available": true
+            },
+            "betfairexchange": {
+              "odds": "+126",
+              "lastUpdatedAt": "2025-12-12T14:59:06.000Z",
+              "available": true,
+              "deeplink": "https://betfair.com/exchange/plus/football/market/1.251204756"
+            },
+            "tipico": {
+              "odds": "+105",
+              "lastUpdatedAt": "2025-12-12T14:58:45.000Z",
+              "available": true
+            },
+            "888sport": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "williamhill": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "marathonbet": {
+              "odds": "+123",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "fliff": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:58:53.000Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "+111",
+              "lastUpdatedAt": "2025-12-12T14:58:41.000Z",
+              "available": true
+            },
+            "draftkings": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235935?outcomes=0ML82446884_1"
+            },
+            "leovegas": {
+              "odds": "+108",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "livescorebet": {
+              "odds": "+106",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "tabtouch": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:58:20.000Z",
+              "available": true
+            },
+            "virginbet": {
+              "odds": "+106",
+              "lastUpdatedAt": "2025-12-12T14:59:06.000Z",
+              "available": true
+            },
+            "betparx": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:58:41.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1024143610?coupon=single|3974307687|0"
+            },
+            "ballybet": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:58:30.000Z",
+              "available": true
+            },
+            "casumo": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:58:16.000Z",
+              "available": true
+            },
+            "grosvenor": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:58:55.000Z",
+              "available": true
+            },
+            "unibet": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "bet365": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:52:59.000Z",
+              "available": true
+            },
+            "betvictor": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:51:10.000Z",
+              "available": true
+            },
+            "suprabets": {
+              "odds": "+113",
+              "lastUpdatedAt": "2025-12-12T14:57:40.000Z",
+              "available": true
+            },
+            "playup": {
+              "odds": "+112",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "tab": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:32.000Z",
+              "available": true
+            },
+            "betrsportsbook": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:59.000Z",
+              "available": true
+            },
+            "betfairsportsbook": {
+              "odds": "+110",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true
+            },
+            "gtbets": {
+              "odds": "+116",
+              "lastUpdatedAt": "2025-12-12T14:58:55.000Z",
+              "available": true
+            },
+            "matchbook": {
+              "odds": "+126",
+              "lastUpdatedAt": "2025-12-12T14:58:41.000Z",
+              "available": true
+            },
+            "betonline": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:57:41.000Z",
+              "available": true
+            },
+            "lowvig": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:58:23.000Z",
+              "available": true
+            },
+            "everygame": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:43.000Z",
+              "available": true
+            },
+            "ladbrokes": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:54.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719202-191129359-700903073"
+            },
+            "coral": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:05.000Z",
+              "available": true
+            },
+            "neds": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:57:55.000Z",
+              "available": true
+            },
+            "espnbet": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:56.000Z",
+              "available": true,
+              "deeplink": "https://espnbet.com/sport/soccer/organization/france/competition/ligue-1/event/01b6e945-85f1-43a3-9554-68c08b7673df/section/lines"
+            },
+            "caesars": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:52:53.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.caesars.com/us/nj/bet/betslip?selectionIds=b95057b1-e992-3f39-9adb-6e44b0a514a1"
+            },
+            "betus": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:58:44.000Z",
+              "available": true
+            }
+          }
+        },
+        "points-away-reg-ml3way-away+draw": {
+          "oddID": "points-away-reg-ml3way-away+draw",
+          "opposingOddID": "points-home-reg-ml3way-home",
+          "marketName": "3-Way Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "reg",
+          "betTypeID": "ml3way",
+          "sideID": "away+draw",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": true,
+          "fairOdds": "-127",
+          "openFairOdds": "-127",
+          "scoringSupported": true
+        },
+        "points-away-reg-ml-away": {
+          "oddID": "points-away-reg-ml-away",
+          "opposingOddID": "points-home-reg-ml-home",
+          "marketName": "Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "reg",
+          "betTypeID": "ml",
+          "sideID": "away",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+167",
+          "bookOdds": "+150",
+          "openFairOdds": "+167",
+          "openBookOdds": "+150",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "fanduel": {
+              "odds": "+150",
+              "lastUpdatedAt": "2025-12-12T14:57:15.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543798691&selectionId=10774"
+            },
+            "bovada": {
+              "odds": "+152",
+              "lastUpdatedAt": "2025-12-12T14:57:38.000Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:00.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1024143610?coupon=single|3974344530|0"
+            },
+            "draftkings": {
+              "odds": "+150",
+              "lastUpdatedAt": "2025-12-12T14:58:52.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235935?outcomes=0QA294985187%23423145501_13L40032Q12Q21"
+            },
+            "ballybet": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:15.000Z",
+              "available": true
+            },
+            "bet365": {
+              "odds": "+150",
+              "lastUpdatedAt": "2025-12-12T14:52:59.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+140",
+              "lastUpdatedAt": "2025-12-12T14:57:22.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719202-191129367-700903142"
+            }
+          }
+        },
+        "points-home-reg-ml-home": {
+          "oddID": "points-home-reg-ml-home",
+          "opposingOddID": "points-away-reg-ml-away",
+          "marketName": "Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "reg",
+          "betTypeID": "ml",
+          "sideID": "home",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-167",
+          "bookOdds": "-200",
+          "openFairOdds": "-167",
+          "openBookOdds": "-200",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "fanduel": {
+              "odds": "-190",
+              "lastUpdatedAt": "2025-12-12T14:57:15.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543798691&selectionId=473963"
+            },
+            "bovada": {
+              "odds": "-185",
+              "lastUpdatedAt": "2025-12-12T14:57:38.000Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "-210",
+              "lastUpdatedAt": "2025-12-12T14:58:00.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1024143610?coupon=single|3974344529|0"
+            },
+            "draftkings": {
+              "odds": "-195",
+              "lastUpdatedAt": "2025-12-12T14:58:52.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235935?outcomes=0QA294985187%23423145497_13L40032Q11Q20"
+            },
+            "ballybet": {
+              "odds": "-210",
+              "lastUpdatedAt": "2025-12-12T14:58:15.000Z",
+              "available": true
+            },
+            "bet365": {
+              "odds": "-200",
+              "lastUpdatedAt": "2025-12-12T14:52:59.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "-200",
+              "lastUpdatedAt": "2025-12-12T14:57:22.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719202-191129367-700903141"
+            }
+          }
+        },
+        "points-away-reg-ml3way-away": {
+          "oddID": "points-away-reg-ml3way-away",
+          "opposingOddID": "points-home-reg-ml3way-home+draw",
+          "marketName": "3-Way Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "reg",
+          "betTypeID": "ml3way",
+          "sideID": "away",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+284",
+          "bookOdds": "+258",
+          "openFairOdds": "+284",
+          "openBookOdds": "+258",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+266",
+              "lastUpdatedAt": "2025-12-12T14:59:33.774Z",
+              "available": true
+            },
+            "betsson": {
+              "odds": "+255",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "unknown": {
+              "odds": "+250",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "coolbet": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:57:55.000Z",
+              "available": true
+            },
+            "nordicbet": {
+              "odds": "+255",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "fanduel": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:54.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543798628&selectionId=10774"
+            },
+            "sportsbet": {
+              "odds": "+250",
+              "lastUpdatedAt": "2025-12-12T14:58:18.000Z",
+              "available": true
+            },
+            "boylesports": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:59:01.000Z",
+              "available": true
+            },
+            "paddypower": {
+              "odds": "+250",
+              "lastUpdatedAt": "2025-12-12T14:57:40.000Z",
+              "available": true
+            },
+            "skybet": {
+              "odds": "+250",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "1xbet": {
+              "odds": "+266",
+              "lastUpdatedAt": "2025-12-12T14:58:41.000Z",
+              "available": true
+            },
+            "fanatics": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:04.000Z",
+              "available": true
+            },
+            "betway": {
+              "odds": "+250",
+              "lastUpdatedAt": "2025-12-12T14:58:05.000Z",
+              "available": true
+            },
+            "betfairexchange": {
+              "odds": "+275",
+              "lastUpdatedAt": "2025-12-12T14:59:06.000Z",
+              "available": true,
+              "deeplink": "https://betfair.com/exchange/plus/football/market/1.251204756"
+            },
+            "tipico": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:45.000Z",
+              "available": true
+            },
+            "888sport": {
+              "odds": "+225",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "williamhill": {
+              "odds": "+230",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "marathonbet": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "fliff": {
+              "odds": "+245",
+              "lastUpdatedAt": "2025-12-12T14:58:53.000Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:41.000Z",
+              "available": true
+            },
+            "draftkings": {
+              "odds": "+255",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235935?outcomes=0ML82446884_3"
+            },
+            "leovegas": {
+              "odds": "+255",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "livescorebet": {
+              "odds": "+255",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "tabtouch": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:20.000Z",
+              "available": true
+            },
+            "virginbet": {
+              "odds": "+255",
+              "lastUpdatedAt": "2025-12-12T14:59:06.000Z",
+              "available": true
+            },
+            "betparx": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:41.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1024143610?coupon=single|3974307689|0"
+            },
+            "ballybet": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:30.000Z",
+              "available": true
+            },
+            "casumo": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:16.000Z",
+              "available": true
+            },
+            "grosvenor": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:55.000Z",
+              "available": true
+            },
+            "unibet": {
+              "odds": "+250",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "bet365": {
+              "odds": "+250",
+              "lastUpdatedAt": "2025-12-12T14:52:59.000Z",
+              "available": true
+            },
+            "betvictor": {
+              "odds": "+250",
+              "lastUpdatedAt": "2025-12-12T14:51:10.000Z",
+              "available": true
+            },
+            "suprabets": {
+              "odds": "+253",
+              "lastUpdatedAt": "2025-12-12T14:57:40.000Z",
+              "available": true
+            },
+            "playup": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "tab": {
+              "odds": "+250",
+              "lastUpdatedAt": "2025-12-12T14:58:32.000Z",
+              "available": true
+            },
+            "betrsportsbook": {
+              "odds": "+250",
+              "lastUpdatedAt": "2025-12-12T14:58:59.000Z",
+              "available": true
+            },
+            "betfairsportsbook": {
+              "odds": "+230",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true
+            },
+            "gtbets": {
+              "odds": "+262",
+              "lastUpdatedAt": "2025-12-12T14:58:55.000Z",
+              "available": true
+            },
+            "matchbook": {
+              "odds": "+280",
+              "lastUpdatedAt": "2025-12-12T14:58:41.000Z",
+              "available": true
+            },
+            "betonline": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:57:41.000Z",
+              "available": true
+            },
+            "lowvig": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:23.000Z",
+              "available": true
+            },
+            "everygame": {
+              "odds": "+250",
+              "lastUpdatedAt": "2025-12-12T14:58:43.000Z",
+              "available": true
+            },
+            "ladbrokes": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:54.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719202-191129359-700903075"
+            },
+            "coral": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:05.000Z",
+              "available": true
+            },
+            "neds": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:57:55.000Z",
+              "available": true
+            },
+            "espnbet": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:56.000Z",
+              "available": true,
+              "deeplink": "https://espnbet.com/sport/soccer/organization/france/competition/ligue-1/event/01b6e945-85f1-43a3-9554-68c08b7673df/section/lines"
+            },
+            "caesars": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:52:53.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.caesars.com/us/nj/bet/betslip?selectionIds=986c23aa-3d1e-3809-ac71-1a1a6d5b5f86"
+            },
+            "betus": {
+              "odds": "+257",
+              "lastUpdatedAt": "2025-12-12T14:58:44.000Z",
+              "available": true
+            }
+          }
+        },
+        "points-home-reg-ml3way-home+draw": {
+          "oddID": "points-home-reg-ml3way-home+draw",
+          "opposingOddID": "points-away-reg-ml3way-away",
+          "marketName": "3-Way Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "reg",
+          "betTypeID": "ml3way",
+          "sideID": "home+draw",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": true,
+          "fairOdds": "-284",
+          "openFairOdds": "-284",
+          "scoringSupported": true
+        },
+        "points-away-1h-ml3way-away+draw": {
+          "oddID": "points-away-1h-ml3way-away+draw",
+          "opposingOddID": "points-home-1h-ml3way-home",
+          "marketName": "1st Half 3-Way Moneyline",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "1h",
+          "betTypeID": "ml3way",
+          "sideID": "away+draw",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": true,
+          "fairOdds": "-198",
+          "openFairOdds": "-198",
+          "scoringSupported": true
+        },
+        "points-home-1h-ml3way-home": {
+          "oddID": "points-home-1h-ml3way-home",
+          "opposingOddID": "points-away-1h-ml3way-away+draw",
+          "marketName": "1st Half 3-Way Moneyline",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "1h",
+          "betTypeID": "ml3way",
+          "sideID": "home",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+198",
+          "bookOdds": "+180",
+          "openFairOdds": "+198",
+          "openBookOdds": "+180",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+198",
+              "lastUpdatedAt": "2025-12-12T14:59:33.774Z",
+              "available": true
+            },
+            "fanduel": {
+              "odds": "+175",
+              "lastUpdatedAt": "2025-12-12T14:57:15.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543798741&selectionId=473963"
+            },
+            "bovada": {
+              "odds": "+185",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+170",
+              "lastUpdatedAt": "2025-12-12T14:58:00.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1024143610?coupon=single|3974344587|0"
+            },
+            "draftkings": {
+              "odds": "+175",
+              "lastUpdatedAt": "2025-12-12T14:58:52.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235935?outcomes=0ML82446893_1"
+            },
+            "ballybet": {
+              "odds": "+175",
+              "lastUpdatedAt": "2025-12-12T14:58:15.000Z",
+              "available": true
+            },
+            "bet365": {
+              "odds": "+188",
+              "lastUpdatedAt": "2025-12-12T14:56:56.000Z",
+              "available": true
+            },
+            "unknown": {
+              "odds": "+188",
+              "lastUpdatedAt": "2025-12-12T14:57:05.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+180",
+              "lastUpdatedAt": "2025-12-12T14:57:22.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719202-191129358-700903070"
+            }
+          }
+        },
+        "bothTeamsScored-all-game-yn-no": {
+          "oddID": "bothTeamsScored-all-game-yn-no",
+          "opposingOddID": "bothTeamsScored-all-game-yn-yes",
+          "marketName": "Both Teams To Score Yes/No (Full Match)",
+          "statID": "bothTeamsScored",
+          "statEntityID": "all",
+          "periodID": "game",
+          "betTypeID": "yn",
+          "sideID": "no",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-110",
+          "bookOdds": "-128",
+          "openFairOdds": "-110",
+          "openBookOdds": "-128",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "fanduel": {
+              "odds": "-128",
+              "lastUpdatedAt": "2025-12-12T14:57:15.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543798682&selectionId=110503"
+            },
+            "bovada": {
+              "odds": "-125",
+              "lastUpdatedAt": "2025-12-12T14:57:38.000Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "-134",
+              "lastUpdatedAt": "2025-12-12T14:58:00.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1024143610?coupon=single|3974338643|0"
+            },
+            "draftkings": {
+              "odds": "-120",
+              "lastUpdatedAt": "2025-12-12T14:58:52.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235935?outcomes=0QA294985093%23423145743_13L40032Q11715Q20"
+            },
+            "ballybet": {
+              "odds": "-132",
+              "lastUpdatedAt": "2025-12-12T14:58:15.000Z",
+              "available": true
+            },
+            "bet365": {
+              "odds": "-125",
+              "lastUpdatedAt": "2025-12-12T14:58:46.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "-135",
+              "lastUpdatedAt": "2025-12-12T14:58:29.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719202-191129381-700903185"
+            }
+          }
+        },
+        "bothTeamsScored-all-game-yn-yes": {
+          "oddID": "bothTeamsScored-all-game-yn-yes",
+          "opposingOddID": "bothTeamsScored-all-game-yn-no",
+          "marketName": "Both Teams To Score Yes/No (Full Match)",
+          "statID": "bothTeamsScored",
+          "statEntityID": "all",
+          "periodID": "game",
+          "betTypeID": "yn",
+          "sideID": "yes",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+110",
+          "bookOdds": "-105",
+          "openFairOdds": "+110",
+          "openBookOdds": "-105",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "fanduel": {
+              "odds": "+100",
+              "lastUpdatedAt": "2025-12-12T14:57:15.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543798682&selectionId=30246"
+            },
+            "bovada": {
+              "odds": "-105",
+              "lastUpdatedAt": "2025-12-12T14:57:38.000Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "-105",
+              "lastUpdatedAt": "2025-12-12T14:58:00.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1024143610?coupon=single|3974338640|0"
+            },
+            "draftkings": {
+              "odds": "-105",
+              "lastUpdatedAt": "2025-12-12T14:58:52.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235935?outcomes=0QA294985093%23423145251_13L40032Q11714Q20"
+            },
+            "ballybet": {
+              "odds": "-104",
+              "lastUpdatedAt": "2025-12-12T14:58:15.000Z",
+              "available": true
+            },
+            "bet365": {
+              "odds": "-105",
+              "lastUpdatedAt": "2025-12-12T14:58:46.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "-105",
+              "lastUpdatedAt": "2025-12-12T14:58:29.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719202-191129381-700903184"
+            }
+          }
+        },
+        "cornerKicks-home-game-ou-under": {
+          "oddID": "cornerKicks-home-game-ou-under",
+          "opposingOddID": "cornerKicks-home-game-ou-over",
+          "marketName": "Angers Corner Kicks Over/Under (Full Match)",
+          "statID": "cornerKicks",
+          "statEntityID": "home",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "under",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-126",
+          "bookOdds": "-150",
+          "fairOverUnder": "5.5",
+          "bookOverUnder": "5.5",
+          "openFairOdds": "-126",
+          "openBookOdds": "-150",
+          "openFairOverUnder": "5.5",
+          "openBookOverUnder": "5.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bet365": {
+              "odds": "-150",
+              "overUnder": "5.5",
+              "lastUpdatedAt": "2025-12-12T14:54:48.000Z",
+              "available": true
+            }
+          }
+        },
+        "cornerKicks-home-game-ou-over": {
+          "oddID": "cornerKicks-home-game-ou-over",
+          "opposingOddID": "cornerKicks-home-game-ou-under",
+          "marketName": "Angers Corner Kicks Over/Under (Full Match)",
+          "statID": "cornerKicks",
+          "statEntityID": "home",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "over",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+126",
+          "bookOdds": "+110",
+          "fairOverUnder": "5.5",
+          "bookOverUnder": "5.5",
+          "openFairOdds": "+126",
+          "openBookOdds": "+110",
+          "openFairOverUnder": "5.5",
+          "openBookOverUnder": "5.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bet365": {
+              "odds": "+110",
+              "overUnder": "5.5",
+              "lastUpdatedAt": "2025-12-12T14:54:48.000Z",
+              "available": true
+            }
+          }
+        },
+        "lastToScore-AMINE_MOUSSAOUI_1_FR_LIGUE_1-game-yn-yes": {
+          "oddID": "lastToScore-AMINE_MOUSSAOUI_1_FR_LIGUE_1-game-yn-yes",
+          "opposingOddID": "lastToScore-AMINE_MOUSSAOUI_1_FR_LIGUE_1-game-yn-no",
+          "marketName": "Amine Moussaoui To Record Last Goal Yes/No (Full Match)",
+          "statID": "lastToScore",
+          "statEntityID": "AMINE_MOUSSAOUI_1_FR_LIGUE_1",
+          "periodID": "game",
+          "betTypeID": "yn",
+          "sideID": "yes",
+          "playerID": "AMINE_MOUSSAOUI_1_FR_LIGUE_1",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": false,
+          "fairOdds": "+990",
+          "bookOdds": "+900",
+          "openFairOdds": "+990",
+          "openBookOdds": "+900",
+          "scoringSupported": false,
+          "byBookmaker": {
+            "bet365": {
+              "odds": "+900",
+              "lastUpdatedAt": "2025-12-12T14:09:17.000Z",
+              "available": false
+            }
+          }
+        },
+        "lastToScore-AMINE_MOUSSAOUI_1_FR_LIGUE_1-game-yn-no": {
+          "oddID": "lastToScore-AMINE_MOUSSAOUI_1_FR_LIGUE_1-game-yn-no",
+          "opposingOddID": "lastToScore-AMINE_MOUSSAOUI_1_FR_LIGUE_1-game-yn-yes",
+          "marketName": "Amine Moussaoui To Record Last Goal Yes/No (Full Match)",
+          "statID": "lastToScore",
+          "statEntityID": "AMINE_MOUSSAOUI_1_FR_LIGUE_1",
+          "periodID": "game",
+          "betTypeID": "yn",
+          "sideID": "no",
+          "playerID": "AMINE_MOUSSAOUI_1_FR_LIGUE_1",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": false,
+          "fairOdds": "-990",
+          "openFairOdds": "-990",
+          "scoringSupported": false
+        }
+      },
+      "results": {},
+      "players": {
+        "MOSTAFA_MOHAMED_1_FR_LIGUE_1": {
+          "playerID": "MOSTAFA_MOHAMED_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Mostafa Mohamed Ahmed",
+          "lastName": "Abdallah",
+          "name": "Mostafa Mohamed"
+        },
+        "HIMAD_ABDELLI_1_FR_LIGUE_1": {
+          "playerID": "HIMAD_ABDELLI_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Himad",
+          "lastName": "Abdelli",
+          "name": "Himad Abdelli"
+        },
+        "YASSINE_BENHATTAB_1_FR_LIGUE_1": {
+          "playerID": "YASSINE_BENHATTAB_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Yassine",
+          "lastName": "Benhattab",
+          "name": "Yassine Benhattab"
+        },
+        "MAYCKEL_LAHDO_1_FR_LIGUE_1": {
+          "playerID": "MAYCKEL_LAHDO_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Mayckel",
+          "lastName": "Lahdo",
+          "name": "Mayckel Lahdo"
+        },
+        "HYUNSEOK_HONG_1_FR_LIGUE_1": {
+          "playerID": "HYUNSEOK_HONG_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Hyun-Seok",
+          "lastName": "Hong",
+          "name": "Hyun-Seok Hong"
+        },
+        "CARLENS_ARCUS_1_FR_LIGUE_1": {
+          "playerID": "CARLENS_ARCUS_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Carlens",
+          "lastName": "Arcus",
+          "name": "Carlens Arcus"
+        },
+        "LANROY_MACHINE_1_FR_LIGUE_1": {
+          "playerID": "LANROY_MACHINE_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Lanroy",
+          "lastName": "Machine",
+          "name": "Lanroy Machine"
+        },
+        "JORDAN_LEFORT_1_FR_LIGUE_1": {
+          "playerID": "JORDAN_LEFORT_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Jordan",
+          "lastName": "Lefort",
+          "name": "Jordan Lefort"
+        },
+        "MOHAMED_AMINE_SBAI_1_FR_LIGUE_1": {
+          "playerID": "MOHAMED_AMINE_SBAI_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Mohamed Amine",
+          "lastName": "Sba\u00ef",
+          "name": "Mohamed Amine Sba\u00ef"
+        },
+        "DEHMAINE_ASSOUMANI_1_FR_LIGUE_1": {
+          "playerID": "DEHMAINE_ASSOUMANI_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Dehmaine",
+          "lastName": "Tabibou",
+          "name": "Dehmaine Tabibou"
+        },
+        "YASSIN_BELKHDIM_1_FR_LIGUE_1": {
+          "playerID": "YASSIN_BELKHDIM_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Yassin",
+          "lastName": "Belkhdim",
+          "name": "Yassin Belkhdim"
+        },
+        "MATTHIS_ABLINE_1_FR_LIGUE_1": {
+          "playerID": "MATTHIS_ABLINE_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Matthis",
+          "lastName": "Abline",
+          "name": "Matthis Abline"
+        },
+        "BAHEREBA_GUIRASSY_1_FR_LIGUE_1": {
+          "playerID": "BAHEREBA_GUIRASSY_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Bahereba",
+          "lastName": "Guirassy",
+          "name": "Bahereba Guirassy"
+        },
+        "JACQUES_EKOMIE_1_FR_LIGUE_1": {
+          "playerID": "JACQUES_EKOMIE_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Jacques",
+          "lastName": "Ekomie",
+          "name": "Jacques Ekomie"
+        },
+        "PROSPER_PETER_1_FR_LIGUE_1": {
+          "playerID": "PROSPER_PETER_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Prosper",
+          "lastName": "Peter",
+          "name": "Prosper Peter"
+        },
+        "JUSTINNOEL_KALUMBA_1_FR_LIGUE_1": {
+          "playerID": "JUSTINNOEL_KALUMBA_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Justin-Noel",
+          "lastName": "Kalumba",
+          "name": "Justin-Noel Kalumba"
+        },
+        "LILIAN_RAOLISOA_1_FR_LIGUE_1": {
+          "playerID": "LILIAN_RAOLISOA_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Lilian",
+          "lastName": "Raolisoa",
+          "name": "Lilian Raolisoa"
+        },
+        "AMADY_CAMARA_1_FR_LIGUE_1": {
+          "playerID": "AMADY_CAMARA_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Amady",
+          "lastName": "Camara",
+          "name": "Amady Camara"
+        },
+        "SIDIKI_CHERIF_1_FR_LIGUE_1": {
+          "playerID": "SIDIKI_CHERIF_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Sidiki",
+          "lastName": "Cherif",
+          "name": "Sidiki Cherif"
+        },
+        "MARIUS_COURCOUL_1_FR_LIGUE_1": {
+          "playerID": "MARIUS_COURCOUL_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Marius",
+          "lastName": "Courcoul",
+          "name": "Marius Courcoul"
+        },
+        "YOUSSEF_EL_ARABI_1_FR_LIGUE_1": {
+          "playerID": "YOUSSEF_EL_ARABI_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Youssef",
+          "lastName": "El-Arabi",
+          "name": "Youssef El Arabi"
+        },
+        "ADEL_MAHAMOUD_1_FR_LIGUE_1": {
+          "playerID": "ADEL_MAHAMOUD_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Adel",
+          "lastName": "Mahamoud",
+          "name": "Adel Mahamoud"
+        },
+        "OUSMANE_CAMARA_1_FR_LIGUE_1": {
+          "playerID": "OUSMANE_CAMARA_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Ousmane",
+          "lastName": "Camara",
+          "name": "Ousmane Camara"
+        },
+        "TYLEL_TATI_1_FR_LIGUE_1": {
+          "playerID": "TYLEL_TATI_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Tylel",
+          "lastName": "Tati",
+          "name": "Tylel Tati"
+        },
+        "NICOLAS_COZZA_1_FR_LIGUE_1": {
+          "playerID": "NICOLAS_COZZA_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Nicolas",
+          "lastName": "Cozza",
+          "name": "Nicolas Cozza"
+        },
+        "JOHANN_LEPENANT_1_FR_LIGUE_1": {
+          "playerID": "JOHANN_LEPENANT_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Johann",
+          "lastName": "Lepenant",
+          "name": "Johann Lepenant"
+        },
+        "CHIDOZIE_AWAZIEM_1_FR_LIGUE_1": {
+          "playerID": "CHIDOZIE_AWAZIEM_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Chidozie",
+          "lastName": "Awaziem",
+          "name": "Chidozie Awaziem"
+        },
+        "JUNIOR_MWANGA_1_FR_LIGUE_1": {
+          "playerID": "JUNIOR_MWANGA_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Junior",
+          "lastName": "Mwanga",
+          "name": "Junior Mwanga"
+        },
+        "HARIS_BELKEBLA_1_FR_LIGUE_1": {
+          "playerID": "HARIS_BELKEBLA_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Haris",
+          "lastName": "Belkebla",
+          "name": "Haris Belkebla"
+        },
+        "FLORENT_HANIN_1_FR_LIGUE_1": {
+          "playerID": "FLORENT_HANIN_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Florent",
+          "lastName": "Hanin",
+          "name": "Florent Hanin"
+        },
+        "HYEOKKYU_KWON_1_FR_LIGUE_1": {
+          "playerID": "HYEOKKYU_KWON_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Hyeok-Kyu",
+          "lastName": "Kwon",
+          "name": "Hyeok-kyu Kwon"
+        },
+        "ABDOULAYE_BAMBA_1_FR_LIGUE_1": {
+          "playerID": "ABDOULAYE_BAMBA_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Abdoulaye",
+          "lastName": "Bamba",
+          "name": "Abdoulaye Bamba"
+        },
+        "AMINE_MOUSSAOUI_1_FR_LIGUE_1": {
+          "playerID": "AMINE_MOUSSAOUI_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Amine",
+          "lastName": "Moussaoui",
+          "name": "Amine Moussaoui"
+        },
+        "BAHMED_DEUFF_1_FR_LIGUE_1": {
+          "playerID": "BAHMED_DEUFF_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Bahmed",
+          "lastName": "Deuff",
+          "name": "Bahmed Deuff"
+        },
+        "DAN_SINATE_1_FR_LIGUE_1": {
+          "playerID": "DAN_SINATE_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Dan",
+          "lastName": "Sinat\u00e9",
+          "name": "Dan Sinat\u00e9"
+        },
+        "DJIBIRIN_HAROUNA_1_FR_LIGUE_1": {
+          "playerID": "DJIBIRIN_HAROUNA_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Djibirin",
+          "lastName": "Harouna",
+          "name": "Djibirin Harouna"
+        },
+        "EMMANUEL_BIUMLA_1_FR_LIGUE_1": {
+          "playerID": "EMMANUEL_BIUMLA_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Emmanuel",
+          "lastName": "Biumla",
+          "name": "Emmanuel Biumla"
+        },
+        "FABIEN_CENTONZE_1_FR_LIGUE_1": {
+          "playerID": "FABIEN_CENTONZE_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Fabien",
+          "lastName": "Centonze",
+          "name": "Fabien Centonze"
+        },
+        "FRANCIS_COQUELIN_1_FR_LIGUE_1": {
+          "playerID": "FRANCIS_COQUELIN_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Francis",
+          "lastName": "Coquelin",
+          "name": "Francis Coquelin"
+        },
+        "JEANKEVIN_DUVERNE_1_FR_LIGUE_1": {
+          "playerID": "JEANKEVIN_DUVERNE_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Jean-K\u00e9vin",
+          "lastName": "Duverne",
+          "name": "Jean-K\u00e9vin Duverne"
+        },
+        "JIM_ALLEVINAH_1_FR_LIGUE_1": {
+          "playerID": "JIM_ALLEVINAH_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Jim",
+          "lastName": "Allevinah",
+          "name": "Jim Allevinah"
+        },
+        "KELVIN_AMIAN_1_FR_LIGUE_1": {
+          "playerID": "KELVIN_AMIAN_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Kelvin",
+          "lastName": "Amian",
+          "name": "Kelvin Amian"
+        },
+        "LOUIS_LEROUX_1_FR_LIGUE_1": {
+          "playerID": "LOUIS_LEROUX_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Louis",
+          "lastName": "Leroux",
+          "name": "Louis Leroux"
+        },
+        "LOUIS_MOUTON_1_FR_LIGUE_1": {
+          "playerID": "LOUIS_MOUTON_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Louis",
+          "lastName": "Mouton",
+          "name": "Louis Mouton"
+        },
+        "MARIUS_LOUER_1_FR_LIGUE_1": {
+          "playerID": "MARIUS_LOUER_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Marius",
+          "lastName": "Louer",
+          "name": "Marius Louer"
+        },
+        "PIERRICK_CAPELLE_1_FR_LIGUE_1": {
+          "playerID": "PIERRICK_CAPELLE_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Pierrick",
+          "lastName": "Capelle",
+          "name": "Pierrick Capelle"
+        },
+        "SACHA_ZIANI_1_FR_LIGUE_1": {
+          "playerID": "SACHA_ZIANI_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Sacha",
+          "lastName": "Ziani",
+          "name": "Sacha Ziani"
+        },
+        "UROS_RADAKOVIC_1_FR_LIGUE_1": {
+          "playerID": "UROS_RADAKOVIC_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Uro\u0161",
+          "lastName": "Radakovi\u0107",
+          "name": "Uro\u0161 Radakovi\u0107"
+        },
+        "JIBRIL_EL_BARAKA_1_FR_LIGUE_1": {
+          "playerID": "JIBRIL_EL_BARAKA_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Jibril",
+          "lastName": "El Baraka",
+          "name": "J. El Baraka"
+        },
+        "ANTHONY_LOPES_1_FR_LIGUE_1": {
+          "playerID": "ANTHONY_LOPES_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Anthony",
+          "lastName": "Lopes",
+          "name": "Anthony Lopes"
+        },
+        "HERVE_KOFFI_1_FR_LIGUE_1": {
+          "playerID": "HERVE_KOFFI_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Herv\u00e9",
+          "lastName": "Koffi",
+          "name": "Herv\u00e9 Koffi"
+        },
+        "MELVIN_ZINGA_1_FR_LIGUE_1": {
+          "playerID": "MELVIN_ZINGA_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Melvin",
+          "lastName": "Zinga",
+          "name": "Melvin Zinga"
+        },
+        "OUMAR_PONA_1_FR_LIGUE_1": {
+          "playerID": "OUMAR_PONA_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Oumar Kalifa",
+          "lastName": "Pona",
+          "name": "Oumar Pona"
+        },
+        "PATRIK_CARLGREN_1_FR_LIGUE_1": {
+          "playerID": "PATRIK_CARLGREN_1_FR_LIGUE_1",
+          "teamID": "NANTES_FR_LIGUE_1",
+          "firstName": "Patrik",
+          "lastName": "Carlgren",
+          "name": "Patrik Carlgren"
+        },
+        "YAHIA_FOFANA_1_FR_LIGUE_1": {
+          "playerID": "YAHIA_FOFANA_1_FR_LIGUE_1",
+          "teamID": "ANGERS_FR_LIGUE_1",
+          "firstName": "Yahia",
+          "lastName": "Fofana",
+          "name": "Yahia Fofana"
+        }
+      }
+    },
+    {
+      "eventID": "xhnJqYBn15iogRYEHUlI",
+      "sportID": "SOCCER",
+      "leagueID": "IT_SERIE_A",
+      "type": "match",
+      "teams": {
+        "home": {
+          "teamID": "LECCE_IT_SERIE_A",
+          "names": {
+            "long": "Lecce",
+            "medium": "Lecce",
+            "short": "LEC"
+          },
+          "colors": {
+            "primary": "#DB2D1F",
+            "secondary": "#F6EA00",
+            "primaryContrast": "#FFFFFF",
+            "secondaryContrast": "#DB2D1F"
+          },
+          "statEntityID": "home"
+        },
+        "away": {
+          "teamID": "PISA_IT_SERIE_A",
+          "names": {
+            "long": "Pisa",
+            "medium": "Pisa",
+            "short": "PIS"
+          },
+          "colors": {
+            "primary": "#4AA5FF",
+            "secondary": "#000000",
+            "text": "#000000",
+            "primaryContrast": "#000000"
+          },
+          "statEntityID": "away"
+        }
+      },
+      "status": {
+        "started": false,
+        "completed": false,
+        "cancelled": false,
+        "ended": false,
+        "live": false,
+        "delayed": false,
+        "currentPeriodID": "",
+        "previousPeriodID": "",
+        "displayShort": "",
+        "displayLong": "Upcoming",
+        "inBreak": false,
+        "startsAt": "2025-12-12T19:45:00.000Z",
+        "previousStartsAt": [],
+        "hardStart": true,
+        "periods": {
+          "started": [],
+          "ended": []
+        },
+        "oddsPresent": true,
+        "oddsAvailable": true,
+        "finalized": false
+      },
+      "info": {
+        "seasonWeek": "Serie A 25/26"
+      },
+      "links": {
+        "bookmakers": {
+          "pinnacle": "https://www.pinnacle.com/en/soccer/italy-serie-a/pisa-vs-lecce/1620331120",
+          "nordicbet": "https://www.nordicbet.com/en/sportsbook/football/italy/italy-serie-a/lecce-pisa",
+          "1xbet": "https://1xbet.com/en/line/football/110163-italy-serie-a/290169828-lecce-pisa-1909",
+          "betsson": "https://www.betsson.com/en/sportsbook/football/italy/italy-serie-a?eventId=f-5endtzU6A0axo6ItMzNRLg",
+          "boylesports": "https://www.boylesports.com/sports/football/event/italy-serie-a/lecce-v-pisa",
+          "betway": "https://betway.com/en/sports/evt/16090534",
+          "sportsbet": "https://www.sportsbet.com.au/betting/soccer/italian-serie-a/lecce-v-pisa-9902608",
+          "fanduel": "https://sportsbook.fanduel.com/soccer/-/35016525",
+          "paddypower": "https://www.paddypower.com/football/italian-serie-a/lecce-v-pisa-35016525",
+          "pointsbet": "https://pointsbet.com.au/sports/soccer/Italian%20Serie%20A/2525505",
+          "888sport": "https://www.888sport.com/football/italy/italian-serie-a/lecce-vs-pisa-e-6790074",
+          "williamhill": "https://sports.williamhill.com/betting/en-gb/football/OB_EV37882252/lecce-vs-pisa",
+          "betonline": "https://sports.betonline.ag/sportsbook/soccer/serie-a/game/490898484",
+          "lowvig": "https://sports.lowvig.ag/sportsbook/soccer/serie%20a/game/490898484",
+          "fliff": "https://sports.getfliff.com/markets/348667_c_p_499_prematch",
+          "ballybet": "https://play.ballybet.com/sports#event/1023931949",
+          "betrivers": "https://nj.betrivers.com/?page=sportsbook#event/1023931949",
+          "casumo": "https://www.casumo.com/en-gb/sports#event/1023931949",
+          "grosvenor": "https://www.grosvenorcasinos.com/sport#event/1023931949",
+          "leovegas": "https://www.leovegas.co.uk/betting#event/1023931949",
+          "livescorebet": "https://www.livescorebet.com/uk/sports/football/italy-serie-a/lecce-pisa/SBTE_2_1023931949",
+          "unibet": "https://www.unibet.com/betting/sports/event/1023931949",
+          "virginbet": "https://www.virginbet.com/sports/football/italy-serie-a/lecce-pisa/SBTE_2_1023931949",
+          "betparx": "https://nj.betparx.com/kambi#event/1023931949",
+          "tabtouch": "https://www.tabtouch.mobi/tabtouch-sports/event/1023931949",
+          "draftkings": "https://sportsbook.draftkings.com/event/33235740",
+          "bovada": "https://www.bovada.lv/sports/soccer/europe/italy/serie-a/lecce-pisa-202512121445",
+          "playup": "https://www.playup.com.au/betting/sports/italy-serie-a/lecce-v-pisa-sporting-club/1732366",
+          "tab": "https://www.tab.com.au/sports/betting/Soccer/competitions/Italian%20Serie%20A/matches/Lecce%20v%20Pisa",
+          "betrsportsbook": "https://www.betr.com.au/sports/Soccer/100/Italy/Italian-Serie-A/Lecce-v-Pisa/1925921/All-Markets",
+          "betfairsportsbook": "https://www.betfair.com/betting/football/italian-serie-a/lecce-v-pisa/e-35016525",
+          "matchbook": "https://www.matchbook.com/events/soccer/italy/italy-serie-a/31857732517400053",
+          "everygame": "https://sports.everygame.eu/en/Bets/Soccer/Italian-Serie-A/US-Lecce-v-Pisa-Sporting-Club/2761511",
+          "neds": "https://www.neds.com.au/sports/-/-/-/20beacf1-fe2d-4407-b6be-72233294361e",
+          "betmgm": "https://sports.nj.betmgm.com/en/sports/events/us-lecce---pisa-sporting-club-2:7719184",
+          "ladbrokes": "https://sports.ladbrokes.com/event/football/-/-/-/253415986",
+          "coral": "https://sports.coral.co.uk/event/football/football-italy/italian-serie-a/us-lecce-v-pisa-sporting-club/40646915",
+          "espnbet": "https://espnbet.com/sport/soccer/organization/italy/competition/serie-a/event/cb28e6e1-cb74-43a5-bf48-1207c4938c89",
+          "caesars": "https://sportsbook.caesars.com/us/nj/bet/football/7236bf00-de6c-49f6-863a-89b4de4ce5d5/lecce-vs-pisa",
+          "coolbet": "https://www.coolbet.com/en/sports/match/4734903"
+        }
+      },
+      "odds": {
+        "points-home-reg-ml3way-home+draw": {
+          "oddID": "points-home-reg-ml3way-home+draw",
+          "opposingOddID": "points-away-reg-ml3way-away",
+          "marketName": "3-Way Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "reg",
+          "betTypeID": "ml3way",
+          "sideID": "home+draw",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": true,
+          "fairOdds": "-259",
+          "openFairOdds": "-259",
+          "scoringSupported": true
+        },
+        "points-away-reg-ml3way-away": {
+          "oddID": "points-away-reg-ml3way-away",
+          "opposingOddID": "points-home-reg-ml3way-home+draw",
+          "marketName": "3-Way Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "reg",
+          "betTypeID": "ml3way",
+          "sideID": "away",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+259",
+          "bookOdds": "+235",
+          "openFairOdds": "+259",
+          "openBookOdds": "+235",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+245",
+              "lastUpdatedAt": "2025-12-12T14:59:33.774Z",
+              "available": true
+            },
+            "nordicbet": {
+              "odds": "+225",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "unknown": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "1xbet": {
+              "odds": "+248",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "betsson": {
+              "odds": "+225",
+              "lastUpdatedAt": "2025-12-12T14:58:44.000Z",
+              "available": true
+            },
+            "unibet": {
+              "odds": "+230",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "boylesports": {
+              "odds": "+220",
+              "lastUpdatedAt": "2025-12-12T14:59:01.000Z",
+              "available": true
+            },
+            "betway": {
+              "odds": "+230",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "sportsbet": {
+              "odds": "+230",
+              "lastUpdatedAt": "2025-12-12T14:58:18.000Z",
+              "available": true
+            },
+            "fanduel": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543809375&selectionId=501200"
+            },
+            "paddypower": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true
+            },
+            "skybet": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:58:18.000Z",
+              "available": true
+            },
+            "pointsbet": {
+              "odds": "+230",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "tipico": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:58:30.000Z",
+              "available": true
+            },
+            "fanatics": {
+              "odds": "+230",
+              "lastUpdatedAt": "2025-12-12T14:58:18.000Z",
+              "available": true
+            },
+            "888sport": {
+              "odds": "+225",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "williamhill": {
+              "odds": "+220",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true
+            },
+            "betonline": {
+              "odds": "+248",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "lowvig": {
+              "odds": "+248",
+              "lastUpdatedAt": "2025-12-12T14:59:06.000Z",
+              "available": true
+            },
+            "marathonbet": {
+              "odds": "+242",
+              "lastUpdatedAt": "2025-12-12T14:58:21.000Z",
+              "available": true
+            },
+            "fliff": {
+              "odds": "+220",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "ballybet": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:58:54.000Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+235",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1023931949?coupon=single|3974109290|0"
+            },
+            "casumo": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "grosvenor": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "leovegas": {
+              "odds": "+235",
+              "lastUpdatedAt": "2025-12-12T14:58:55.000Z",
+              "available": true
+            },
+            "livescorebet": {
+              "odds": "+235",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "virginbet": {
+              "odds": "+235",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "betparx": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:58:55.000Z",
+              "available": true
+            },
+            "tabtouch": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:58:55.000Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "+235",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "draftkings": {
+              "odds": "+225",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235740?outcomes=0ML82446334_3"
+            },
+            "bet365": {
+              "odds": "+230",
+              "lastUpdatedAt": "2025-12-12T14:38:59.000Z",
+              "available": true
+            },
+            "betvictor": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:45:51.000Z",
+              "available": true
+            },
+            "playup": {
+              "odds": "+215",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "betfairexchange": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:45.000Z",
+              "available": true,
+              "deeplink": "https://betfair.com/exchange/plus/football/market/1.251206204"
+            },
+            "tab": {
+              "odds": "+220",
+              "lastUpdatedAt": "2025-12-12T14:58:20.000Z",
+              "available": true
+            },
+            "betrsportsbook": {
+              "odds": "+220",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "gtbets": {
+              "odds": "+231",
+              "lastUpdatedAt": "2025-12-12T14:58:57.000Z",
+              "available": true
+            },
+            "betfairsportsbook": {
+              "odds": "+210",
+              "lastUpdatedAt": "2025-12-12T14:58:57.000Z",
+              "available": true
+            },
+            "matchbook": {
+              "odds": "+260",
+              "lastUpdatedAt": "2025-12-12T14:58:57.000Z",
+              "available": true
+            },
+            "everygame": {
+              "odds": "+235",
+              "lastUpdatedAt": "2025-12-12T14:59:10.000Z",
+              "available": true
+            },
+            "neds": {
+              "odds": "+225",
+              "lastUpdatedAt": "2025-12-12T14:57:44.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+230",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719184-191128679-700896472"
+            },
+            "ladbrokes": {
+              "odds": "+225",
+              "lastUpdatedAt": "2025-12-12T14:58:57.000Z",
+              "available": true
+            },
+            "coral": {
+              "odds": "+230",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "espnbet": {
+              "odds": "+220",
+              "lastUpdatedAt": "2025-12-12T14:58:54.000Z",
+              "available": true,
+              "deeplink": "https://espnbet.com/sport/soccer/organization/italy/competition/serie-a/event/cb28e6e1-cb74-43a5-bf48-1207c4938c89/section/lines"
+            },
+            "betanysports": {
+              "odds": "+235",
+              "lastUpdatedAt": "2025-12-12T14:58:19.000Z",
+              "available": true
+            },
+            "betus": {
+              "odds": "+240",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true
+            },
+            "caesars": {
+              "odds": "+230",
+              "lastUpdatedAt": "2025-12-12T14:58:28.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.caesars.com/us/nj/bet/betslip?selectionIds=b3427a4b-7cf6-3242-9ef0-6d1563043262"
+            },
+            "coolbet": {
+              "odds": "+253",
+              "lastUpdatedAt": "2025-12-12T14:57:55.000Z",
+              "available": true
+            }
+          }
+        },
+        "points-home-reg-ml-home": {
+          "oddID": "points-home-reg-ml-home",
+          "opposingOddID": "points-away-reg-ml-away",
+          "marketName": "Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "reg",
+          "betTypeID": "ml",
+          "sideID": "home",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-136",
+          "bookOdds": "-163",
+          "openFairOdds": "-136",
+          "openBookOdds": "-163",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "fanduel": {
+              "odds": "-155",
+              "lastUpdatedAt": "2025-12-12T14:59:13.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543809485&selectionId=508827"
+            },
+            "ballybet": {
+              "odds": "-167",
+              "lastUpdatedAt": "2025-12-12T14:58:39.000Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "-167",
+              "lastUpdatedAt": "2025-12-12T14:58:35.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1023931949?coupon=single|3974150571|0"
+            },
+            "draftkings": {
+              "odds": "-155",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235740?outcomes=0QA294969587%23423058814_13L40030Q11Q20"
+            },
+            "bovada": {
+              "odds": "-150",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "bet365": {
+              "odds": "-163",
+              "lastUpdatedAt": "2025-12-12T14:38:59.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "-165",
+              "lastUpdatedAt": "2025-12-12T14:59:02.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719184-191128696-700896756"
+            }
+          }
+        },
+        "points-away-reg-ml-away": {
+          "oddID": "points-away-reg-ml-away",
+          "opposingOddID": "points-home-reg-ml-home",
+          "marketName": "Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "reg",
+          "betTypeID": "ml",
+          "sideID": "away",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+136",
+          "bookOdds": "+120",
+          "openFairOdds": "+136",
+          "openBookOdds": "+120",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "fanduel": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:59:13.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543809485&selectionId=501200"
+            },
+            "ballybet": {
+              "odds": "+116",
+              "lastUpdatedAt": "2025-12-12T14:58:39.000Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+116",
+              "lastUpdatedAt": "2025-12-12T14:58:35.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1023931949?coupon=single|3974150572|0"
+            },
+            "draftkings": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235740?outcomes=0QA294969587%23423058815_13L40030Q12Q21"
+            },
+            "bovada": {
+              "odds": "+125",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "bet365": {
+              "odds": "+120",
+              "lastUpdatedAt": "2025-12-12T14:38:59.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+115",
+              "lastUpdatedAt": "2025-12-12T14:59:02.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719184-191128696-700896757"
+            }
+          }
+        },
+        "points-home-reg-ml3way-home": {
+          "oddID": "points-home-reg-ml3way-home",
+          "opposingOddID": "points-away-reg-ml3way-away+draw",
+          "marketName": "3-Way Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "reg",
+          "betTypeID": "ml3way",
+          "sideID": "home",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+160",
+          "bookOdds": "+145",
+          "openFairOdds": "+160",
+          "openBookOdds": "+145",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+154",
+              "lastUpdatedAt": "2025-12-12T14:59:33.774Z",
+              "available": true
+            },
+            "nordicbet": {
+              "odds": "+152",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "unknown": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "1xbet": {
+              "odds": "+156",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "betsson": {
+              "odds": "+152",
+              "lastUpdatedAt": "2025-12-12T14:58:44.000Z",
+              "available": true
+            },
+            "unibet": {
+              "odds": "+150",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "boylesports": {
+              "odds": "+140",
+              "lastUpdatedAt": "2025-12-12T14:59:01.000Z",
+              "available": true
+            },
+            "betway": {
+              "odds": "+150",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "sportsbet": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:18.000Z",
+              "available": true
+            },
+            "fanduel": {
+              "odds": "+150",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543809375&selectionId=508827"
+            },
+            "paddypower": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true
+            },
+            "skybet": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:18.000Z",
+              "available": true
+            },
+            "pointsbet": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "tipico": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:30.000Z",
+              "available": true
+            },
+            "fanatics": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:18.000Z",
+              "available": true
+            },
+            "888sport": {
+              "odds": "+140",
+              "lastUpdatedAt": "2025-12-12T14:58:17.000Z",
+              "available": true
+            },
+            "williamhill": {
+              "odds": "+140",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true
+            },
+            "betonline": {
+              "odds": "+155",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "lowvig": {
+              "odds": "+155",
+              "lastUpdatedAt": "2025-12-12T14:59:06.000Z",
+              "available": true
+            },
+            "marathonbet": {
+              "odds": "+152",
+              "lastUpdatedAt": "2025-12-12T14:58:21.000Z",
+              "available": true
+            },
+            "fliff": {
+              "odds": "+135",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "ballybet": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:54.000Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+143",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1023931949?coupon=single|3974109288|0"
+            },
+            "casumo": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "grosvenor": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "leovegas": {
+              "odds": "+143",
+              "lastUpdatedAt": "2025-12-12T14:58:55.000Z",
+              "available": true
+            },
+            "livescorebet": {
+              "odds": "+140",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "virginbet": {
+              "odds": "+140",
+              "lastUpdatedAt": "2025-12-12T14:59:07.000Z",
+              "available": true
+            },
+            "betparx": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:55.000Z",
+              "available": true
+            },
+            "tabtouch": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:55.000Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "+147",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "draftkings": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235740?outcomes=0ML82446334_1"
+            },
+            "bet365": {
+              "odds": "+150",
+              "lastUpdatedAt": "2025-12-12T14:38:59.000Z",
+              "available": true
+            },
+            "betvictor": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:45:51.000Z",
+              "available": true
+            },
+            "playup": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "betfairexchange": {
+              "odds": "+160",
+              "lastUpdatedAt": "2025-12-12T14:58:45.000Z",
+              "available": true,
+              "deeplink": "https://betfair.com/exchange/plus/football/market/1.251206204"
+            },
+            "tab": {
+              "odds": "+150",
+              "lastUpdatedAt": "2025-12-12T14:58:20.000Z",
+              "available": true
+            },
+            "betrsportsbook": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:59:08.000Z",
+              "available": true
+            },
+            "gtbets": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:57.000Z",
+              "available": true
+            },
+            "betfairsportsbook": {
+              "odds": "+140",
+              "lastUpdatedAt": "2025-12-12T14:58:57.000Z",
+              "available": true
+            },
+            "matchbook": {
+              "odds": "+160",
+              "lastUpdatedAt": "2025-12-12T14:58:57.000Z",
+              "available": true
+            },
+            "everygame": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:59:10.000Z",
+              "available": true
+            },
+            "neds": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:57:44.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719184-191128679-700896470"
+            },
+            "ladbrokes": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:57.000Z",
+              "available": true
+            },
+            "coral": {
+              "odds": "+145",
+              "lastUpdatedAt": "2025-12-12T14:58:31.000Z",
+              "available": true
+            },
+            "espnbet": {
+              "odds": "+140",
+              "lastUpdatedAt": "2025-12-12T14:58:54.000Z",
+              "available": true,
+              "deeplink": "https://espnbet.com/sport/soccer/organization/italy/competition/serie-a/event/cb28e6e1-cb74-43a5-bf48-1207c4938c89/section/lines"
+            },
+            "betanysports": {
+              "odds": "+148",
+              "lastUpdatedAt": "2025-12-12T14:58:19.000Z",
+              "available": true
+            },
+            "betus": {
+              "odds": "+150",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true
+            },
+            "caesars": {
+              "odds": "+150",
+              "lastUpdatedAt": "2025-12-12T14:58:28.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.caesars.com/us/nj/bet/betslip?selectionIds=3ebc4f0a-bb65-3e0b-8321-70b532fd3258"
+            },
+            "coolbet": {
+              "odds": "+148",
+              "lastUpdatedAt": "2025-12-12T14:57:55.000Z",
+              "available": true
+            }
+          }
+        },
+        "points-away-reg-ml3way-away+draw": {
+          "oddID": "points-away-reg-ml3way-away+draw",
+          "opposingOddID": "points-home-reg-ml3way-home",
+          "marketName": "3-Way Moneyline (Regulation)",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "reg",
+          "betTypeID": "ml3way",
+          "sideID": "away+draw",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": true,
+          "fairOdds": "-160",
+          "openFairOdds": "-160",
+          "scoringSupported": true
+        },
+        "points-all-reg-ou-over": {
+          "oddID": "points-all-reg-ou-over",
+          "opposingOddID": "points-all-reg-ou-under",
+          "marketName": "Over/Under (Regulation)",
+          "statID": "points",
+          "statEntityID": "all",
+          "periodID": "reg",
+          "betTypeID": "ou",
+          "sideID": "over",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+119",
+          "bookOdds": "-182",
+          "fairOverUnder": "2",
+          "bookOverUnder": "1.5",
+          "openFairOdds": "+119",
+          "openBookOdds": "-182",
+          "openFairOverUnder": "2",
+          "openBookOverUnder": "1.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "betparx": {
+              "odds": "-182",
+              "overUnder": "1.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "-185",
+              "overUnder": "1.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "+110",
+              "overUnder": "2",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "-182",
+              "overUnder": "1.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            }
+          }
+        },
+        "points-all-reg-ou-under": {
+          "oddID": "points-all-reg-ou-under",
+          "opposingOddID": "points-all-reg-ou-over",
+          "marketName": "Over/Under (Regulation)",
+          "statID": "points",
+          "statEntityID": "all",
+          "periodID": "reg",
+          "betTypeID": "ou",
+          "sideID": "under",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-119",
+          "bookOdds": "+138",
+          "fairOverUnder": "2",
+          "bookOverUnder": "1.5",
+          "openFairOdds": "-119",
+          "openBookOdds": "+138",
+          "openFairOverUnder": "2",
+          "openBookOverUnder": "1.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "betparx": {
+              "odds": "+140",
+              "overUnder": "1.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+138",
+              "overUnder": "1.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "-130",
+              "overUnder": "2",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+130",
+              "overUnder": "1.5",
+              "lastUpdatedAt": "2025-12-12T14:58:30.716Z",
+              "available": true
+            }
+          }
+        },
+        "points-home-1h-ml3way-home": {
+          "oddID": "points-home-1h-ml3way-home",
+          "opposingOddID": "points-away-1h-ml3way-away+draw",
+          "marketName": "1st Half 3-Way Moneyline",
+          "statID": "points",
+          "statEntityID": "home",
+          "periodID": "1h",
+          "betTypeID": "ml3way",
+          "sideID": "home",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+244",
+          "bookOdds": "+222",
+          "openFairOdds": "+244",
+          "openBookOdds": "+222",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "pinnacle": {
+              "odds": "+249",
+              "lastUpdatedAt": "2025-12-12T14:59:33.774Z",
+              "available": true
+            },
+            "fanduel": {
+              "odds": "+220",
+              "lastUpdatedAt": "2025-12-12T14:59:13.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.543809421&selectionId=508827"
+            },
+            "unknown": {
+              "odds": "+222",
+              "lastUpdatedAt": "2025-12-12T14:57:05.000Z",
+              "available": true
+            },
+            "ballybet": {
+              "odds": "+215",
+              "lastUpdatedAt": "2025-12-12T14:58:39.000Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "+225",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+215",
+              "lastUpdatedAt": "2025-12-12T14:58:35.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1023931949?coupon=single|3974153756|0"
+            },
+            "draftkings": {
+              "odds": "+225",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.draftkings.com/event/33235740?outcomes=0ML82446350_1"
+            },
+            "bet365": {
+              "odds": "+225",
+              "lastUpdatedAt": "2025-12-12T14:32:53.000Z",
+              "available": true
+            },
+            "betmgm": {
+              "odds": "+220",
+              "lastUpdatedAt": "2025-12-12T14:59:02.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719184-191128678-700896467"
+            },
+            "betanysports": {
+              "odds": "+222",
+              "lastUpdatedAt": "2025-12-12T14:58:19.000Z",
+              "available": true
+            }
+          }
+        },
+        "points-away-1h-ml3way-away+draw": {
+          "oddID": "points-away-1h-ml3way-away+draw",
+          "opposingOddID": "points-home-1h-ml3way-home",
+          "marketName": "1st Half 3-Way Moneyline",
+          "statID": "points",
+          "statEntityID": "away",
+          "periodID": "1h",
+          "betTypeID": "ml3way",
+          "sideID": "away+draw",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": true,
+          "fairOdds": "-244",
+          "openFairOdds": "-244",
+          "scoringSupported": true
+        },
+        "cornerKicks-all-game-ou-under": {
+          "oddID": "cornerKicks-all-game-ou-under",
+          "opposingOddID": "cornerKicks-all-game-ou-over",
+          "marketName": "Total Corner Kicks Over/Under (Full Match)",
+          "statID": "cornerKicks",
+          "statEntityID": "all",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "under",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+115",
+          "bookOdds": "-150",
+          "fairOverUnder": "9",
+          "bookOverUnder": "9.5",
+          "openFairOdds": "+115",
+          "openBookOdds": "-150",
+          "openFairOverUnder": "9",
+          "openBookOverUnder": "9.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "ballybet": {
+              "odds": "-167",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:58:39.000Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "-167",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:58:35.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1023931949?coupon=single|3974150455|0"
+            },
+            "bet365": {
+              "odds": "-150",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:55:17.000Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "-128",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "draftkings": {
+              "odds": "-155",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true
+            },
+            "fanduel": {
+              "odds": "-132",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:59:13.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.545323479&selectionId=6384611"
+            },
+            "betmgm": {
+              "odds": "-145",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:59:02.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719184-191655640-704234331"
+            }
+          }
+        },
+        "cornerKicks-all-game-ou-over": {
+          "oddID": "cornerKicks-all-game-ou-over",
+          "opposingOddID": "cornerKicks-all-game-ou-under",
+          "marketName": "Total Corner Kicks Over/Under (Full Match)",
+          "statID": "cornerKicks",
+          "statEntityID": "all",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "over",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-115",
+          "bookOdds": "+110",
+          "fairOverUnder": "9",
+          "bookOverUnder": "9.5",
+          "openFairOdds": "-115",
+          "openBookOdds": "+110",
+          "openFairOverUnder": "9",
+          "openBookOverUnder": "9.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "ballybet": {
+              "odds": "+117",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:58:39.000Z",
+              "available": true
+            },
+            "betrivers": {
+              "odds": "+115",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:58:35.000Z",
+              "available": true,
+              "deeplink": "https://nj.betrivers.com/?page=sportsbook#event/1023931949?coupon=single|3974150456|0"
+            },
+            "bet365": {
+              "odds": "+110",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:55:17.000Z",
+              "available": true
+            },
+            "bovada": {
+              "odds": "-102",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:59:05.000Z",
+              "available": true
+            },
+            "draftkings": {
+              "odds": "+110",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:58:42.000Z",
+              "available": true
+            },
+            "fanduel": {
+              "odds": "-102",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:59:13.000Z",
+              "available": true,
+              "deeplink": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.545323479&selectionId=6384610"
+            },
+            "betmgm": {
+              "odds": "+105",
+              "overUnder": "9.5",
+              "lastUpdatedAt": "2025-12-12T14:59:02.000Z",
+              "available": true,
+              "deeplink": "https://sports.nj.betmgm.com/en/sports?options=2:7719184-191655640-704234330"
+            }
+          }
+        },
+        "cornerKicks-home-game-ou-over": {
+          "oddID": "cornerKicks-home-game-ou-over",
+          "opposingOddID": "cornerKicks-home-game-ou-under",
+          "marketName": "Lecce Corner Kicks Over/Under (Full Match)",
+          "statID": "cornerKicks",
+          "statEntityID": "home",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "over",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "-126",
+          "bookOdds": "-150",
+          "fairOverUnder": "4.5",
+          "bookOverUnder": "4.5",
+          "openFairOdds": "-126",
+          "openBookOdds": "-150",
+          "openFairOverUnder": "4.5",
+          "openBookOverUnder": "4.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bet365": {
+              "odds": "-150",
+              "overUnder": "4.5",
+              "lastUpdatedAt": "2025-12-12T14:55:17.000Z",
+              "available": true
+            }
+          }
+        },
+        "cornerKicks-home-game-ou-under": {
+          "oddID": "cornerKicks-home-game-ou-under",
+          "opposingOddID": "cornerKicks-home-game-ou-over",
+          "marketName": "Lecce Corner Kicks Over/Under (Full Match)",
+          "statID": "cornerKicks",
+          "statEntityID": "home",
+          "periodID": "game",
+          "betTypeID": "ou",
+          "sideID": "under",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": true,
+          "fairOddsAvailable": true,
+          "fairOdds": "+126",
+          "bookOdds": "+110",
+          "fairOverUnder": "4.5",
+          "bookOverUnder": "4.5",
+          "openFairOdds": "+126",
+          "openBookOdds": "+110",
+          "openFairOverUnder": "4.5",
+          "openBookOverUnder": "4.5",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bet365": {
+              "odds": "+110",
+              "overUnder": "4.5",
+              "lastUpdatedAt": "2025-12-12T14:55:17.000Z",
+              "available": true
+            }
+          }
+        },
+        "goals+assists-FRANCESCO_CAMARDA_1_IT_SERIE_A-game-yn-no": {
+          "oddID": "goals+assists-FRANCESCO_CAMARDA_1_IT_SERIE_A-game-yn-no",
+          "opposingOddID": "goals+assists-FRANCESCO_CAMARDA_1_IT_SERIE_A-game-yn-yes",
+          "marketName": "Francesco Camarda Any Goals + Assists Yes/No (Full Match)",
+          "statID": "goals+assists",
+          "statEntityID": "FRANCESCO_CAMARDA_1_IT_SERIE_A",
+          "periodID": "game",
+          "betTypeID": "yn",
+          "sideID": "no",
+          "playerID": "FRANCESCO_CAMARDA_1_IT_SERIE_A",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": false,
+          "fairOdds": "-207",
+          "openFairOdds": "-207",
+          "scoringSupported": true
+        },
+        "goals+assists-FRANCESCO_CAMARDA_1_IT_SERIE_A-game-yn-yes": {
+          "oddID": "goals+assists-FRANCESCO_CAMARDA_1_IT_SERIE_A-game-yn-yes",
+          "opposingOddID": "goals+assists-FRANCESCO_CAMARDA_1_IT_SERIE_A-game-yn-no",
+          "marketName": "Francesco Camarda Any Goals + Assists Yes/No (Full Match)",
+          "statID": "goals+assists",
+          "statEntityID": "FRANCESCO_CAMARDA_1_IT_SERIE_A",
+          "periodID": "game",
+          "betTypeID": "yn",
+          "sideID": "yes",
+          "playerID": "FRANCESCO_CAMARDA_1_IT_SERIE_A",
+          "started": false,
+          "ended": false,
+          "cancelled": false,
+          "bookOddsAvailable": false,
+          "fairOddsAvailable": false,
+          "fairOdds": "+207",
+          "bookOdds": "+188",
+          "openFairOdds": "+207",
+          "openBookOdds": "+188",
+          "scoringSupported": true,
+          "byBookmaker": {
+            "bet365": {
+              "odds": "+188",
+              "lastUpdatedAt": "2025-12-12T14:00:42.000Z",
+              "available": false
+            }
+          }
+        }
+      },
+      "results": {},
+      "players": {
+        "YLBER_RAMADANI_1_IT_SERIE_A": {
+          "playerID": "YLBER_RAMADANI_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Ylber",
+          "lastName": "Ramadani",
+          "name": "Ylber Ramadani"
+        },
+        "KIALONDA_GASPAR_1_IT_SERIE_A": {
+          "playerID": "KIALONDA_GASPAR_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Esmev\u00e2nio Kialonda",
+          "lastName": "Gaspar",
+          "name": "Kialonda Gaspar"
+        },
+        "SANTIAGO_PIEROTTI_1_IT_SERIE_A": {
+          "playerID": "SANTIAGO_PIEROTTI_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Santiago",
+          "lastName": "Pierotti",
+          "name": "Santiago Pierotti"
+        },
+        "RICCARDO_SOTTIL_1_IT_SERIE_A": {
+          "playerID": "RICCARDO_SOTTIL_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Riccardo",
+          "lastName": "Sottil",
+          "name": "Riccardo Sottil"
+        },
+        "DANILO_VEIGA_1_IT_SERIE_A": {
+          "playerID": "DANILO_VEIGA_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Danilo Filipe",
+          "lastName": "Melo Veiga",
+          "name": "Danilo Veiga"
+        },
+        "THORIR_JOHANN_HELGASON_1_IT_SERIE_A": {
+          "playerID": "THORIR_JOHANN_HELGASON_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "\u00de\u00f3rir J\u00f3hann",
+          "lastName": "Helgason",
+          "name": "\u00de\u00f3rir J\u00f3hann Helgason"
+        },
+        "JAMIL_SIEBERT_1_IT_SERIE_A": {
+          "playerID": "JAMIL_SIEBERT_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Jamil",
+          "lastName": "Siebert",
+          "name": "Jamil Siebert"
+        },
+        "FREDERIC_GUILBERT_1_IT_SERIE_A": {
+          "playerID": "FREDERIC_GUILBERT_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Fr\u00e9d\u00e9ric",
+          "lastName": "Guilbert",
+          "name": "Fr\u00e9d\u00e9ric Guilbert"
+        },
+        "CORRIE_NDABA_1_IT_SERIE_A": {
+          "playerID": "CORRIE_NDABA_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Corrie",
+          "lastName": "Ndaba",
+          "name": "Corrie Ndaba"
+        },
+        "LASSANA_COULIBALY_1_IT_SERIE_A": {
+          "playerID": "LASSANA_COULIBALY_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Lassana",
+          "lastName": "Coulibaly",
+          "name": "Lassana Coulibaly"
+        },
+        "LAMECK_BANDA_1_IT_SERIE_A": {
+          "playerID": "LAMECK_BANDA_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Lameck",
+          "lastName": "Banda",
+          "name": "Lameck Banda"
+        },
+        "BALTHAZAR_PIERRET_1_IT_SERIE_A": {
+          "playerID": "BALTHAZAR_PIERRET_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Balthazar",
+          "lastName": "Pierret",
+          "name": "Balthazar Pierret"
+        },
+        "MOHAMED_KABA_1_IT_SERIE_A": {
+          "playerID": "MOHAMED_KABA_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Mohamed",
+          "lastName": "Kaba",
+          "name": "Mohamed Kaba"
+        },
+        "ANTONINO_GALLO_1_IT_SERIE_A": {
+          "playerID": "ANTONINO_GALLO_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Antonino",
+          "lastName": "Gallo",
+          "name": "Antonino Gallo"
+        },
+        "MEDON_BERISHA_1_IT_SERIE_A": {
+          "playerID": "MEDON_BERISHA_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Medon",
+          "lastName": "Berisha",
+          "name": "Medon Berisha"
+        },
+        "FRANCESCO_CAMARDA_1_IT_SERIE_A": {
+          "playerID": "FRANCESCO_CAMARDA_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Francesco",
+          "lastName": "Camarda",
+          "name": "Francesco Camarda"
+        },
+        "NIKOLA_STULIC_1_IT_SERIE_A": {
+          "playerID": "NIKOLA_STULIC_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Nikola",
+          "lastName": "\u0160tuli\u0107",
+          "name": "Nikola \u0160tuli\u0107"
+        },
+        "TETE_MORENTE_1_IT_SERIE_A": {
+          "playerID": "TETE_MORENTE_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Jos\u00e9 Antonio",
+          "lastName": "Morente Oliva",
+          "name": "Tete Morente"
+        },
+        "ALEX_SALA_1_IT_SERIE_A": {
+          "playerID": "ALEX_SALA_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "\u00c1lex",
+          "lastName": "Sala Herrero",
+          "name": "Alex Sala"
+        },
+        "CHRISTOWEN_KOUASSI_1_IT_SERIE_A": {
+          "playerID": "CHRISTOWEN_KOUASSI_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Owen",
+          "lastName": "Kouassi",
+          "name": "Christ-Owen Kouassi"
+        },
+        "HAMZA_RAFIA_1_IT_SERIE_A": {
+          "playerID": "HAMZA_RAFIA_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Hamza",
+          "lastName": "Rafia",
+          "name": "Hamza Rafia"
+        },
+        "KONAN_NDRI_1_IT_SERIE_A": {
+          "playerID": "KONAN_NDRI_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Konan",
+          "lastName": "N'Dri",
+          "name": "Konan N'Dri"
+        },
+        "MATIAS_PEREZ_SEPULVEDA_1_IT_SERIE_A": {
+          "playerID": "MATIAS_PEREZ_SEPULVEDA_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Matias",
+          "lastName": "Perez",
+          "name": "Mat\u00edas P\u00e9rez Sep\u00falveda"
+        },
+        "NIKO_KOVAC_1_IT_SERIE_A": {
+          "playerID": "NIKO_KOVAC_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Niko",
+          "lastName": "Kova\u010d",
+          "name": "Niko Kova\u010d"
+        },
+        "OLAF_GORTER_1_IT_SERIE_A": {
+          "playerID": "OLAF_GORTER_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Olaf",
+          "lastName": "Gorter",
+          "name": "Olaf Gorter"
+        },
+        "YOUSSEF_MALEH_1_IT_SERIE_A": {
+          "playerID": "YOUSSEF_MALEH_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Youssef",
+          "lastName": "Maleh",
+          "name": "Youssef Maleh"
+        },
+        "TIAGO_GABRIEL_1_IT_SERIE_A": {
+          "playerID": "TIAGO_GABRIEL_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Tiago Gabriel",
+          "lastName": "Coelho Oliveira",
+          "name": "Tiago Gabriel"
+        },
+        "ANTONIO_CARACCIOLO_1_IT_SERIE_A": {
+          "playerID": "ANTONIO_CARACCIOLO_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Antonio",
+          "lastName": "Caracciolo",
+          "name": "Antonio Caracciolo"
+        },
+        "ARTURO_CALABRESI_1_IT_SERIE_A": {
+          "playerID": "ARTURO_CALABRESI_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Arturo",
+          "lastName": "Calabresi",
+          "name": "Arturo Calabresi"
+        },
+        "BRANDO_BETTAZZI_1_IT_SERIE_A": {
+          "playerID": "BRANDO_BETTAZZI_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Brando",
+          "lastName": "Bettazzi",
+          "name": "Brando Bettazzi"
+        },
+        "DANIEL_DENOON_1_IT_SERIE_A": {
+          "playerID": "DANIEL_DENOON_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Daniel",
+          "lastName": "Denoon",
+          "name": "Daniel Denoon"
+        },
+        "EBENEZER_AKINSANMIRO_1_IT_SERIE_A": {
+          "playerID": "EBENEZER_AKINSANMIRO_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Ebenezer",
+          "lastName": "Akinsanmiro",
+          "name": "Ebenezer Akinsanmiro"
+        },
+        "FRANCESCO_COPPOLA_1_IT_SERIE_A": {
+          "playerID": "FRANCESCO_COPPOLA_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Francesco",
+          "lastName": "Coppola",
+          "name": "Francesco Coppola"
+        },
+        "GABRIELE_PICCININI_1_IT_SERIE_A": {
+          "playerID": "GABRIELE_PICCININI_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Gabriele",
+          "lastName": "Piccinini",
+          "name": "Gabriele Piccinini"
+        },
+        "GIACOMO_MAUCCI_1_IT_SERIE_A": {
+          "playerID": "GIACOMO_MAUCCI_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Giacomo",
+          "lastName": "Maucci",
+          "name": "Giacomo Maucci"
+        },
+        "GIOVANNI_BONFANTI_1_IT_SERIE_A": {
+          "playerID": "GIOVANNI_BONFANTI_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Giovanni",
+          "lastName": "Bonfanti",
+          "name": "Giovanni Bonfanti"
+        },
+        "HENRIK_WENDEL_MEISTER_1_IT_SERIE_A": {
+          "playerID": "HENRIK_WENDEL_MEISTER_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Henrik",
+          "lastName": "Meister",
+          "name": "Henrik Wendel Meister"
+        },
+        "IDRISSA_TOURE_1_IT_SERIE_A": {
+          "playerID": "IDRISSA_TOURE_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Idrissa",
+          "lastName": "Tour\u00e9",
+          "name": "Idrissa Tour\u00e9"
+        },
+        "ISAK_VURAL_1_IT_SERIE_A": {
+          "playerID": "ISAK_VURAL_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "\u0130sak",
+          "lastName": "Vural",
+          "name": "Isak Vural"
+        },
+        "JUAN_CUADRADO_1_IT_SERIE_A": {
+          "playerID": "JUAN_CUADRADO_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Juan",
+          "lastName": "Cuadrado",
+          "name": "Juan Cuadrado"
+        },
+        "LOUIS_BUFFON_1_IT_SERIE_A": {
+          "playerID": "LOUIS_BUFFON_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Louis",
+          "lastName": "Buffon",
+          "name": "Louis Buffon"
+        },
+        "MALTHE_HOJHOLT_1_IT_SERIE_A": {
+          "playerID": "MALTHE_HOJHOLT_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Malthe",
+          "lastName": "H\u00f8jholt",
+          "name": "Malthe H\u00f8jholt"
+        },
+        "MATEUS_LUSUARDI_1_IT_SERIE_A": {
+          "playerID": "MATEUS_LUSUARDI_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Mateus Henrique",
+          "lastName": "Vanelli Lusuardi",
+          "name": "Mateus Lusuardi"
+        },
+        "MATTEO_TRAMONI_1_IT_SERIE_A": {
+          "playerID": "MATTEO_TRAMONI_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Matt\u00e9o",
+          "lastName": "Tramoni",
+          "name": "Matteo Tramoni"
+        },
+        "MBALA_NZOLA_1_IT_SERIE_A": {
+          "playerID": "MBALA_NZOLA_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "M'Bala",
+          "lastName": "Nzola",
+          "name": "M'Bala Nzola"
+        },
+        "MICHEL_AEBISCHER_1_IT_SERIE_A": {
+          "playerID": "MICHEL_AEBISCHER_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Michel",
+          "lastName": "Aebischer",
+          "name": "Michel Aebischer"
+        },
+        "RAUL_ALBIOL_1_IT_SERIE_A": {
+          "playerID": "RAUL_ALBIOL_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Ra\u00fal",
+          "lastName": "Albiol i Tortajada",
+          "name": "Ra\u00fal Albiol"
+        },
+        "SAMUELE_ANGORI_1_IT_SERIE_A": {
+          "playerID": "SAMUELE_ANGORI_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Samuele",
+          "lastName": "Angori",
+          "name": "Samuele Angori"
+        },
+        "SIMONE_CANESTRELLI_1_IT_SERIE_A": {
+          "playerID": "SIMONE_CANESTRELLI_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Simone",
+          "lastName": "Canestrelli",
+          "name": "Simone Canestrelli"
+        },
+        "STEFANO_MOREO_1_IT_SERIE_A": {
+          "playerID": "STEFANO_MOREO_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Stefano",
+          "lastName": "Moreo",
+          "name": "Stefano Moreo"
+        },
+        "ZAN_JEVSENAK_1_IT_SERIE_A": {
+          "playerID": "ZAN_JEVSENAK_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "\u017dan",
+          "lastName": "Jev\u0161enak",
+          "name": "\u017dan Jev\u0161enak"
+        },
+        "TOMAS_ESTEVES_1_IT_SERIE_A": {
+          "playerID": "TOMAS_ESTEVES_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Tom\u00e1s",
+          "lastName": "do Lago Pontes Esteves",
+          "name": "Tom\u00e1s Esteves"
+        },
+        "ADRIAN_SEMPER_1_IT_SERIE_A": {
+          "playerID": "ADRIAN_SEMPER_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Adrian",
+          "lastName": "\u0160emper",
+          "name": "Adrian \u0160emper"
+        },
+        "CHRISTIAN_FRUCHTL_1_IT_SERIE_A": {
+          "playerID": "CHRISTIAN_FRUCHTL_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Christian",
+          "lastName": "Fr\u00fcchtl",
+          "name": "Christian Fr\u00fcchtl"
+        },
+        "JASPER_SAMOOJA_1_IT_SERIE_A": {
+          "playerID": "JASPER_SAMOOJA_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Jasper",
+          "lastName": "Samooja",
+          "name": "Jasper Samooja"
+        },
+        "SIMONE_SCUFFET_1_IT_SERIE_A": {
+          "playerID": "SIMONE_SCUFFET_1_IT_SERIE_A",
+          "teamID": "PISA_IT_SERIE_A",
+          "firstName": "Simone",
+          "lastName": "Scuffet",
+          "name": "Simone Scuffet"
+        },
+        "WLADIMIRO_FALCONE_1_IT_SERIE_A": {
+          "playerID": "WLADIMIRO_FALCONE_1_IT_SERIE_A",
+          "teamID": "LECCE_IT_SERIE_A",
+          "firstName": "Wladimiro",
+          "lastName": "Falcone",
+          "name": "Wladimiro Falcone"
+        }
+      }
+    }
+  ]
+}

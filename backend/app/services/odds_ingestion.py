@@ -181,6 +181,8 @@ class OddsIngestionService:
             index: Dict[str, Team] = {}
             for team in self.session.exec(select(Team)).all():
                 index[(team.abbreviation or "").upper()] = team
+                if team.full_name:
+                    index.setdefault(_team_key(team.full_name), team)
                 canon = canonical_team_name(team.full_name or "")
                 if canon:
                     index.setdefault(_team_key(canon), team)

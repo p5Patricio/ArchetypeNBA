@@ -19,7 +19,7 @@ What to build next and why, in priority order. Each item states the reason, how 
 | 5 | Shutdown endpoint CSRF and origin hardening (done) | S | An unauthenticated endpoint can stop the services |
 | 6 | Closing-quote presence record (done) | M | Stale closes bias CLV |
 | 7 | Postponed-game polling (done) | S | Wasted calls and noise for up to 14 days |
-| 8 | Second odds feed (built, disabled until key exists, unverified against live responses) | M | Redundancy and more props; no sharp book |
+| 8 | Second odds feed (built, disabled until key exists, parser validated against documentation examples; still not against a live response) | M | Redundancy and more props; no sharp book |
 | 9 | CI that runs the test suite (done) | S | No automated check exists |
 | 10 | Legacy cleanup (done) | M | Dead code and confusing duplicates |
 | 11 | Fix `props_engine.load_baselines_from_db` (done) | S | It reads a SQLite file that does not exist |
@@ -161,7 +161,7 @@ Props quotes and shadow evaluation are completed under WP-S2:
 
 **First step.** Add an attempt counter or an age rule in `results_sync` and test it.
 
-## 8. Second odds feed (built, disabled until key exists, unverified against live responses)
+## 8. Second odds feed (built, disabled until key exists, parser validated against documentation examples; still not against a live response)
 
 **Why.** Redundancy if The Odds API fails or the quota runs out, and more props/bookmaker coverage. Integrated SportsGameOdds (free "Amateur" tier, 2,500 objects a month, 10 req/min, 9 US books: FanDuel, DraftKings, BetMGM, Caesars, ESPN BET, Bovada, Unibet, PointsBet, William Hill; **no Pinnacle**).
 
@@ -169,11 +169,11 @@ Props quotes and shadow evaluation are completed under WP-S2:
 
 - [x] A provider interface (`services/odds_providers/base.py`) with SportsGameOdds client (`services/odds_providers/sportsgameodds.py`); writes its own `sportsbook` rows and has its own quota guard.
 - [x] The sharp reference stays Pinnacle: a feed without a sharp book never creates bets alone.
-- [x] Idempotent ingestion into existing `Game` rows; never creates games; offline tests from documented fixtures (`tests/test_sportsgameodds.py`).
+- [x] Idempotent ingestion into existing `Game` rows; never creates games; offline tests from documented fixtures (`tests/test_sportsgameodds.py`) and validated against official documentation example responses (`tests/test_sgo_docs_validation.py`).
 - [x] Terms and free-tier limits read and recorded from primary documentation (`docs/DECISIONS.md` D-58, `docs/OPERATIONS.md`).
 - [ ] Owner supplies a valid `SPORTSGAMEODDS_API_KEY` and verifies live response shapes using `scripts/sgo_probe.py`.
 
-**Risks.** Live payload differences once a key is used (mitigated by `sgo_probe.py`); unverified against real live responses until the owner configures a key.
+**Risks.** Live payload differences once a key is used (mitigated by `sgo_probe.py`); parser is validated against official documentation examples but remains unverified against real live responses until the owner configures a key.
 
 **First step.** Owner registers at sportsgameodds.com, sets `SPORTSGAMEODDS_API_KEY` in `backend/.env`, and runs `python scripts/sgo_probe.py` to verify real response against assumed shapes.
 
