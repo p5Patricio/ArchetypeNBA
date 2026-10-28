@@ -54,5 +54,10 @@ class Settings(BaseSettings):
     LEARNING_MAX_LOOKS: int = 12
     LEARNING_MAX_AGE_DAYS: int = 150
 
+    # Candidate lab multiple-testing control (app.analytics.multiple_testing).
+    # When True, a candidate must also pass the SPA multiple-testing gate (selection_pvalue_spa < 0.2)
+    # on the selection window to be eligible for registration as a challenger. Default False (report only).
+    LAB_MULTITEST_GATE: bool = False
+
 
 settings = Settings()
