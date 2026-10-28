@@ -1,13 +1,74 @@
-from fastapi import APIRouter
-from pydantic import BaseModel
+import logging
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
-import logging
+from urllib.parse import urlparse
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/system", tags=["system"])
+
+ALLOWED_HOSTNAMES = {"localhost", "127.0.0.1"}
+
+
+def _extract_origin(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    raw = raw.strip()
+    if not raw:
+        return None
+    parsed = urlparse(raw)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+    return raw.rstrip("/")
+
+
+def verify_shutdown_safety(request: Request) -> None:
+    """
+    Enforces origin and host safety on the shutdown endpoint:
+    (a) Rejects with 403 when the Origin header is missing or not in settings.CORS_ORIGINS
+        (falling back to Referer only if Origin is absent).
+    (b) Rejects with 403 when the Host header's hostname is not localhost or 127.0.0.1
+        (DNS-rebinding guard).
+    """
+    # (a) Origin / Referer check
+    raw_origin = request.headers.get("origin")
+    if not raw_origin:
+        raw_origin = request.headers.get("referer")
+
+    if not raw_origin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: missing Origin or Referer header",
+        )
+
+    origin = _extract_origin(raw_origin)
+    allowed_origins = {o.rstrip("/") for o in settings.CORS_ORIGINS}
+    if not origin or origin not in allowed_origins:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: invalid origin",
+        )
+
+    # (b) Host header hostname check
+    host_header = request.headers.get("host")
+    if not host_header:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: missing Host header",
+        )
+
+    hostname = urlparse(f"//{host_header}").hostname
+    if not hostname or hostname.lower() not in ALLOWED_HOSTNAMES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: invalid host",
+        )
 
 
 class ShutdownResponse(BaseModel):
@@ -15,7 +76,11 @@ class ShutdownResponse(BaseModel):
     message: str
 
 
-@router.post("/shutdown", response_model=ShutdownResponse)
+@router.post(
+    "/shutdown",
+    response_model=ShutdownResponse,
+    dependencies=[Depends(verify_shutdown_safety)],
+)
 def shutdown_services():
     """
     Shuts down both frontend (port 38920) and backend (port 38921) services cleanly.
