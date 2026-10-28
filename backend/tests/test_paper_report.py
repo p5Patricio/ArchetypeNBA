@@ -235,3 +235,50 @@ def test_paper_report_includes_pinnacle_clv_section(world):
     assert "sd " in text
     assert "bets needed for +1%" in text
     assert "Exclusions:" in text
+
+
+def test_market_breakdown_reports_h2h_spreads_and_totals(world):
+    from app.services.settlement import settle_bets
+
+    game = final_game(world, 110, 100)
+    # H2H bet (won)
+    h2h_bet = place_bet(world, game, MarketType.h2h, BetSide.home, price="2.0000", stake="1.000")
+    # Spreads bet (push)
+    spread_bet = place_bet(world, game, MarketType.spreads, BetSide.home, line=-10, price="1.9090", stake="1.000")
+    # Totals bet (won: 110 + 100 = 210 > 200.5)
+    total_bet = place_bet(world, game, MarketType.totals, BetSide.over, line=200.5, price="1.9500", stake="1.000")
+
+    settle_bets(world, NOW)
+
+    # Add CLV: +5% on h2h, +2% on totals
+    h2h_bet.closing_price = Decimal("1.9048")  # ~+5%
+    total_bet.closing_price = Decimal("1.9118")  # ~+2%
+    world.add_all([h2h_bet, total_bet])
+    world.commit()
+
+    report = build_report(world, NOW)
+    by_market = {m.market: m for m in report.markets}
+
+    assert set(by_market.keys()) == {"h2h", "spreads", "totals"}
+
+    h2h = by_market["h2h"]
+    assert (h2h.bets, h2h.settled) == (1, 1)
+    assert h2h.roi == pytest.approx(1.0)
+    assert h2h.avg_clv is not None and h2h.avg_clv > 0
+
+    spreads = by_market["spreads"]
+    assert (spreads.bets, spreads.settled) == (1, 1)
+    assert spreads.roi == pytest.approx(0.0)
+    assert spreads.avg_clv is None
+
+    totals = by_market["totals"]
+    assert (totals.bets, totals.settled) == (1, 1)
+    assert totals.roi == pytest.approx(0.95)
+    assert totals.avg_clv is not None and totals.avg_clv > 0
+
+    text = format_report(report)
+    assert "Market breakdown (h2h / spreads / totals)" in text
+    assert "h2h                bets 1 (settled 1) | ROI 100.0%" in text
+    assert "spreads            bets 1 (settled 1) | ROI 0.0%" in text
+    assert "totals             bets 1 (settled 1) | ROI 95.0%" in text
+

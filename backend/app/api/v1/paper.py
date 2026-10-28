@@ -48,6 +48,14 @@ class StrategySummary(BaseModel):
     clv_bets: int
 
 
+class MarketSummary(BaseModel):
+    market: str
+    bets: int
+    settled: int
+    roi: Optional[float] = None
+    avg_clv: Optional[float] = None
+
+
 class PinnacleClvExclusionsResponse(BaseModel):
     total: int
     no_closing_marker: int
@@ -81,6 +89,7 @@ class ChampionSkillResponse(BaseModel):
 
 class PaperSummaryResponse(BaseModel):
     strategies: List[StrategySummary]
+    markets: Optional[List[MarketSummary]] = None
     pinnacle_clv: PinnacleClvSummaryResponse
     champion_model: Optional[str] = None
     brier: ChampionSkillResponse
@@ -191,8 +200,20 @@ def get_paper_summary(session: Session = Depends(get_db_session)) -> PaperSummar
         difference=report.skill.difference,
     )
 
+    markets_resp = [
+        MarketSummary(
+            market=m.market,
+            bets=m.bets,
+            settled=m.settled,
+            roi=m.roi,
+            avg_clv=m.avg_clv,
+        )
+        for m in report.markets
+    ]
+
     return PaperSummaryResponse(
         strategies=strategies_resp,
+        markets=markets_resp,
         pinnacle_clv=pinnacle_resp,
         champion_model=report.skill.model,
         brier=brier_resp,

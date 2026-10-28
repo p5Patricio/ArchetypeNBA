@@ -22,7 +22,17 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, select
 
 from app.analytics.props_engine import normalize_player_key
-from app.models import BetSide, Game, MarketType, OddsHistory, Player, Season, Sportsbook, Team
+from app.models import (
+    BetSide,
+    Game,
+    MarketType,
+    OddsCapturePresence,
+    OddsHistory,
+    Player,
+    Season,
+    Sportsbook,
+    Team,
+)
 from app.services.odds_api_service import GAME_LINE_MARKETS, MARKET_TO_STAT, GameQuote, OddsQuote
 
 logger = logging.getLogger(__name__)
@@ -171,16 +181,23 @@ class OddsIngestionService:
         return self._teams
 
     def resolve_team(self, api_name: str) -> Optional[Team]:
-        """Finds the `team` row for an Odds API team name; None when the franchise is unknown."""
-        canon = canonical_team_name(api_name)
-        if canon is None:
+        """Finds the `team` row for an Odds API team name or abbreviation; None when the franchise is unknown."""
+        if not api_name:
             return None
         index = self._team_index()
-        for abbreviation in _TEAM_ABBREVIATIONS[canon]:
-            team = index.get(abbreviation)
-            if team is not None:
-                return team
-        return index.get(_team_key(canon))
+        # Fast path: direct abbreviation lookup (e.g. 'BOS', 'LAL', 'GSW')
+        abbr = api_name.strip().upper()
+        if abbr in index:
+            return index[abbr]
+
+        canon = canonical_team_name(api_name)
+        if canon is not None:
+            for abbreviation in _TEAM_ABBREVIATIONS.get(canon, ()):
+                team = index.get(abbreviation)
+                if team is not None:
+                    return team
+            return index.get(_team_key(canon))
+        return index.get(_team_key(api_name))
 
     @staticmethod
     def season_label_for(day: date) -> str:
@@ -301,6 +318,92 @@ class OddsIngestionService:
                 continue
 
             game = self.upsert_game(q.event_id, commence, q.home_team, q.away_team)
+            if game is None:
+                result.skipped_unmatched += 1
+                continue
+
+            book = self.upsert_sportsbook(q.bookmaker_key, q.bookmaker_title)
+            row = self._row(game, book, market, None, side, q.line, q.price_american, updated, captured_at)
+            if row is None:
+                result.skipped_invalid += 1
+                continue
+            rows.append(row)
+
+        return result.merge(self._insert_rows(rows))
+
+    def find_existing_game(
+        self,
+        home_team: str,
+        away_team: str,
+        commence_time: datetime,
+        tolerance_hours: float = 6.0,
+    ) -> Optional[Game]:
+        """
+        Locates an existing Game row matching home and away teams within a commence_time tolerance window.
+        Never creates a game row. Returns None if unmatched.
+        """
+        home = self.resolve_team(home_team)
+        away = self.resolve_team(away_team)
+        if home is None or away is None or home.id == away.id:
+            return None
+
+        target = _aware_utc(commence_time)
+        candidates = self.session.exec(
+            select(Game).where(
+                Game.home_team_id == home.id,
+                Game.away_team_id == away.id,
+            )
+        ).all()
+
+        best: Optional[Game] = None
+        min_delta: Optional[float] = None
+        tolerance_seconds = tolerance_hours * 3600.0
+
+        for g in candidates:
+            delta = abs((_aware_utc(g.commence_time) - target).total_seconds())
+            if delta <= tolerance_seconds:
+                if min_delta is None or delta < min_delta:
+                    min_delta = delta
+                    best = g
+
+        return best
+
+    def ingest_secondary_game_quotes(
+        self,
+        quotes: Iterable[GameQuote],
+        captured_at: datetime,
+        tolerance_hours: float = 6.0,
+    ) -> IngestResult:
+        """
+        Ingests quotes from a secondary feed (e.g. SportsGameOdds).
+        Matches events to existing Game rows; NEVER creates a game row.
+        Unmatched events are counted in skipped_unmatched and logged.
+        """
+        result = IngestResult()
+        rows: List[dict] = []
+        event_game_map: Dict[str, Optional[Game]] = {}
+
+        for q in quotes:
+            market = _GAME_MARKETS.get(q.market_key)
+            side = _SIDES.get(q.side)
+            commence = parse_api_datetime(q.commence_time)
+            # book_last_update from lastUpdatedAt when present, fallback to captured_at
+            updated = parse_api_datetime(q.book_last_update) or _aware_utc(captured_at)
+
+            if market is None or side is None or commence is None:
+                result.skipped_invalid += 1
+                continue
+
+            if q.event_id not in event_game_map:
+                game = self.find_existing_game(q.home_team, q.away_team, commence, tolerance_hours)
+                event_game_map[q.event_id] = game
+                if game is None:
+                    logger.warning(
+                        f"OddsIngestion: unmatched secondary feed event {q.event_id} "
+                        f"({q.away_team} @ {q.home_team} at {commence}); skipped (never created)."
+                    )
+
+            game = event_game_map[q.event_id]
             if game is None:
                 result.skipped_unmatched += 1
                 continue
@@ -440,4 +543,97 @@ class OddsIngestionService:
 
         self.session.commit()
         return result
+
+    def ingest_capture_presence(
+        self, capture_id: int, game_id: int, quotes: Iterable[GameQuote], *, commit: bool = False
+    ) -> int:
+        """
+        Records the (book, market, side, line) quotes present in a closing capture payload.
+        Bulk-inserted and idempotent: duplicate presence rows within the payload or from a re-ingest
+        are ignored.
+        """
+        rows: List[dict] = []
+        for q in quotes:
+            market = _GAME_MARKETS.get(q.market_key)
+            side = _SIDES.get(q.side)
+            if market is None or side is None:
+                continue
+            book = self.upsert_sportsbook(q.bookmaker_key, q.bookmaker_title)
+            line_val = None if q.line is None else Decimal(str(q.line)).quantize(Decimal("0.1"))
+            rows.append({
+                "capture_id": capture_id,
+                "game_id": game_id,
+                "sportsbook_id": book.id,
+                "market": market,
+                "side": side,
+                "line": line_val,
+            })
+        return self._insert_presence_rows(capture_id, rows, commit=commit)
+
+    def _insert_presence_rows(
+        self, capture_id: int, rows: List[dict], *, commit: bool = False
+    ) -> int:
+        if not rows:
+            return 0
+
+        deduped: Dict[tuple, dict] = {}
+        for r in rows:
+            m_val = r["market"].value if hasattr(r["market"], "value") else str(r["market"])
+            s_val = r["side"].value if hasattr(r["side"], "value") else str(r["side"])
+            key = (r["sportsbook_id"], m_val, s_val, r["line"])
+            if key not in deduped:
+                deduped[key] = r
+
+        dialect = self.session.get_bind().dialect.name
+        fresh: List[dict] = list(deduped.values())
+        if dialect != "postgresql":
+            # Without NULLS NOT DISTINCT SQLite treats NULL lines as distinct.
+            # Pre-filter against existing rows in the DB to emulate NULLS NOT DISTINCT.
+            table = OddsCapturePresence.__table__
+            stmt = sa_select(
+                table.c.sportsbook_id,
+                table.c.market,
+                table.c.side,
+                table.c.line,
+            ).where(table.c.capture_id == capture_id)
+            existing = set()
+            for book_id, market, side, line in self.session.execute(stmt):
+                m_val = market.value if hasattr(market, "value") else str(market)
+                s_val = side.value if hasattr(side, "value") else str(side)
+                line_val = None if line is None else Decimal(str(line)).quantize(Decimal("0.1"))
+                existing.add((book_id, m_val, s_val, line_val))
+            fresh = [
+                r for r in deduped.values()
+                if (
+                    r["sportsbook_id"],
+                    r["market"].value if hasattr(r["market"], "value") else str(r["market"]),
+                    r["side"].value if hasattr(r["side"], "value") else str(r["side"]),
+                    r["line"],
+                ) not in existing
+            ]
+
+        if not fresh:
+            return 0
+
+        table = OddsCapturePresence.__table__
+        make_insert = {"postgresql": pg_insert, "sqlite": sqlite_insert}.get(dialect, generic_insert)
+        inserted = 0
+        for start in range(0, len(fresh), self._CHUNK):
+            chunk = fresh[start : start + self._CHUNK]
+            stmt = make_insert(table).values(chunk)
+            if dialect in ("postgresql", "sqlite"):
+                stmt = stmt.on_conflict_do_nothing()
+            if dialect == "postgresql":
+                res = self.session.execute(stmt.returning(table.c.id)).all()
+                inserted += len(res)
+            else:
+                self.session.execute(stmt)
+                inserted += len(chunk)
+
+        if commit:
+            self.session.commit()
+        else:
+            self.session.flush()
+        return inserted
+
 

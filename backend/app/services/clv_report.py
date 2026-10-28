@@ -6,6 +6,8 @@ Pinnacle's two-way de-vigged closing price:
   - h2h: Pinnacle's de-vigged closing price of the same side.
   - spreads: only when Pinnacle's closing line equals the bet's line_taken (otherwise
     excluded as line moved).
+  - totals: only when Pinnacle's closing line equals the bet's line_taken (otherwise
+    excluded as line moved).
 
 Games are the independent sampling unit: multiple bets on the same game (e.g. flat and Kelly)
 are averaged first.
@@ -28,6 +30,7 @@ from app.models import (
     Game,
     MarketType,
     ModelPrediction,
+    OddsCapturePresence,
     OddsHistory,
     OddsSnapshotCapture,
     SimulatedBet,
@@ -77,6 +80,7 @@ class PinnacleClvExclusions:
     one_sided_quote: int = 0
     closing_before_bet: int = 0
     unsupported_market: int = 0
+    absent_at_close: int = 0
 
     @property
     def total(self) -> int:
@@ -87,6 +91,7 @@ class PinnacleClvExclusions:
             + self.one_sided_quote
             + self.closing_before_bet
             + self.unsupported_market
+            + self.absent_at_close
         )
 
 
@@ -120,14 +125,31 @@ def build_pinnacle_clv_report(
         book_keys = {bid: k for bid, k in pinnacle_rows}
 
     # Games with closing capture marker
-    markers: Dict[int, datetime] = {}
-    for game_id, captured_at in session.execute(
-        select(OddsSnapshotCapture.game_id, OddsSnapshotCapture.captured_at).where(
+    markers: Dict[int, Tuple[int, datetime]] = {}  # game_id -> (capture_id, captured_at)
+    for cap_id, game_id, captured_at in session.execute(
+        select(OddsSnapshotCapture.id, OddsSnapshotCapture.game_id, OddsSnapshotCapture.captured_at).where(
             OddsSnapshotCapture.kind == CAPTURE_CLOSING
         )
     ).all():
         if captured_at is not None:
-            markers[game_id] = _aware_utc(captured_at)
+            markers[game_id] = (cap_id, _aware_utc(captured_at))
+
+    capture_ids = [cap_id for cap_id, _ in markers.values()]
+    presence_by_capture: Dict[int, Set[Tuple[int, str, str, Optional[Decimal]]]] = {}
+    if capture_ids:
+        for cap_id, book_id, market, side, line in session.execute(
+            select(
+                OddsCapturePresence.capture_id,
+                OddsCapturePresence.sportsbook_id,
+                OddsCapturePresence.market,
+                OddsCapturePresence.side,
+                OddsCapturePresence.line,
+            ).where(OddsCapturePresence.capture_id.in_(capture_ids))
+        ).all():
+            m_val = market.value if hasattr(market, "value") else str(market)
+            s_val = side.value if hasattr(side, "value") else str(side)
+            l_val = _line(line)
+            presence_by_capture.setdefault(cap_id, set()).add((book_id, m_val, s_val, l_val))
 
     # Load all simulated bets with predictions and game info
     rows = session.execute(
@@ -164,14 +186,15 @@ def build_pinnacle_clv_report(
 
     for bet, game_id, market, side, player_id, commence_time in rows:
         # Check closing marker
-        closed_at = markers.get(game_id)
-        if closed_at is None:
+        marker_info = markers.get(game_id)
+        if marker_info is None:
             report.exclusions.no_closing_marker += 1
             continue
+        capture_id, closed_at = marker_info
 
-        # Check market support (h2h and spreads only)
+        # Check market support (h2h, spreads and totals)
         m_str = _enum_value(market)
-        if m_str not in (MarketType.h2h.value, MarketType.spreads.value):
+        if m_str not in (MarketType.h2h.value, MarketType.spreads.value, MarketType.totals.value):
             report.exclusions.unsupported_market += 1
             continue
 
@@ -189,12 +212,13 @@ def build_pinnacle_clv_report(
             report.exclusions.no_pinnacle_quote += 1
             continue
 
+        presence = presence_by_capture.get(capture_id)  # None if capture has no presence rows (legacy)
         if m_str == MarketType.h2h.value:
-            fair_result = _devig_h2h(pre_tipoff, side)
+            fair_result, reason = _devig_h2h(pre_tipoff, side, presence=presence)
             if fair_result is None:
-                # Distinguish no quote vs one sided
-                has_side = any(_enum_value(q.side) == _enum_value(side) for q in pre_tipoff)
-                if has_side:
+                if reason == "absent_at_close":
+                    report.exclusions.absent_at_close += 1
+                elif reason == "one_sided":
                     report.exclusions.one_sided_quote += 1
                 else:
                     report.exclusions.no_pinnacle_quote += 1
@@ -208,7 +232,27 @@ def build_pinnacle_clv_report(
 
         elif m_str == MarketType.spreads.value:
             taken_line = _line(bet.line_taken)
-            fair_result, reason = _devig_spread(pre_tipoff, side, taken_line)
+            fair_result, reason = _devig_spread(pre_tipoff, side, taken_line, presence=presence)
+            if fair_result is None:
+                if reason == "absent_at_close":
+                    report.exclusions.absent_at_close += 1
+                elif reason == "line_moved":
+                    report.exclusions.line_moved += 1
+                elif reason == "one_sided":
+                    report.exclusions.one_sided_quote += 1
+                else:
+                    report.exclusions.no_pinnacle_quote += 1
+                continue
+            fair_prob, fair_price = fair_result
+            rec = BetClvRecord(game_id=game_id, price_taken=float(bet.price_taken), fair_closing_price=fair_price)
+            valid_records.append(rec)
+            game_bet_details[game_id].append(
+                (float(bet.price_taken), fair_price, fair_prob, rec.log_clv, commence)
+            )
+
+        elif m_str == MarketType.totals.value:
+            taken_line = _line(bet.line_taken)
+            fair_result, reason = _devig_totals(pre_tipoff, side, taken_line)
             if fair_result is None:
                 if reason == "line_moved":
                     report.exclusions.line_moved += 1
@@ -273,22 +317,38 @@ def _load_pinnacle_quotes(
     return grouped
 
 
-def _devig_h2h(quotes: List[OddsHistory], bet_side) -> Optional[Tuple[float, float]]:
+def _devig_h2h(
+    quotes: List[OddsHistory],
+    bet_side,
+    presence: Optional[Set[Tuple[int, str, str, Optional[Decimal]]]] = None,
+) -> Tuple[Optional[Tuple[float, float]], str]:
     """
     Finds latest h2h home and away quotes and devigs them.
-    Returns (fair_prob_of_bet_side, fair_closing_price_of_bet_side).
+    Returns ((fair_prob_of_bet_side, fair_closing_price_of_bet_side), status_reason).
     """
     h2h_quotes = [q for q in quotes if _enum_value(q.market) == MarketType.h2h.value]
     if not h2h_quotes:
-        return None
+        return None, "no_quote"
 
     home_quotes = [q for q in h2h_quotes if _enum_value(q.side) == BetSide.home.value]
     away_quotes = [q for q in h2h_quotes if _enum_value(q.side) == BetSide.away.value]
     if not home_quotes or not away_quotes:
-        return None
+        return None, "one_sided" if (home_quotes or away_quotes) else "no_quote"
 
     latest_home = max(home_quotes, key=_recency)
     latest_away = max(away_quotes, key=_recency)
+
+    # If the capture has presence records, both sides must have been present in the capture payload.
+    # If the bet side itself was absent -> "absent_at_close"; if only opposing side absent -> "one_sided".
+    if presence is not None:
+        home_present = (latest_home.sportsbook_id, MarketType.h2h.value, BetSide.home.value, None) in presence
+        away_present = (latest_away.sportsbook_id, MarketType.h2h.value, BetSide.away.value, None) in presence
+        is_home_bet = _enum_value(bet_side) == BetSide.home.value
+        bet_side_present = home_present if is_home_bet else away_present
+        if not bet_side_present:
+            return None, "absent_at_close"
+        if not (home_present and away_present):
+            return None, "one_sided"
 
     d_home = american_to_decimal(latest_home.price_american)
     d_away = american_to_decimal(latest_away.price_american)
@@ -297,11 +357,14 @@ def _devig_h2h(quotes: List[OddsHistory], bet_side) -> Optional[Tuple[float, flo
     is_home = _enum_value(bet_side) == BetSide.home.value
     fair_prob = p_home if is_home else p_away
     fair_price = 1.0 / fair_prob
-    return fair_prob, fair_price
+    return (fair_prob, fair_price), "ok"
 
 
 def _devig_spread(
-    quotes: List[OddsHistory], bet_side, taken_line: Optional[Decimal]
+    quotes: List[OddsHistory],
+    bet_side,
+    taken_line: Optional[Decimal],
+    presence: Optional[Set[Tuple[int, str, str, Optional[Decimal]]]] = None,
 ) -> Tuple[Optional[Tuple[float, float]], str]:
     """
     Finds latest spread quote for bet_side.
@@ -329,6 +392,57 @@ def _devig_spread(
     opp_line = -taken_line
     matching_opp = [
         q for q in spread_quotes if _enum_value(q.side) == opp_side and _line(q.line) == opp_line
+    ]
+    if not matching_opp:
+        return None, "one_sided"
+
+    latest_opp = max(matching_opp, key=_recency)
+
+    # If the capture has presence records, quotes must have been present in the capture payload.
+    if presence is not None:
+        own_key = (latest_own.sportsbook_id, MarketType.spreads.value, _enum_value(bet_side), taken_line)
+        opp_key = (latest_opp.sportsbook_id, MarketType.spreads.value, opp_side, opp_line)
+        if own_key not in presence:
+            return None, "absent_at_close"
+        if opp_key not in presence:
+            return None, "one_sided"
+
+    d_own = american_to_decimal(latest_own.price_american)
+    d_opp = american_to_decimal(latest_opp.price_american)
+    p_own, _ = devig_two_way(d_own, d_opp)
+
+    fair_price = 1.0 / p_own
+    return (p_own, fair_price), "ok"
+
+
+def _devig_totals(
+    quotes: List[OddsHistory], bet_side, taken_line: Optional[Decimal]
+) -> Tuple[Optional[Tuple[float, float]], str]:
+    """
+    Finds latest total quote for bet_side.
+    Only proceeds if Pinnacle's closing line == taken_line.
+    Returns ((fair_prob, fair_price), status_reason).
+    """
+    if taken_line is None:
+        return None, "invalid_line"
+
+    totals_quotes = [q for q in quotes if _enum_value(q.market) == MarketType.totals.value]
+    if not totals_quotes:
+        return None, "no_quote"
+
+    own_quotes = [q for q in totals_quotes if _enum_value(q.side) == _enum_value(bet_side)]
+    if not own_quotes:
+        return None, "no_quote"
+
+    latest_own = max(own_quotes, key=_recency)
+    pinnacle_closing_line = _line(latest_own.line)
+    if pinnacle_closing_line != taken_line:
+        return None, "line_moved"
+
+    # Opponent side at the SAME line
+    opp_side = BetSide.under.value if _enum_value(bet_side) == BetSide.over.value else BetSide.over.value
+    matching_opp = [
+        q for q in totals_quotes if _enum_value(q.side) == opp_side and _line(q.line) == taken_line
     ]
     if not matching_opp:
         return None, "one_sided"

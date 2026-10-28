@@ -130,7 +130,7 @@ One `FeatureState` class serves training and serving. A single chronological pas
 | Never | At or after tip-off |
 | Stale ratings guard | A game is skipped while either team has an earlier game that is not settled |
 | Uniqueness | One bet per (strategy, game, market, side) across all runs |
-| Markets | h2h and spreads. Totals and props are not modelled or settled |
+| Markets | h2h and spreads are model-driven (champion and shadow challengers). Totals are evaluated and bet strictly by the model-free `market_edge` arm against Pinnacle's de-vigged over/under lines and attached to the benchmark model `market_pinnacle` (`role = benchmark`; champion model strategies `flat`, `kelly_fractional`, `kelly_shrunk` never bet totals). Props are not modelled or paper-bet |
 
 ### Staking
 
@@ -171,10 +171,12 @@ Elo cannot see offseason roster moves, so early on it disagrees with Pinnacle a 
 |------|-----------|
 | Grading, h2h | Bet side against the winner |
 | Grading, spreads | `line_taken` is the line of the bet's own side. Bet margin is `home - away` for a home bet and `away - home` for an away bet; `margin + line_taken > 0` wins, `== 0` pushes, `< 0` loses |
+| Grading, totals | Total points `home_score + away_score`. `total > line` wins for `over`, `total < line` wins for `under`, `total == line` pushes (refund) |
 | Profit | Win: `stake * (price - 1)`; loss: `-stake`; push: 0 |
 | Closing price | The **same sportsbook's** latest quote of the **same market, side and exact line** at or before tip-off, taken from a `closing` capture that is **later than the bet** |
 | CLV | `clv_pct = price_taken / closing_price - 1` (decimal prices; a database generated column). Positive means the bet beat the close |
 | Line moved | If the book closed at another line, `closing_price` stays NULL (a price at a different line is not comparable); only `closing_line` is stored |
+| Pinnacle CLV | Per-game CLV against Pinnacle's de-vigged close at the same line (supports h2h, spreads, and totals; lines that moved are excluded) |
 | Brier vs the market | Brier of the champion's h2h home probability against Brier of Pinnacle's de-vigged closing home probability, on the same final games |
 
 ### Known biases
@@ -182,7 +184,7 @@ Elo cannot see offseason roster moves, so early on it disagrees with Pinnacle a 
 | Bias | Why it happens | Effect on the numbers |
 |------|----------------|----------------------|
 | Coverage | CLV needs a `closing` marker. Games are captured only when the PC is on and a tick runs inside the 30-minute window; 13 of 43 tipped-off games had no closing capture (2026-10-26). It cannot be backfilled on a free plan | Fewer bets carry a CLV; the sample is whatever the PC witnessed |
-| Stale close | The feed stores a row only when a book's own update stamp changes. A book that withdrew a market looks "unchanged", so an old quote can pass as the close | CLV can be 0 when the truth is "no longer offered" |
+| Stale close | The feed stores a row only when a book's own update stamp changes. A book that withdrew a market looks "unchanged", so an old quote could pass as the close. **Detected from migration `f1a9c3d7e5b2` on:** closing captures record payload presence in `odds_capture_presence`; quotes absent at close leave `closing_price` NULL and are counted as `absent_at_close` in CLV reports (legacy captures without presence rows retain old behavior) | Eliminates false 0 CLV on dropped markets for captures recorded from this release on |
 | Survivorship | Bets whose book moved the line have no comparable close and drop out | The average CLV is computed over lines that did not move; 35% of bets had a CLV (2026-10-26) |
 | Near-close, not the close | The tick captures the first time a game is inside the 30-minute window, typically 15 to 30 minutes before tip-off, so the last minutes (and late news) are missed | The "close" is slightly earlier than the true close |
 | Same-book CLV | CLV is measured against the book where the best price was found, which is often a soft book, not against Pinnacle | A soft book's close is a weaker benchmark; the Pinnacle-based test is the Brier comparison |

@@ -67,7 +67,7 @@ docs/                  # architecture, quant methodology, operations, setup, DB 
 logs/                  # git-ignored runtime logs (tick.log rotating 2 MB x3, tick.lock)
 ```
 
-Legacy at the repo root (`api.py`, `nba_data_processor.py`, `nba_player_analyzer.py`, tracked `.xlsx` files, `backend/app/etl/pipeline.py` Excel ETL) predates the Postgres platform. A cleanup was proposed but **not executed and is riskier than it looks**: `backend/app/services/report.py` imports `nba_player_analyzer`, `backend/app/etl/pipeline.py` is used by `services/data_update.py` (not only `seed_database.py`), and copies of the legacy modules live both at the root and in `backend/`. Map the importers before deleting anything.
+Legacy prototype cleanup (ROADMAP item 10) was executed safely: `api.py`, `nba_data_processor.py`, `nba_player_analyzer.py`, `nba_player_data.py`, `cluster_means_report.xlsx`, root `app/`, and tracked bytecode files were removed from the root and `backend/`. The PDF scouting report logic needed by `report.py` was moved into `backend/app/services/scouting_report/` and verified with offline tests. The three tracked `nba_active_player_stats_*.xlsx` files and `backend/app/etl/pipeline.py` are deliberately retained because `backend/scripts/seed_database.py` and `backend/app/services/data_update.py` actively read them.
 
 ## 5. How the quant system works
 
@@ -94,7 +94,7 @@ Each step is isolated (a failure never blocks `record`); a lock file prevents ov
 | Promotion | `services/model_promotion.py`, `scripts/model_league.py` | Gates in §6. Audit trail in `model_evaluation`. Kill switch `LEARNING_AUTOPROMOTE`. |
 | Candidate lab | `services/model_lab.py`, `scripts/model_lab.py` | Time-split: select on seasons [T-9, T-2], hold-out [T-1, T]; Elo random search (40 configs, seed) + `margin_features`; historical gate: hold-out log-loss gain ≥ 0.0005 and materially different. |
 
-Database (20 model tables + `alembic_version`; PostgreSQL): platform tables (`season`, `team`, `player`, `player_season_stats`, `team_season_stats`, `player_game_log`, `player_shot`, `player_advanced_stats`, `player_similarity`, `player_contract`, `player_matchup_stats`) and quant tables (`sportsbook`, `game`, `odds_history`, `odds_snapshot_capture`, `team_elo_rating` (per model), `model_version`, `model_prediction`, `simulated_bet`, `model_evaluation`) plus views `v_closing_odds`, `v_paper_performance`.
+Database (21 model tables + `alembic_version`; PostgreSQL): platform tables (`season`, `team`, `player`, `player_season_stats`, `team_season_stats`, `player_game_log`, `player_shot`, `player_advanced_stats`, `player_similarity`, `player_contract`, `player_matchup_stats`) and quant tables (`sportsbook`, `game`, `odds_history`, `odds_snapshot_capture`, `odds_capture_presence`, `team_elo_rating` (per model), `model_version`, `model_prediction`, `simulated_bet`, `model_evaluation`) plus views `v_closing_odds`, `v_paper_performance`.
 
 ## 6. Decisions that shaped the system (why, not just what)
 
@@ -144,12 +144,13 @@ Rejected/not done: paid odds feeds (OpticOdds ~$5k/mo), scraping ESPN/OddsPortal
 - **Hardcoded interpreter paths**: `scripts/run_backend.bat` and `scripts/run_pipeline.bat` contain this PC's Python path. `scripts/register_tick_task.ps1` now discovers Python (`-PythonExe`, `backend/.venv`, `run_pipeline.bat` if the path exists, then PATH), but the `.bat` files still need editing on a new machine.
 - **Dependencies**: the code uses psycopg 3 (`postgresql+psycopg://`); `requirements.txt`/`pyproject.toml` were fixed to list `psycopg[binary]` (earlier they listed only `psycopg2-binary`, which would break a clean install). `ETL_BATCH_SIZE` in `config.py` is defined but unused. The README links a `LICENSE` file that does not exist; the licence holder is the owner's call.
 - **Feature sets are frozen per model**: `MarginFeaturesModel` raises if the stored `feature_names` differ from the code's `FEATURE_NAMES`, so adding features in place would make challenger id 2 unloadable. Version the feature set in code (keep the old list loadable) before adding any.
+- **Retained legacy data and ETL**: The three tracked `nba_active_player_stats_*.xlsx` files and `backend/app/etl/pipeline.py` are deliberately retained because `backend/scripts/seed_database.py` and `backend/app/services/data_update.py` actively read them. Dead prototype files (`api.py`, `nba_data_processor.py`, `nba_player_analyzer.py`, `nba_player_data.py`, `cluster_means_report.xlsx`) were removed under ROADMAP item 10, and report generation logic was moved to `backend/app/services/scouting_report/`.
 
 ## 9. State of the system (as of 2026-10-26)
 
 | Metric | Value |
 |--------|-------|
-| Tests | 843 backend tests pass (2026-10-28, integrated betting-improvements branch); frontend `tsc --noEmit` clean |
+| Tests | 893 backend tests pass (2026-10-28, with the betting-improvements work and the rest of the roadmap); frontend `tsc --noEmit` clean |
 | Database | PostgreSQL 18.4, 229 MB, Alembic head `e3f8b1a4c9d2`; 23 seasons of game logs (2003-04..2025-26), 59k Elo rows per model |
 | Capture | Since 2026-10-06 (opening lines) and 2026-10-20 (full tick); Odds API credits left: 371 (resets on the 1st of each month); task healthy, 0 failed ticks |
 | Paper trading (2026-10-20 → 10-26) | flat: 56 bets (49 settled), P/L −5.28 u, ROI −11.4%; ¼ Kelly: 44 bets, −13.34 u. Bankrolls 94.7 u / 86.7 u. **Tiny samples, not evidence of anything.** |
@@ -176,7 +177,7 @@ Modelling caveats the next agent must handle:
 3. **Evaluation.** First make the feature set versionable in code (see §8, "Feature sets are frozen per model"), then register the new set as a *new `margin_features` version*, run `scripts/model_lab.py` for the historical gate, and let it run in shadow; promotion is decided by `learn`, not by hand. Expect the historical gain to be small: a +0.0026 gain needs thousands of paired games to be detectable.
 4. Keep tests offline: store a few real PDFs/text fixtures, never fetch in tests.
 
-Other backlog (see [`docs/ROADMAP.md`](docs/ROADMAP.md)): totals and props models through the same registry; settle totals/props bets; frontend league page; promotion notifications; shutdown-endpoint hardening; second odds feed (SportsGameOdds free tier); CI; legacy cleanup.
+Other backlog (see [`docs/ROADMAP.md`](docs/ROADMAP.md)): totals and props models through the same registry; settle totals/props bets; frontend league page; promotion notifications; shutdown-endpoint hardening; second odds feed (SportsGameOdds free tier); CI; legacy cleanup (done).
 
 ## 11. Moving to a new PC (checklist)
 

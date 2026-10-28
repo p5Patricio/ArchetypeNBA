@@ -575,7 +575,13 @@ class OddsHistory(SQLModel, table=True):
 MODEL_ROLE_CHAMPION = "champion"  # drives the paper bets; exactly one at a time
 MODEL_ROLE_CHALLENGER = "challenger"  # shadow predictions only
 MODEL_ROLE_RETIRED = "retired"
-MODEL_ROLES = (MODEL_ROLE_CHAMPION, MODEL_ROLE_CHALLENGER, MODEL_ROLE_RETIRED)
+MODEL_ROLE_BENCHMARK = "benchmark"
+MODEL_ROLES = (
+    MODEL_ROLE_CHAMPION,
+    MODEL_ROLE_CHALLENGER,
+    MODEL_ROLE_RETIRED,
+    MODEL_ROLE_BENCHMARK,
+)
 
 EVALUATION_DECISIONS = (
     "insufficient_data", "keep", "promote", "retire", "rollback", "proposal", "dry_run",
@@ -812,3 +818,45 @@ class OddsSnapshotCapture(SQLModel, table=True):
     quotes_inserted: int = Field(
         default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
     )
+
+
+class OddsCapturePresence(SQLModel, table=True):
+    """
+    Quotes present in the payload of an odds snapshot capture.
+
+    Used to detect stale closing quotes: odds_history rows are inserted only when a book's own
+    update stamp changes, so a book that dropped a market looks 'unchanged' in odds_history.
+    This table records every quote actually present in the capture payload.
+    """
+
+    __tablename__ = "odds_capture_presence"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "capture_id",
+            "sportsbook_id",
+            "market",
+            "side",
+            "line",
+            name="uq_odds_capture_presence_quote",
+            postgresql_nulls_not_distinct=True,
+        ),
+        Index("ix_odds_capture_presence_capture_id", "capture_id"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    capture_id: int = Field(
+        sa_column=Column(_BIG_ID, ForeignKey("odds_snapshot_capture.id", ondelete="CASCADE"), nullable=False)
+    )
+    game_id: int = Field(
+        sa_column=Column(_BIG_ID, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    )
+    sportsbook_id: int = Field(
+        sa_column=Column(_SMALL_ID, ForeignKey("sportsbook.id"), nullable=False)
+    )
+    market: MarketType = Field(sa_column=Column(_MARKET_TYPE, nullable=False))
+    side: BetSide = Field(sa_column=Column(_BET_SIDE, nullable=False))
+    line: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
+

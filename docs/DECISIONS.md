@@ -68,6 +68,9 @@ Entries are grouped by area below; the IDs follow the index. To change a decisio
 | [D-52](#d-52-a-manifest-with-exact-row-counts-checked-on-both-ends) | 2026-10-26 | A manifest with exact row counts, checked on both ends | Operations |
 | [D-53](#d-53-dumps-and-secrets-never-in-git) | 2026-10-26 | Dumps and secrets never in git | Security |
 | [D-54](#d-54-one-pc-captures-at-a-time-in-a-fixed-cutover-order) | 2026-10-26 | One PC captures at a time, in a fixed cutover order | Operations |
+| [D-55](#d-55-everything-runs-in-wsl2-systemd-timers-replace-task-scheduler) | 2026-10-27 | Everything runs in WSL2; systemd timers replace Task Scheduler | Operations |
+| [D-56](#d-56-judge-the-paper-system-by-pinnacle-referenced-clv-per-game-add-two-staking-arms-and-a-report-only-selection-test) | 2026-10-28 | Judge the paper system by Pinnacle-referenced CLV per game | Method |
+| [D-58](#d-58-second-odds-feed-sportsgameodds-as-best-price-contributor-only) | 2026-10-28 | Second odds feed (SportsGameOdds) as best-price contributor only | Data |
 
 ## Data and scope
 
@@ -532,6 +535,25 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Alternatives rejected**: Judging by ROI (needs about 15,000 bets for +2%); replacing the fixed quarter-Kelly outright (rule 8: a new strategy keeps the old bankroll comparable); a hard multiple-testing gate by default (a silent policy change).
 - **Consequences**: New enum values need the lockstep deploy; the two arms are hypotheses and carry no weight until their CLV against Pinnacle is positive with t above 2.
 - **Source**: [`RESEARCH_BETTING_IMPROVEMENTS.md`](RESEARCH_BETTING_IMPROVEMENTS.md); [`betting-improvements.md`](../odd/tasks/betting-improvements.md).
+
+### D-57 Totals paper bets via model-free market benchmark model (`market_pinnacle`)
+- **Date**: 2026-10-28
+- **Decision**: Totals (over/under) paper bets are evaluated and placed strictly by the model-free `market_edge` strategy (comparing best sportsbook odds against Pinnacle's de-vigged fair over/under at the exact same total line). The champion forecasting model and model-driven strategies (`flat`, `kelly_fractional`, `kelly_shrunk`) never bet totals. To satisfy the `simulated_bet.prediction_id` NOT NULL foreign key while upholding AGENTS.md rule 8 ("every bet must stay attributable") and preventing artificial inflation of champion prediction counts, totals predictions are attached to a dedicated model-free benchmark model (`name='market_pinnacle'`, `version='1'`, `params={"family": "market"}`, `role='benchmark'`, `notes="Pinnacle's de-vigged probability, not a forecasting model"`). The role `benchmark` is added to `MODEL_ROLES` in `app/models.py` and guarded by Alembic migration `a2c4e6f8b1d3`. All model league components, promotion logic, evaluation audits, and active forecasting model reports strictly ignore benchmark rows.
+- **Context**: In the initial draft of WP-T, totals predictions were attached to the champion's `model_version_id` to avoid a schema migration. That design was rejected because it violated AGENTS.md rule 8 by attributing to the champion predictions it never made, distorted the champion's prediction counts, and broke model attribution. The correct architecture introduces a distinct `benchmark` role and `market_pinnacle` row so totals predictions truthfully represent Pinnacle's fair probabilities.
+- **Alternatives rejected**:
+  1. Attaching totals predictions to the champion's `model_version_id` (rejected: violates AGENTS.md rule 8; falsifies champion attribution; inflates champion prediction tallies).
+  2. Making `simulated_bet.prediction_id` nullable (rejected: loses the audit trail of what probability justified the bet).
+  3. Forecasting model for totals: market audit demonstrated closing totals error sd ~17.7 points across 39 games and no verified evidence of statistical edge over Pinnacle's close.
+- **Consequences**: Hand-written Alembic migration `a2c4e6f8b1d3` updates `ck_model_version_role` to include `'benchmark'`. The model league and promotion gates remain 100% untouched and pure forecasting models (h2h/spreads). The champion's prediction counts remain strictly attributable to games it predicted.
+- **Source**: WP-T2; [`QUANT_MODULE.md`](QUANT_MODULE.md); [`DECISIONS.md`](DECISIONS.md); migration `a2c4e6f8b1d3`.
+
+### D-58 Second odds feed (SportsGameOdds) as best-price contributor only
+- **Date**: 2026-10-28
+- **Decision**: Integrate SportsGameOdds as a second odds provider (free Amateur tier: 2,500 objects/month, 10 requests/minute, 9 US books, no Pinnacle) behind a generic `OddsProvider` protocol (`services/odds_providers/base.py`). The feed is completely disabled until `SPORTSGAMEODDS_API_KEY` is provided. It NEVER creates games (events match existing `Game` rows by team names/abbreviations and commence time within a 6-hour tolerance; unmatched events are logged and skipped), and because it lacks a sharp bookmaker, it NEVER generates paper bets or fair probability references on its own. Its quotes are stored as ordinary `odds_history` rows to serve solely as best-price execution candidates and market cross-checks. A conservative quota guard checks `/account/usage` and tracks monthly objects consumed in `logs/sportsgameodds_usage.json`, stopping at `SPORTSGAMEODDS_MIN_REMAINING_OBJECTS` (default 100). A probe CLI `scripts/sgo_probe.py` allows inspecting live API responses safely without scheduling.
+- **Context**: The Odds API 500 credit/month quota provides 1 props event per closing run; a second free feed adds redundancy and best-price line shopping across books like Caesars and ESPN BET that are not in our primary feed call.
+- **Alternatives rejected**: Using SportsGameOdds for paper-trading fair value (rejected: lacks a sharp book like Pinnacle); creating `Game` entities from secondary feeds (rejected: avoids duplicating games or conflicting schedules); polling without quota guards.
+- **Consequences**: No database schema change needed. When enabled, more bookmakers are tracked in `sportsbook` and `odds_history`. The system remains offline and untouched during ticks until the owner configures a valid key.
+- **Source**: [`ROADMAP.md`](ROADMAP.md) item 8; `app/services/odds_providers/sportsgameodds.py`.
 
 ## Next step
 

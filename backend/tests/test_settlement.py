@@ -173,6 +173,14 @@ def reload(s, row):
         # away favourite -6.5
         ("spreads", "away", Decimal("-6.5"), 90, 100, BetStatus.won),
         ("spreads", "away", Decimal("-6.5"), 95, 100, BetStatus.lost),
+        # totals: over wins when total > line, loses when total < line, push on equal
+        ("totals", "over", Decimal("220.5"), 115, 110, BetStatus.won),
+        ("totals", "over", Decimal("220.5"), 110, 105, BetStatus.lost),
+        ("totals", "over", Decimal("220"), 110, 110, BetStatus.push),
+        # totals: under wins when total < line, loses when total > line, push on equal
+        ("totals", "under", Decimal("220.5"), 110, 105, BetStatus.won),
+        ("totals", "under", Decimal("220.5"), 115, 110, BetStatus.lost),
+        ("totals", "under", Decimal("220"), 110, 110, BetStatus.push),
     ],
 )
 def test_grade_bet(market, side, line, home, away, expected):
@@ -180,7 +188,8 @@ def test_grade_bet(market, side, line, home, away, expected):
 
 
 def test_grade_bet_refuses_markets_it_does_not_settle():
-    assert grade_bet("totals", "over", Decimal("220.5"), 110, 100) is None
+    assert grade_bet("totals", "over", None, 110, 100) is None
+    assert grade_bet("totals", "home", Decimal("220.5"), 110, 100) is None
     assert grade_bet("spreads", "home", None, 110, 100) is None
     assert grade_bet("player_points", "over", Decimal("25.5"), 110, 100) is None
 
@@ -250,11 +259,11 @@ def test_games_that_are_not_final_leave_their_bets_pending(world):
 
 def test_unsupported_markets_stay_pending(world):
     game = final_game(world, 110, 100)
-    totals = place_bet(world, game, MarketType.totals, BetSide.over, line=210.5)
+    props = place_bet(world, game, MarketType.player_points, BetSide.over, line=25.5)
 
     summary = settle_bets(world, NOW)
 
-    assert summary.skipped_unsupported == 1 and reload(world, totals).status == BetStatus.pending
+    assert summary.skipped_unsupported == 1 and reload(world, props).status == BetStatus.pending
 
 
 def test_both_strategies_of_one_prediction_settle_independently(world):
@@ -443,3 +452,71 @@ def test_clv_is_independent_of_settlement(world):
 
     bet = reload(world, bet)
     assert bet.status == BetStatus.won and bet.closing_price == Decimal("1.8000")
+
+
+def total_bet(world, game, side=BetSide.over, **kwargs):
+    kwargs.setdefault("line", 220.5)
+    return place_bet(world, game, MarketType.totals, side, **kwargs)
+
+
+def test_settle_totals_bets_end_to_end(world):
+    # Total: 110 + 110 = 220
+    game = final_game(world, 110, 110)
+    over_win = total_bet(world, game, BetSide.over, line=215.5, price="1.9500", stake="1.000")
+    over_loss = total_bet(world, game, BetSide.over, line=225.5, price="1.9500", stake="1.000")
+    over_push = total_bet(world, game, BetSide.over, line=220.0, price="1.9500", stake="1.000")
+    under_win = total_bet(world, game, BetSide.under, line=225.5, price="1.9500", stake="1.000")
+    under_loss = total_bet(world, game, BetSide.under, line=215.5, price="1.9500", stake="1.000")
+    under_push = total_bet(world, game, BetSide.under, line=220.0, price="1.9500", stake="1.000")
+
+    summary = settle_bets(world, NOW)
+
+    assert summary.total_settled == 6
+    assert summary.settled[BetStatus.won.value] == 2
+    assert summary.settled[BetStatus.lost.value] == 2
+    assert summary.settled[BetStatus.push.value] == 2
+    assert reload(world, over_win).status == BetStatus.won
+    assert reload(world, over_win).profit_units == Decimal("0.950")
+    assert reload(world, over_loss).status == BetStatus.lost
+    assert reload(world, over_loss).profit_units == Decimal("-1.000")
+    assert reload(world, over_push).status == BetStatus.push
+    assert reload(world, over_push).profit_units == Decimal("0.000")
+    assert reload(world, under_win).status == BetStatus.won
+    assert reload(world, under_win).profit_units == Decimal("0.950")
+    assert reload(world, under_loss).status == BetStatus.lost
+    assert reload(world, under_loss).profit_units == Decimal("-1.000")
+    assert reload(world, under_push).status == BetStatus.push
+    assert reload(world, under_push).profit_units == Decimal("0.000")
+
+
+def test_totals_clv_same_book_matching_and_line_moved(world):
+    game = add_game(world)
+    # Bet placed on Over 220.5 at +100 (2.0000)
+    bet_matching = total_bet(world, game, BetSide.over, line=220.5, american=100, price="2.0000", book="pinnacle")
+    # Closing quote for matching bet at the same line 220.5 with price -125 (1.8000)
+    closing_quote = add_quote(world, game, "pinnacle", MarketType.totals, BetSide.over, -125, 220.5, captured_at=CLOSING_AT)
+
+    # Bet placed on FanDuel Under 218.5 at -110 (1.9090)
+    bet_moved = total_bet(world, game, BetSide.under, line=218.5, american=-110, price="1.9090", book="fanduel")
+    # FanDuel closed at 217.0 (line moved!)
+    add_quote(world, game, "fanduel", MarketType.totals, BetSide.under, -110, 217.0, captured_at=CLOSING_AT)
+
+    add_marker(world, game)
+
+    summary = fill_clv(world, NOW)
+
+    assert summary.candidates == 2
+    assert summary.filled == 1
+    assert summary.line_moved == 1
+
+    bet_matching = reload(world, bet_matching)
+    assert bet_matching.closing_odds_id == closing_quote.id
+    assert bet_matching.closing_price == Decimal("1.8000")
+    assert bet_matching.closing_line == Decimal("220.5")
+    assert float(bet_matching.clv_pct) == pytest.approx(2.0 / 1.8 - 1, abs=1e-4)
+
+    bet_moved = reload(world, bet_moved)
+    assert bet_moved.closing_odds_id is None
+    assert bet_moved.closing_price is None
+    assert bet_moved.closing_line == Decimal("217.0")
+    assert bet_moved.clv_pct is None

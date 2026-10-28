@@ -13,15 +13,15 @@ What to build next and why, in priority order. Each item states the reason, how 
 | # | Item | Size | Why now |
 |---|------|------|---------|
 | 1 | Injuries and lineups as a model signal (partly done: fabrication removed, parser and lineup logger built; downloads disabled until the owner clears the NBA terms) | L | The one thing the baseline cannot see and the market can |
-| 2 | Totals and props models, with settlement | L | The data is already captured and paid for |
+| 2 | Totals (done: grading, CLV and market-edge paper bets; props models deferred) | L | The data is already captured and paid for |
 | 3 | Frontend model-league page (done) | M | The league is invisible outside a terminal |
 | 4 | Promotion notifications (done) | S | A champion change should not go unnoticed |
 | 5 | Shutdown endpoint CSRF and origin hardening (done) | S | An unauthenticated endpoint can stop the services |
-| 6 | Closing-quote presence record | M | Stale closes bias CLV |
+| 6 | Closing-quote presence record (done) | M | Stale closes bias CLV |
 | 7 | Postponed-game polling (done) | S | Wasted calls and noise for up to 14 days |
-| 8 | Second odds feed | M | Redundancy and more props; no sharp book |
+| 8 | Second odds feed (built, disabled until key exists, unverified against live responses) | M | Redundancy and more props; no sharp book |
 | 9 | CI that runs the test suite (done) | S | No automated check exists |
-| 10 | Legacy cleanup | M | Dead code and confusing duplicates |
+| 10 | Legacy cleanup (done) | M | Dead code and confusing duplicates |
 | 11 | Fix `props_engine.load_baselines_from_db` (done) | S | It reads a SQLite file that does not exist |
 
 Small fixes found while writing these docs are listed at the end ([hygiene](#hygiene-fixes)).
@@ -64,19 +64,23 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 ## 2. Totals and props models, with settlement
 
-**Why.** The 3-credit game-lines call already captures totals for every game, and one player-props event per closing run is already stored. Nothing models or settles them, so that spend produces no evidence.
+**Status**: Totals implemented (WP-T: settlement, same-book and Pinnacle CLV, reporting, and model-free `market_edge` paper bets); props models deliberately deferred.
+
+**Why.** The 3-credit game-lines call already captures totals for every game, and one player-props event per closing run is stored. Research on closing totals lines revealed a forecast error standard deviation of ~17.7 points over 39 games (`scripts/market_audit.py`) with no verified evidence of an edge for statistical scoring models. Consequently, totals are handled through:
+- Complete settlement in `settlement.grade_bet` (over wins when total > line, under when total < line, push on equal).
+- Same-book and Pinnacle-referenced CLV at the exact matching total line.
+- Paper betting strictly via the model-free `market_edge` arm against Pinnacle de-vigged over/under lines (champion models and model-driven strategies never bet totals).
+- Reporting in `paper_report` with per-market breakdowns (`h2h`, `spreads`, `totals`) and `/paper` bets table display in Spanish and English.
+
+Props models are deliberately deferred: player prop bets are not recorded anywhere in paper trading, and capturing one event per tick produces far too small and noisy of a sample to justify model development or paper trading.
 
 **Acceptance criteria.**
 
-- [ ] Totals: a model registered through the same registry (the family protocol is currently `Prediction(p_home, mu, sigma)` for margins and needs a total-points form), recorded as shadow predictions with the same pre-tip-off guarantees.
-- [ ] `settlement.grade_bet` handles `totals` (over and under, with pushes on integer lines); CLV works for it; the paper report shows it.
-- [ ] Props: grading from `player_game_log` box scores, with `void` for players who did not play, after the name-matching rules are reviewed.
-- [ ] Betting policy thresholds re-derived for the new markets and registered as a new `model_version` (rule 8).
-- [ ] Offline tests; no extra credits beyond the guard.
-
-**Risks.** Props samples are tiny at one event per tick; name matching (diacritics, suffixes); voids and minutes; the aggressive policy could over-bet a market with no evidence yet.
-
-**First step.** Totals only: extend `grade_bet` and the report with tests, then a pace and scoring model scored on history by the lab.
+- [x] `settlement.grade_bet` handles `totals` (over and under, with pushes on integer lines); CLV works for it; the paper report shows it.
+- [x] Pinnacle-referenced CLV supports totals (`_devig_totals` at matching line).
+- [x] Totals considered and paper-bet exclusively by the `market_edge` benchmark arm against Pinnacle de-vigged quotes, attached to benchmark model `market_pinnacle` (role `benchmark`); zero pollution of the model league or champion attribution.
+- [x] Per-market breakdown in `paper_report` and `/paper` bets table UI localized.
+- [ ] Props models and props grading (deferred: insufficient sample size at 1 event/tick).
 
 ## 3. Frontend model-league page
 
@@ -121,15 +125,15 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 **First step.** Add an origin and host dependency to the router and its tests.
 
-## 6. Closing-quote presence record
+## 6. Closing-quote presence record (done)
 
 **Why.** The feed stores a row only when a book's own update stamp changes. A book that dropped a market looks "unchanged", so a stale quote can pass as the close and produce a false 0 CLV.
 
 **Acceptance criteria.**
 
-- [ ] Each capture records which (game, book, market, side) were present in the payload.
-- [ ] CLV ignores or flags a closing quote that was absent at the closing capture; the report shows how many.
-- [ ] A migration deployed in lockstep ([`OPERATIONS.md`](OPERATIONS.md), section 4); tests.
+- [x] Each capture records which (game, book, market, side) were present in the payload.
+- [x] CLV ignores or flags a closing quote that was absent at the closing capture; the report shows how many.
+- [x] A migration deployed in lockstep ([`OPERATIONS.md`](OPERATIONS.md), section 4); tests.
 
 **Risks.** Table growth (small: tens of rows per game per capture); touching the capture path that spends credits.
 
@@ -149,20 +153,21 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 **First step.** Add an attempt counter or an age rule in `results_sync` and test it.
 
-## 8. Second odds feed
+## 8. Second odds feed (built, disabled until key exists, unverified against live responses)
 
-**Why.** Redundancy if The Odds API fails or the quota runs out, and more props coverage. The candidate found in 2026-10 is SportsGameOdds (free "Amateur" tier, about 2,500 events a month, props, 9 US books, **no Pinnacle**).
+**Why.** Redundancy if The Odds API fails or the quota runs out, and more props/bookmaker coverage. Integrated SportsGameOdds (free "Amateur" tier, 2,500 objects a month, 10 req/min, 9 US books: FanDuel, DraftKings, BetMGM, Caesars, ESPN BET, Bovada, Unibet, PointsBet, William Hill; **no Pinnacle**).
 
 **Acceptance criteria.**
 
-- [ ] A provider interface; the second feed writes its own `sportsbook` rows and has its own quota guard.
-- [ ] The sharp reference stays Pinnacle: a feed without a sharp book never creates bets alone.
-- [ ] Idempotent ingestion; offline tests from recorded fixtures.
-- [ ] Terms and free-tier limits read and recorded first (the figures above date from the original research and may have changed).
+- [x] A provider interface (`services/odds_providers/base.py`) with SportsGameOdds client (`services/odds_providers/sportsgameodds.py`); writes its own `sportsbook` rows and has its own quota guard.
+- [x] The sharp reference stays Pinnacle: a feed without a sharp book never creates bets alone.
+- [x] Idempotent ingestion into existing `Game` rows; never creates games; offline tests from documented fixtures (`tests/test_sportsgameodds.py`).
+- [x] Terms and free-tier limits read and recorded from primary documentation (`docs/DECISIONS.md` D-58, `docs/OPERATIONS.md`).
+- [ ] Owner supplies a valid `SPORTSGAMEODDS_API_KEY` and verifies live response shapes using `scripts/sgo_probe.py`.
 
-**Risks.** Terms; duplicate games across feeds; accounting for two quotas.
+**Risks.** Live payload differences once a key is used (mitigated by `sgo_probe.py`); unverified against real live responses until the owner configures a key.
 
-**First step.** Re-read the provider's current terms and free-tier limits, then ask the user before integrating.
+**First step.** Owner registers at sportsgameodds.com, sets `SPORTSGAMEODDS_API_KEY` in `backend/.env`, and runs `python scripts/sgo_probe.py` to verify real response against assumed shapes.
 
 ## 9. CI that runs the test suite (done)
 
@@ -178,26 +183,20 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 **First step.** Add `.github/workflows/tests.yml` on a branch and open a pull request.
 
-## 10. Legacy cleanup
+## 10. Legacy cleanup (done)
 
-**Why.** The repository still carries the pre-PostgreSQL prototype: root `api.py`, `nba_data_processor.py`, `nba_player_analyzer.py`, `nba_player_data.py` and tracked `.xlsx` files, copies of the same modules in `backend/`, the Excel ETL (`backend/app/etl/pipeline.py`) and `seed_database.py`. A cleanup was proposed and not executed.
+**Why.** The repository carried pre-PostgreSQL prototype files from early development. Safely cleaned up under WP-L without breaking live report generation or data updates.
 
-**Do not delete blindly (verified 2026-10-26).**
-
-| Piece | Still used by |
-|-------|---------------|
-| `nba_player_analyzer` (and through it `nba_data_processor`) | `backend/app/services/report.py` (PDF scouting reports) and the root `api.py` |
-| `app/etl/pipeline.py` | `app/services/data_update.py` and `backend/scripts/seed_database.py` |
+**Completed 2026-10-28:**
+- Moved report generation logic (`generate_player_report_pdf`, `create_radar_chart_to_file`, `STAT_NAMES_MAP`, `radar_stats_categories`, `assign_cluster_roles`) into `backend/app/services/scouting_report/` and verified with offline tests (`backend/tests/test_report.py`).
+- Deleted dead root files and backend copies with zero live callers: `api.py`, `nba_player_analyzer.py`, `nba_data_processor.py`, `nba_player_data.py`, `cluster_means_report.xlsx`, root `app/`, and tracked bytecode files (`*.pyc`).
+- **Deliberately kept**: `backend/app/etl/pipeline.py` and the three `nba_active_player_stats_*.xlsx` data files because `backend/scripts/seed_database.py`, `backend/app/services/data_update.py`, and `backend/tests/test_data_update_api.py` actively read them.
 
 **Acceptance criteria.**
 
-- [ ] An inventory of importers (the table above, completed with a code search).
-- [ ] `report.py` no longer imports a root-level module (move what it needs into `app/`).
-- [ ] Removal in small pull requests, tests green after each; `README.md` updated.
-
-**Risks.** The PDF report and the data-update endpoint break silently.
-
-**First step.** Search for every importer and write the inventory into the plan file.
+- [x] An inventory of importers (`odd/tasks/legacy-cleanup.md`).
+- [x] `report.py` no longer imports a root-level module (moved to `app/services/scouting_report/`).
+- [x] Removal verified with offline tests and full suite green; `README.md`, `AGENTS.md`, and docs updated.
 
 ## 11. Fix `props_engine.load_baselines_from_db`
 
@@ -241,6 +240,7 @@ Small items found while documenting (2026-10-26). Each is a few lines.
 | Postponed games and props baselines (items 7 and 11) | Games 48 h past tip-off with no result become `postponed` and are no longer polled; a new commence time returns them to `scheduled`. Props baselines come from the database ordered by season label; no static fallback. Props refresh respects the credit floor (HTTP 429) and the cached slate reports its age |
 | Fabricated injuries removed (part of item 1) | `fetch_injury_report()` returns `available=false` with a reason; the NBA PDF download is behind `INJURY_PDF_ENABLED` (default off), the parser works on text and is tested offline; `scripts/log_lineups.py` measures how early `nba_api` publishes starters |
 | Multiple-comparison control in the lab (research item 4) | Reality Check, SPA and DM-HLN p-values recorded for every lab run; `LAB_MULTITEST_GATE` (default off) makes SPA p < 0.2 a registration condition |
+| Closing-quote presence record (item 6) | `odds_capture_presence` table (migration `f1a9c3d7e5b2`) records quotes seen in closing capture payloads; `fill_clv` and Pinnacle CLV report require presence when presence rows exist, counting absent quotes as `absent_at_close`; `v_closing_odds` updated |
 
 ### Found while doing this work (2026-10-28)
 
@@ -249,7 +249,7 @@ Small items found while documenting (2026-10-26). Each is a few lines.
 | Hardcoded player filter in props | `_compute_today_props` analyses only 8 named star players; it limits credit use but is static data standing in for a rule |
 | Backend strings in English on Spanish pages | The league gate sentence and audit reason come from the backend untranslated |
 | `balldontlie` is not a free source of injuries | Injuries need the ALL-STAR tier ($9.99/month), lineups the GOAT tier; free tier is 5 requests/minute with basic data |
-| Items still open | 2 (totals and props models: measure first with `scripts/market_audit.py`), 6 (closing-quote presence, schema plus capture path), 8 (second odds feed, terms), 10 (legacy cleanup) |
+| Items still open | 2 (totals and props models: measure first with `scripts/market_audit.py`), 8 (second odds feed, terms), 10 (legacy cleanup) |
 
 ## Next step
 
