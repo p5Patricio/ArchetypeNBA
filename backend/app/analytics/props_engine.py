@@ -20,6 +20,20 @@ def normalize_player_key(name: str) -> str:
     return " ".join(cleaned.split())
 
 
+_PLAYER_SUFFIXES = ("jr", "sr", "ii", "iii", "iv", "v")
+
+
+def strip_player_suffix(name_key: str) -> str:
+    """
+    Strips common suffixes (jr, sr, ii, iii, iv, v) from a normalized player key.
+    E.g. "pj washington jr" -> "pj washington", "trey murphy iii" -> "trey murphy".
+    """
+    tokens = (name_key or "").split()
+    if len(tokens) > 1 and tokens[-1].lower() in _PLAYER_SUFFIXES:
+        return " ".join(tokens[:-1])
+    return name_key
+
+
 def index_props_by_player(props_map: Dict[str, Dict[str, "PropBetLine"]]) -> Dict[str, Dict[str, "PropBetLine"]]:
     """Re-keys a {player name: {stat: line}} map by normalize_player_key so lookups ignore accents."""
     indexed: Dict[str, Dict[str, "PropBetLine"]] = {}

@@ -296,6 +296,62 @@ def test_prop_quotes_for_an_unknown_event_are_skipped_not_fatal(world):
     assert (result.inserted, result.skipped_unmatched) == (0, 2)
 
 
+def test_prop_quotes_match_players_with_suffixes(world, db_session):
+    db_session.add(Player(id=10, full_name="P.J. Washington Jr."))
+    db_session.add(Player(id=11, full_name="Marcus Morris"))
+    db_session.add(Player(id=12, full_name="Trey Murphy III"))
+    db_session.commit()
+
+    service = OddsIngestionService(db_session)
+    service.ingest_game_quotes([_gq()], CAPTURED)
+
+    # Provider sends without suffix or with different suffix casing
+    quotes = [
+        _pq(player="PJ Washington"),
+        _pq(player="Marcus Morris Sr.", side="under", price=-105),
+        _pq(player="Trey Murphy"),
+    ]
+    result = service.ingest_prop_quotes("e1", quotes, CAPTURED)
+    assert result.inserted == 3
+    rows = {r.player_id: r for r in db_session.exec(select(OddsHistory)).all() if r.player_id in (10, 11, 12)}
+    assert set(rows.keys()) == {10, 11, 12}
+
+
+def test_prop_quotes_resolves_ambiguity_when_restricted_to_game_teams(world, db_session):
+    from app.models import PlayerSeasonStats
+    # Two players named Marcus Morris in the league, but one plays for BOS (home team)
+    db_session.add(Player(id=20, full_name="Marcus Morris"))
+    db_session.add(Player(id=21, full_name="Marcus Morris"))
+    bos = world.resolve_team("Boston Celtics")
+    lal = world.resolve_team("Los Angeles Lakers")
+    season = db_session.exec(select(Season).where(Season.is_active == True)).first()
+    db_session.add(PlayerSeasonStats(player_id=20, team_id=bos.id, season_id=season.id))
+    db_session.add(PlayerSeasonStats(player_id=21, team_id=lal.id, season_id=season.id))
+    db_session.commit()
+
+    service = OddsIngestionService(db_session)
+    service.ingest_game_quotes([_gq(home="Boston Celtics", away="LA Clippers")], CAPTURED)
+
+    # The game is BOS vs LAC. Marcus Morris #20 is on BOS.
+    result = service.ingest_prop_quotes("e1", [_pq(player="Marcus Morris")], CAPTURED)
+    assert result.inserted == 1
+    row = db_session.exec(select(OddsHistory).where(OddsHistory.player_id == 20)).first()
+    assert row is not None
+
+
+def test_unmatched_player_counter_and_info_logging(world, caplog):
+    import logging
+    world.ingest_game_quotes([_gq()], CAPTURED)
+
+    with caplog.at_level(logging.INFO):
+        result = world.ingest_prop_quotes("e1", [_pq(player="Nonexistent Player")], CAPTURED)
+
+    assert result.inserted == 0
+    assert result.skipped_unmatched == 1
+    assert result.unmatched_names == 1
+    assert "unmatched or ambiguous" in caplog.text
+
+
 def test_ingesting_prop_quotes_twice_is_idempotent(world, db_session):
     world.ingest_game_quotes([_gq()], CAPTURED)
     quotes = [_pq(), _pq(side="under", price=-105)]
