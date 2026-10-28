@@ -36,6 +36,29 @@ BOOKMAKER_TITLES: Dict[str, str] = {
     "pointsbet": "PointsBet",
     "williamhill": "William Hill",
     "betrivers": "BetRivers",
+    "pinnacle": "Pinnacle",
+    "bet365": "Bet365",
+    "fanatics": "Fanatics",
+    "ballybet": "Bally Bet",
+    "betparx": "betPARX",
+    "hardrockbet": "Hard Rock Bet",
+    "circa": "Circa Sports",
+    "fliff": "Fliff",
+    "betonline": "BetOnline",
+    "lowvig": "LowVig",
+    "boylesports": "BoyleSports",
+    "1xbet": "1xBet",
+    "tipico": "Tipico",
+    "betus": "BetUS",
+    "coral": "Coral",
+    "ladbrokes": "Ladbrokes",
+    "paddypower": "Paddy Power",
+    "skybet": "Sky Bet",
+    "betway": "Betway",
+    "nordicbet": "NordicBet",
+    "betsson": "Betsson",
+    "leovegas": "LeoVegas",
+    "casumo": "Casumo",
 }
 
 
@@ -107,16 +130,20 @@ def _write_local_usage(data: Dict[str, Any], cache_path: Optional[Path] = None) 
 
 
 def parse_american_odds(raw: Any) -> Optional[int]:
-    """Parses an American odds value (string or int, e.g. '-112', '+105') into int."""
+    """Parses an American odds value (string, float, or int, e.g. '-112', '+105') into int."""
     if raw is None:
         return None
     try:
-        s = str(raw).strip().replace("+", "")
-        val = int(s)
+        s = str(raw).strip()
+        if not s:
+            return None
+        if s.startswith("+"):
+            s = s[1:]
+        val = int(float(s))
         if -100 < val < 100:
             return None
         return val
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
         return None
 
 
@@ -125,7 +152,11 @@ def parse_float_line(raw: Any) -> Optional[float]:
     if raw is None:
         return None
     try:
-        s = str(raw).strip().replace("+", "")
+        s = str(raw).strip()
+        if not s:
+            return None
+        if s.startswith("+"):
+            s = s[1:]
         return float(s)
     except (ValueError, TypeError):
         return None
@@ -183,7 +214,7 @@ def parse_sgo_events(payload: Any) -> List[GameQuote]:
             if not isinstance(odd_obj, dict):
                 continue
 
-            # Check periodID: must be full game
+            # Check periodID and statID: must be primary scoring stat (points) for full game or regulation
             period_id = odd_obj.get("periodID")
             bet_type_id = odd_obj.get("betTypeID")
             stat_id = odd_obj.get("statID")
@@ -191,7 +222,7 @@ def parse_sgo_events(payload: Any) -> List[GameQuote]:
             stat_entity_id = odd_obj.get("statEntityID")
 
             # Fallback to parsing odd_id if fields omitted: {statID}-{statEntityID}-{periodID}-{betTypeID}-{sideID}
-            if not (period_id and bet_type_id):
+            if not (period_id and bet_type_id and stat_id):
                 parts = odd_id.split("-")
                 if len(parts) >= 5:
                     stat_id = stat_id or parts[0]
@@ -200,7 +231,12 @@ def parse_sgo_events(payload: Any) -> List[GameQuote]:
                     bet_type_id = bet_type_id or parts[3]
                     side_id = side_id or parts[4]
 
-            if period_id != "game":
+            # Primary scoring stat is points (game lines). Skip non-point props (e.g. weightedCards, cornerKicks)
+            if stat_id != "points":
+                continue
+
+            # Full game ('game') or regulation ('reg' for soccer/3-way). Skip sub-periods (1h, 1q, etc.)
+            if period_id not in ("game", "reg"):
                 continue
 
             # Determine market and side
@@ -239,7 +275,8 @@ def parse_sgo_events(payload: Any) -> List[GameQuote]:
                 if not isinstance(b_info, dict):
                     continue
 
-                if not b_info.get("available", False):
+                avail = b_info.get("available")
+                if not (avail is True or str(avail).lower() == "true"):
                     continue
 
                 price_american = parse_american_odds(b_info.get("odds"))
@@ -372,6 +409,12 @@ class SportsGameOddsService:
                 if body.get("success") and "data" in body:
                     data = body["data"]
                     rem = data.get("objectsRemainingThisMonth")
+                    if rem is None and isinstance(data.get("rateLimits"), dict):
+                        month_limits = data["rateLimits"].get("per-month") or {}
+                        max_ent = month_limits.get("max-entities")
+                        cur_ent = month_limits.get("current-entities")
+                        if isinstance(max_ent, (int, float)) and isinstance(cur_ent, (int, float)):
+                            rem = int(max_ent - cur_ent)
                     if rem is not None:
                         self.objects_remaining = int(rem)
                         local = _read_local_usage(self.usage_cache_path)
