@@ -22,6 +22,7 @@ from app.models import (
     MarketType,
     OddsHistory,
     OddsSnapshotCapture,
+    PlayerGameLog,
     Sportsbook,
 )
 
@@ -46,6 +47,43 @@ def _recency(quote: OddsHistory) -> Tuple[datetime, datetime, int]:
     return (_aware_utc(quote.captured_at), _aware_utc(quote.book_last_update), quote.id)
 
 
+def _is_player_void(log: Optional[PlayerGameLog]) -> bool:
+    if log is None:
+        return True
+    if log.min is None:
+        return True
+    if isinstance(log.min, (int, float)):
+        return log.min <= 0
+    s = str(log.min).strip()
+    if not s or s in ("0", "0:00", "00:00", "0.0"):
+        return True
+    if ":" in s:
+        parts = s.split(":")
+        try:
+            return float(parts[0]) <= 0 and float(parts[1]) <= 0
+        except ValueError:
+            return True
+    try:
+        return float(s) <= 0
+    except ValueError:
+        return True
+
+
+def _get_actual_stat(log: PlayerGameLog, market: MarketType) -> Optional[float]:
+    pts = float(log.pts or 0)
+    reb = float(log.reb or 0)
+    ast = float(log.ast or 0)
+    if market == MarketType.player_points:
+        return pts
+    elif market == MarketType.player_rebounds:
+        return reb
+    elif market == MarketType.player_assists:
+        return ast
+    elif market == MarketType.player_pra:
+        return pts + reb + ast
+    return None
+
+
 @dataclass
 class TotalErrorAudit:
     n_games: int = 0
@@ -61,9 +99,45 @@ class PropVigAudit:
 
 
 @dataclass
+class TotalsShadowAudit:
+    n_games: int = 0
+    brier_model: Optional[float] = None
+    brier_pinnacle: Optional[float] = None
+    brier_diff: Optional[float] = None
+    brier_diff_ci_low: Optional[float] = None
+    brier_diff_ci_high: Optional[float] = None
+    log_loss_model: Optional[float] = None
+    log_loss_pinnacle: Optional[float] = None
+    log_loss_diff: Optional[float] = None
+    log_loss_diff_ci_low: Optional[float] = None
+    log_loss_diff_ci_high: Optional[float] = None
+    mean_total_error: Optional[float] = None
+    sd_total_error: Optional[float] = None
+
+
+@dataclass
+class PropsShadowAudit:
+    n: int = 0
+    brier_model: Optional[float] = None
+    brier_book: Optional[float] = None
+    brier_diff: Optional[float] = None
+    brier_diff_ci_low: Optional[float] = None
+    brier_diff_ci_high: Optional[float] = None
+    log_loss_model: Optional[float] = None
+    log_loss_book: Optional[float] = None
+    log_loss_diff: Optional[float] = None
+    log_loss_diff_ci_low: Optional[float] = None
+    log_loss_diff_ci_high: Optional[float] = None
+    void_count: int = 0
+    unmatched_name_count: int = 0
+
+
+@dataclass
 class MarketAuditResult:
     totals: TotalErrorAudit = field(default_factory=TotalErrorAudit)
     props: PropVigAudit = field(default_factory=PropVigAudit)
+    totals_shadow: TotalsShadowAudit = field(default_factory=TotalsShadowAudit)
+    props_shadow: PropsShadowAudit = field(default_factory=PropsShadowAudit)
 
 
 def audit_closing_totals(session: Session) -> TotalErrorAudit:
@@ -200,10 +274,413 @@ def audit_prop_vig(session: Session) -> PropVigAudit:
     )
 
 
+def audit_totals_shadow(session: Session, seed: int = 42) -> TotalsShadowAudit:
+    """
+    Evaluates the shadow totals model (totals_pace) against Pinnacle's de-vigged closing line
+    on settled games with matching totals lines.
+    """
+    import numpy as np
+    from app.analytics.props_engine import devig_two_way
+    from app.analytics.totals_model import PROB_CLIP
+    from app.models import ModelPrediction
+    from app.services import model_registry
+    from app.services.model_lab import paired_bootstrap
+
+    shadow_model = model_registry.get_totals_shadow_model(session)
+    if shadow_model is None:
+        return TotalsShadowAudit()
+
+    # 1. Settled games with closing marker
+    closing_marker_ids = set(
+        session.execute(
+            select(OddsSnapshotCapture.game_id).where(OddsSnapshotCapture.kind == CAPTURE_CLOSING)
+        ).scalars()
+    )
+    if not closing_marker_ids:
+        return TotalsShadowAudit()
+
+    finals = session.execute(
+        select(Game.id, Game.home_score, Game.away_score, Game.commence_time).where(
+            Game.id.in_(list(closing_marker_ids)),
+            Game.status == "final",
+            Game.home_score.is_not(None),
+            Game.away_score.is_not(None),
+        )
+    ).all()
+    if not finals:
+        return TotalsShadowAudit()
+
+    game_scores = {g_id: (int(h_score) + int(a_score), commence) for g_id, h_score, a_score, commence in finals}
+    game_ids = list(game_scores.keys())
+
+    # 2. Pinnacle closing totals quotes
+    quotes = session.execute(
+        select(OddsHistory)
+        .join(Sportsbook, Sportsbook.id == OddsHistory.sportsbook_id)
+        .where(
+            OddsHistory.game_id.in_(game_ids),
+            Sportsbook.is_sharp == True,
+            OddsHistory.market == MarketType.totals,
+            OddsHistory.player_id.is_(None),
+            OddsHistory.line.is_not(None),
+            OddsHistory.price_american.is_not(None),
+        )
+        .order_by(OddsHistory.captured_at.asc(), OddsHistory.id.asc())
+    ).scalars().all()
+
+    # Latest closing quote per (game_id, line, side) at or before tip-off
+    pinnacle_quotes: Dict[Tuple[int, Decimal, str], OddsHistory] = {}
+    for q in quotes:
+        if q.captured_at is None:
+            continue
+        commence = game_scores[q.game_id][1]
+        if _aware_utc(q.captured_at) > _aware_utc(commence):
+            continue
+        line_key = _line(q.line)
+        if line_key is None:
+            continue
+        side_key = _enum_value(q.side)
+        key = (q.game_id, line_key, side_key)
+        if key not in pinnacle_quotes or _recency(q) > _recency(pinnacle_quotes[key]):
+            pinnacle_quotes[key] = q
+
+    # 3. Model predictions under totals_pace
+    preds = session.execute(
+        select(ModelPrediction).where(
+            ModelPrediction.model_version_id == shadow_model.id,
+            ModelPrediction.game_id.in_(game_ids),
+            ModelPrediction.market == MarketType.totals,
+            ModelPrediction.line.is_not(None),
+        )
+    ).scalars().all()
+
+    preds_by_game_line_side: Dict[Tuple[int, Decimal, str], ModelPrediction] = {}
+    for p in preds:
+        line_key = _line(p.line)
+        if line_key is not None:
+            preds_by_game_line_side[(p.game_id, line_key, _enum_value(p.side))] = p
+
+    # 4. Pair up (game, line) where both Pinnacle (over+under) and Model (over) exist
+    game_lines = set()
+    for (g_id, line_key, side_key) in pinnacle_quotes:
+        if (g_id, line_key, BetSide.over.value) in pinnacle_quotes and (g_id, line_key, BetSide.under.value) in pinnacle_quotes:
+            if (g_id, line_key, BetSide.over.value) in preds_by_game_line_side:
+                game_lines.add((g_id, line_key))
+
+    if not game_lines:
+        return TotalsShadowAudit()
+
+    sorted_game_lines = sorted(game_lines, key=lambda x: (x[0], x[1]))
+
+    brier_mod_list: List[float] = []
+    brier_pin_list: List[float] = []
+    ll_mod_list: List[float] = []
+    ll_pin_list: List[float] = []
+    total_errors: List[float] = []
+
+    for g_id, line_key in sorted_game_lines:
+        actual_total = game_scores[g_id][0]
+        q_over = pinnacle_quotes[(g_id, line_key, BetSide.over.value)]
+        q_under = pinnacle_quotes[(g_id, line_key, BetSide.under.value)]
+        pred_over = preds_by_game_line_side[(g_id, line_key, BetSide.over.value)]
+
+        p_over_dec = american_to_decimal(q_over.price_american)
+        p_under_dec = american_to_decimal(q_under.price_american)
+        if p_over_dec <= 0 or p_under_dec <= 0:
+            continue
+
+        fair_over, _ = devig_two_way(p_over_dec, p_under_dec)
+        model_prob = float(pred_over.model_prob)
+
+        # Model total error (actual - mu)
+        if pred_over.projection is not None:
+            mu = float(pred_over.projection)
+            total_errors.append(actual_total - mu)
+
+        line_val = float(line_key)
+        if actual_total == line_val:
+            # Push on integer line: outcome is not binary won/lost
+            continue
+        y = 1.0 if actual_total > line_val else 0.0
+
+        # Brier
+        b_m = (model_prob - y) ** 2
+        b_p = (fair_over - y) ** 2
+        brier_mod_list.append(b_m)
+        brier_pin_list.append(b_p)
+
+        # Log loss
+        p_m_clip = float(np.clip(model_prob, PROB_CLIP, 1.0 - PROB_CLIP))
+        p_p_clip = float(np.clip(fair_over, PROB_CLIP, 1.0 - PROB_CLIP))
+        ll_m = -(y * math.log(p_m_clip) + (1.0 - y) * math.log(1.0 - p_m_clip))
+        ll_p = -(y * math.log(p_p_clip) + (1.0 - y) * math.log(1.0 - p_p_clip))
+        ll_mod_list.append(ll_m)
+        ll_pin_list.append(ll_p)
+
+    n_eval = len(sorted_game_lines)
+    if n_eval == 0:
+        return TotalsShadowAudit()
+
+    brier_m_mean = float(np.mean(brier_mod_list)) if brier_mod_list else None
+    brier_p_mean = float(np.mean(brier_pin_list)) if brier_pin_list else None
+    brier_diff = (brier_m_mean - brier_p_mean) if (brier_m_mean is not None and brier_p_mean is not None) else None
+
+    ll_m_mean = float(np.mean(ll_mod_list)) if ll_mod_list else None
+    ll_p_mean = float(np.mean(ll_pin_list)) if ll_pin_list else None
+    ll_diff = (ll_m_mean - ll_p_mean) if (ll_m_mean is not None and ll_p_mean is not None) else None
+
+    brier_ci_low, brier_ci_high = None, None
+    ll_ci_low, ll_ci_high = None, None
+
+    if len(brier_mod_list) >= 2:
+        diff_b_arr = np.array(brier_mod_list) - np.array(brier_pin_list)
+        delta_b = paired_bootstrap(diff_b_arr, seed=seed)
+        brier_ci_low, brier_ci_high = delta_b.ci_low, delta_b.ci_high
+
+    if len(ll_mod_list) >= 2:
+        diff_ll_arr = np.array(ll_mod_list) - np.array(ll_pin_list)
+        delta_ll = paired_bootstrap(diff_ll_arr, seed=seed)
+        ll_ci_low, ll_ci_high = delta_ll.ci_low, delta_ll.ci_high
+
+    mean_err = float(np.mean(total_errors)) if total_errors else None
+    sd_err = float(np.std(total_errors, ddof=1)) if len(total_errors) >= 2 else None
+
+    return TotalsShadowAudit(
+        n_games=n_eval,
+        brier_model=brier_m_mean,
+        brier_pinnacle=brier_p_mean,
+        brier_diff=brier_diff,
+        brier_diff_ci_low=brier_ci_low,
+        brier_diff_ci_high=brier_ci_high,
+        log_loss_model=ll_m_mean,
+        log_loss_pinnacle=ll_p_mean,
+        log_loss_diff=ll_diff,
+        log_loss_diff_ci_low=ll_ci_low,
+        log_loss_diff_ci_high=ll_ci_high,
+        mean_total_error=mean_err,
+        sd_total_error=sd_err,
+    )
+
+
+def audit_props_shadow(session: Session, seed: int = 42) -> PropsShadowAudit:
+    """
+    Evaluates the shadow props model (props_nb) against the same book's de-vigged closing quote
+    on final games with stored prop quotes.
+    Classifies predictions as over/under/push, or VOID when player has no log row or played 0 minutes.
+    """
+    import numpy as np
+    from sqlalchemy import func
+    from app.analytics.props_engine import devig_two_way
+    from app.analytics.totals_model import PROB_CLIP
+    from app.models import ModelPrediction
+    from app.services import model_registry
+    from app.services.model_lab import paired_bootstrap
+
+    shadow_model = model_registry.get_props_shadow_model(session)
+    if shadow_model is None:
+        return PropsShadowAudit()
+
+    # 1. Final games
+    finals = session.execute(
+        select(Game.id, Game.nba_game_id, Game.commence_time).where(Game.status == "final")
+    ).all()
+    if not finals:
+        return PropsShadowAudit()
+
+    game_commence: Dict[int, datetime] = {}
+    game_id_by_nba_id: Dict[str, int] = {}
+    final_game_ids: List[int] = []
+
+    for g_id, nba_g_id, commence in finals:
+        final_game_ids.append(g_id)
+        if commence:
+            game_commence[g_id] = commence
+        if nba_g_id:
+            game_id_by_nba_id[str(nba_g_id)] = g_id
+        game_id_by_nba_id[str(g_id)] = g_id
+
+    # 2. Unmatched name count from capture markers
+    unmatched_query = select(
+        func.coalesce(
+            func.sum(OddsSnapshotCapture.quotes_seen - OddsSnapshotCapture.quotes_inserted),
+            0,
+        )
+    ).where(OddsSnapshotCapture.kind == CAPTURE_CLOSING_PROPS)
+    if final_game_ids:
+        unmatched_query = unmatched_query.where(OddsSnapshotCapture.game_id.in_(final_game_ids))
+    unmatched_name_count = max(0, int(session.execute(unmatched_query).scalar() or 0))
+
+    # 3. Player game logs for final games
+    logs = session.execute(
+        select(PlayerGameLog).where(PlayerGameLog.game_id.in_(list(game_id_by_nba_id.keys())))
+    ).scalars().all()
+
+    player_logs: Dict[Tuple[int, int], PlayerGameLog] = {}
+    for log in logs:
+        g_id = game_id_by_nba_id.get(str(log.game_id))
+        if g_id is not None and log.player_id is not None:
+            player_logs[(g_id, log.player_id)] = log
+
+    # 4. Prop quotes at or before tip-off
+    props_market_types = [
+        MarketType.player_points,
+        MarketType.player_rebounds,
+        MarketType.player_assists,
+        MarketType.player_pra,
+    ]
+
+    quotes = session.execute(
+        select(OddsHistory)
+        .where(
+            OddsHistory.game_id.in_(final_game_ids),
+            OddsHistory.player_id.is_not(None),
+            OddsHistory.market.in_(props_market_types),
+            OddsHistory.line.is_not(None),
+            OddsHistory.price_american.is_not(None),
+            OddsHistory.side.in_([BetSide.over, BetSide.under, BetSide.over.value, BetSide.under.value]),
+        )
+        .order_by(OddsHistory.captured_at.asc(), OddsHistory.id.asc())
+    ).scalars().all()
+
+    grouped_quotes: Dict[Tuple[int, int, str, int, Decimal], Dict[str, OddsHistory]] = defaultdict(dict)
+    for q in quotes:
+        if q.captured_at is None:
+            continue
+        commence = game_commence.get(q.game_id)
+        if commence and _aware_utc(q.captured_at) > _aware_utc(commence):
+            continue
+        line_key = _line(q.line)
+        if line_key is None:
+            continue
+        mkt = _enum_value(q.market)
+        side_str = _enum_value(q.side)
+        key = (q.game_id, q.sportsbook_id, mkt, q.player_id, line_key)
+        if side_str not in grouped_quotes[key] or _recency(q) > _recency(grouped_quotes[key][side_str]):
+            grouped_quotes[key][side_str] = q
+
+    # 5. Model predictions under props_nb
+    preds = session.execute(
+        select(ModelPrediction).where(
+            ModelPrediction.model_version_id == shadow_model.id,
+            ModelPrediction.game_id.in_(final_game_ids),
+            ModelPrediction.market.in_(props_market_types),
+            ModelPrediction.player_id.is_not(None),
+            ModelPrediction.line.is_not(None),
+        )
+    ).scalars().all()
+
+    preds_by_key: Dict[Tuple[int, str, int, Decimal, str], ModelPrediction] = {}
+    for p in preds:
+        line_key = _line(p.line)
+        if line_key is not None:
+            preds_by_key[(p.game_id, _enum_value(p.market), p.player_id, line_key, _enum_value(p.side))] = p
+
+    # 6. Evaluate predictions vs book closing quotes
+    void_count = 0
+    brier_mod_list: List[float] = []
+    brier_book_list: List[float] = []
+    ll_mod_list: List[float] = []
+    ll_book_list: List[float] = []
+
+    sorted_keys = sorted(grouped_quotes.keys(), key=lambda x: (x[0], x[2], x[3], x[4], x[1]))
+
+    for (g_id, sb_id, mkt_str, player_id, line_key) in sorted_keys:
+        sides = grouped_quotes[(g_id, sb_id, mkt_str, player_id, line_key)]
+        if BetSide.over.value not in sides or BetSide.under.value not in sides:
+            continue
+
+        pred_over = preds_by_key.get((g_id, mkt_str, player_id, line_key, BetSide.over.value))
+        if pred_over is None:
+            continue
+
+        log = player_logs.get((g_id, player_id))
+        if _is_player_void(log):
+            void_count += 1
+            continue
+
+        mkt_enum = MarketType(mkt_str)
+        actual_stat = _get_actual_stat(log, mkt_enum)
+        if actual_stat is None:
+            void_count += 1
+            continue
+
+        line_val = float(line_key)
+        if actual_stat == line_val:
+            # Push on integer line
+            continue
+
+        q_over = sides[BetSide.over.value]
+        q_under = sides[BetSide.under.value]
+        p_over_dec = american_to_decimal(q_over.price_american)
+        p_under_dec = american_to_decimal(q_under.price_american)
+        if p_over_dec <= 0 or p_under_dec <= 0:
+            continue
+
+        fair_over, _ = devig_two_way(p_over_dec, p_under_dec)
+        model_prob = float(pred_over.model_prob)
+
+        y = 1.0 if actual_stat > line_val else 0.0
+
+        brier_mod_list.append((model_prob - y) ** 2)
+        brier_book_list.append((fair_over - y) ** 2)
+
+        p_m_clip = float(np.clip(model_prob, PROB_CLIP, 1.0 - PROB_CLIP))
+        p_b_clip = float(np.clip(fair_over, PROB_CLIP, 1.0 - PROB_CLIP))
+        ll_mod_list.append(-(y * math.log(p_m_clip) + (1.0 - y) * math.log(1.0 - p_m_clip)))
+        ll_book_list.append(-(y * math.log(p_b_clip) + (1.0 - y) * math.log(1.0 - p_b_clip)))
+
+    n_eval = len(brier_mod_list)
+    if n_eval == 0:
+        return PropsShadowAudit(
+            n=0,
+            void_count=void_count,
+            unmatched_name_count=unmatched_name_count,
+        )
+
+    brier_m_mean = float(np.mean(brier_mod_list))
+    brier_b_mean = float(np.mean(brier_book_list))
+    brier_diff = brier_m_mean - brier_b_mean
+
+    ll_m_mean = float(np.mean(ll_mod_list))
+    ll_b_mean = float(np.mean(ll_book_list))
+    ll_diff = ll_m_mean - ll_b_mean
+
+    brier_ci_low, brier_ci_high = None, None
+    ll_ci_low, ll_ci_high = None, None
+
+    if len(brier_mod_list) >= 2:
+        diff_b_arr = np.array(brier_mod_list) - np.array(brier_book_list)
+        delta_b = paired_bootstrap(diff_b_arr, seed=seed)
+        brier_ci_low, brier_ci_high = delta_b.ci_low, delta_b.ci_high
+
+    if len(ll_mod_list) >= 2:
+        diff_ll_arr = np.array(ll_mod_list) - np.array(ll_book_list)
+        delta_ll = paired_bootstrap(diff_ll_arr, seed=seed)
+        ll_ci_low, ll_ci_high = delta_ll.ci_low, delta_ll.ci_high
+
+    return PropsShadowAudit(
+        n=n_eval,
+        brier_model=brier_m_mean,
+        brier_book=brier_b_mean,
+        brier_diff=brier_diff,
+        brier_diff_ci_low=brier_ci_low,
+        brier_diff_ci_high=brier_ci_high,
+        log_loss_model=ll_m_mean,
+        log_loss_book=ll_b_mean,
+        log_loss_diff=ll_diff,
+        log_loss_diff_ci_low=ll_ci_low,
+        log_loss_diff_ci_high=ll_ci_high,
+        void_count=void_count,
+        unmatched_name_count=unmatched_name_count,
+    )
+
+
 def run_market_audit(session: Session) -> MarketAuditResult:
     return MarketAuditResult(
         totals=audit_closing_totals(session),
         props=audit_prop_vig(session),
+        totals_shadow=audit_totals_shadow(session),
+        props_shadow=audit_props_shadow(session),
     )
 
 
@@ -234,5 +711,68 @@ def format_market_audit(result: MarketAuditResult) -> str:
         )
     else:
         lines.append("   no data (no over/under closing prop pairs)")
+
+    lines.append("")
+
+    # (c) Totals shadow model vs Pinnacle's close
+    lines.append("3. Totals shadow model vs Pinnacle's close:")
+    shadow = result.totals_shadow
+    if shadow.n_games == 0:
+        lines.append("   no data (no settled games with totals prediction and Pinnacle close)")
+    elif shadow.n_games < 30:
+        lines.append(f"   insufficient data (n = {shadow.n_games} < 30)")
+        if shadow.brier_model is not None and shadow.brier_pinnacle is not None:
+            lines.append(
+                f"   Brier: model {shadow.brier_model:.4f} | Pinnacle {shadow.brier_pinnacle:.4f} | diff {shadow.brier_diff:+.4f}"
+            )
+            lines.append(
+                f"   Log loss: model {shadow.log_loss_model:.4f} | Pinnacle {shadow.log_loss_pinnacle:.4f} | diff {shadow.log_loss_diff:+.4f}"
+            )
+        if shadow.mean_total_error is not None:
+            sd_str = f"{shadow.sd_total_error:.2f} pts" if shadow.sd_total_error is not None else "n/a"
+            lines.append(f"   Model total error (actual - mu): mean = {shadow.mean_total_error:+.2f} pts | sd = {sd_str}")
+    else:
+        lines.append(f"   n = {shadow.n_games} games")
+        lines.append(
+            f"   Brier: model {shadow.brier_model:.4f} | Pinnacle {shadow.brier_pinnacle:.4f} | "
+            f"diff {shadow.brier_diff:+.4f} (95% CI [{shadow.brier_diff_ci_low:+.4f}, {shadow.brier_diff_ci_high:+.4f}])"
+        )
+        lines.append(
+            f"   Log loss: model {shadow.log_loss_model:.4f} | Pinnacle {shadow.log_loss_pinnacle:.4f} | "
+            f"diff {shadow.log_loss_diff:+.4f} (95% CI [{shadow.log_loss_diff_ci_low:+.4f}, {shadow.log_loss_diff_ci_high:+.4f}])"
+        )
+        sd_str = f"{shadow.sd_total_error:.2f} pts" if shadow.sd_total_error is not None else "n/a"
+        lines.append(f"   Model total error (actual - mu): mean = {shadow.mean_total_error:+.2f} pts | sd = {sd_str}")
+
+    lines.append("")
+
+    # (d) Props shadow model vs book close
+    lines.append("4. Props shadow model vs book close:")
+    shadow_props = result.props_shadow
+    if shadow_props.n == 0:
+        lines.append("   no data (no settled games with props prediction and book close)")
+        if shadow_props.void_count > 0 or shadow_props.unmatched_name_count > 0:
+            lines.append(f"   voids = {shadow_props.void_count} | unmatched names = {shadow_props.unmatched_name_count}")
+    elif shadow_props.n < 30:
+        lines.append(f"   insufficient data (n = {shadow_props.n} < 30)")
+        if shadow_props.brier_model is not None and shadow_props.brier_book is not None:
+            lines.append(
+                f"   Brier: model {shadow_props.brier_model:.4f} | book {shadow_props.brier_book:.4f} | diff {shadow_props.brier_diff:+.4f}"
+            )
+            lines.append(
+                f"   Log loss: model {shadow_props.log_loss_model:.4f} | book {shadow_props.log_loss_book:.4f} | diff {shadow_props.log_loss_diff:+.4f}"
+            )
+        lines.append(f"   voids = {shadow_props.void_count} | unmatched names = {shadow_props.unmatched_name_count}")
+    else:
+        lines.append(f"   n = {shadow_props.n} predictions")
+        lines.append(
+            f"   Brier: model {shadow_props.brier_model:.4f} | book {shadow_props.brier_book:.4f} | "
+            f"diff {shadow_props.brier_diff:+.4f} (95% CI [{shadow_props.brier_diff_ci_low:+.4f}, {shadow_props.brier_diff_ci_high:+.4f}])"
+        )
+        lines.append(
+            f"   Log loss: model {shadow_props.log_loss_model:.4f} | book {shadow_props.log_loss_book:.4f} | "
+            f"diff {shadow_props.log_loss_diff:+.4f} (95% CI [{shadow_props.log_loss_diff_ci_low:+.4f}, {shadow_props.log_loss_diff_ci_high:+.4f}])"
+        )
+        lines.append(f"   voids = {shadow_props.void_count} | unmatched names = {shadow_props.unmatched_name_count}")
 
     return "\n".join(lines)

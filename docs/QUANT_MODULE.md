@@ -113,6 +113,34 @@ One `FeatureState` class serves training and serving. A single chronological pas
 | Deployment | The deployed version is refit on every completed season (the first season of the data is a burn-in and dropped) |
 | Storage | `model_version.params` as JSON: feature names, scaler, coefficients, intercepts, penalties, sigma, `trained_through`, seeds. No pickles. Inference is numpy-only |
 
+### `totals_pace`: the shadow totals model
+
+`analytics/totals_model.py`, registered in `model_version` as `totals_pace` v1 with role `'shadow'` (migration `b3d5f7a9c1e4`).
+
+| Item | Value |
+|------|-------|
+| Purpose | Shadow-only forecasting model for game totals (over/under). It records predictions at Pinnacle's lines to measure statistical edge against the close; it NEVER bets |
+| Expected total $\mu$ | Pace/efficiency style estimate from each team's rolling combined points (points scored + allowed, last N=10 games), shrunk toward the season league mean with prior weight 5.0: $\mu = (T_{\text{home}} + T_{\text{away}}) / 2$ |
+| Residual $\sigma$ | Standard deviation of $(Y - \mu)$ computed from the SAME rolling procedure over completed past games only (default 17.7 points when fewer than 2 residuals exist) |
+| Over probability | $p_{\text{over}}(\text{line}) = 1 - \Phi((\text{line} - \mu) / \sigma)$. Push mass on integer lines is ignored under the continuous normal distribution approximation |
+| Leak-free design | Mirrors `FeatureState`: features for game $i$ are formed before $i$ updates the state; perturbing future games leaves earlier predictions bit-identical |
+| Role isolation | Role `'shadow'` is strictly ignored by the model league, promotion gates, active models list, and candidate proposals |
+| Evaluation | Benchmarked against Pinnacle's de-vigged closing quotes in `scripts/market_audit.py` and `scripts/paper_report.py`: reports $n$, Brier, log loss, paired differences with bootstrap 95% intervals, and model total error mean and sd; prints "insufficient data" when $n < 30$ |
+
+### `props_nb`: the shadow props model
+
+`analytics/props_engine.py`, registered in `model_version` as `props_nb` v1 with role `'shadow'` (`model_registry.py`).
+
+| Item | Value |
+|------|-------|
+| Purpose | Shadow-only forecasting model for player props (points, rebounds, assists, PRA). Evaluates statistical calibration of negative-binomial projections against sportsbook quotes without betting |
+| Probability calculation | Negative-binomial machinery from `analytics/props_engine.py` (mean $\mu = \text{avg\_minutes} \times \text{per-minute rate}$, dispersion parameter $r$). Evaluates $p_{\text{over}}(\text{line})$ for each stored quote's `(player_id, market, line)`. Players without database baseline data are skipped (never fabricated) |
+| Prediction recording | One prediction row per `(game_id, market, player_id, line, side)` under `props_nb` v1 right after props capture within the tick prediction recording step; idempotent; zero bets created |
+| Role isolation | Role `'shadow'` is strictly ignored by the model league, promotion gates, active models list, and candidate proposals |
+| Settlement-free evaluation | Derives actual stat value from `player_game_log` (`pts`, `reb`, `ast`, `pra`) for final games. Classifies as over/under/push, or `VOID` when player has no log row or played 0 minutes (never guessed). Pushes on integer lines are excluded from binary scoring |
+| Market benchmark | Compares model probability against the **same book's** de-vigged closing over/under quote (`devig_two_way`) at or before tip-off. Reports $n$, Brier score, log loss, paired differences with bootstrap 95% intervals, void count, and unmatched name count; displays "insufficient data" when $n < 30$ |
+| Betting status | Zero bets. Props paper bets are deliberately not built: there is no universal sharp reference for player props and the sample is tiny. Revisit when shadow evaluation reaches $n \ge 200$ |
+
 ## 6. Betting policy
 
 `analytics/betting_policy.py`, applied by `prediction_recorder.py`. Changing any value is a **new `model_version`** so every bet stays attributable (rule 8).
@@ -130,7 +158,7 @@ One `FeatureState` class serves training and serving. A single chronological pas
 | Never | At or after tip-off |
 | Stale ratings guard | A game is skipped while either team has an earlier game that is not settled |
 | Uniqueness | One bet per (strategy, game, market, side) across all runs |
-| Markets | h2h and spreads are model-driven (champion and shadow challengers). Totals are evaluated and bet strictly by the model-free `market_edge` arm against Pinnacle's de-vigged over/under lines and attached to the benchmark model `market_pinnacle` (`role = benchmark`; champion model strategies `flat`, `kelly_fractional`, `kelly_shrunk` never bet totals). Props are not modelled or paper-bet |
+| Markets | h2h and spreads are model-driven (champion and shadow challengers). Totals are evaluated and bet strictly by the model-free `market_edge` arm against Pinnacle's de-vigged over/under lines and attached to the benchmark model `market_pinnacle` (`role = benchmark`; champion model strategies `flat`, `kelly_fractional`, `kelly_shrunk` never bet totals). A shadow totals model `totals_pace` (`role = shadow`) records predictions for measurement only and never bets. Props quotes are persisted in `odds_history` and evaluated under the shadow model `props_nb` (`role = shadow`, negative-binomial engine); props are NEVER paper-bet (no sharp reference and tiny sample; revisit when $n \ge 200$) |
 
 ### Staking
 

@@ -19,7 +19,7 @@ What to build next and why, in priority order. Each item states the reason, how 
 | 5 | Shutdown endpoint CSRF and origin hardening (done) | S | An unauthenticated endpoint can stop the services |
 | 6 | Closing-quote presence record (done) | M | Stale closes bias CLV |
 | 7 | Postponed-game polling (done) | S | Wasted calls and noise for up to 14 days |
-| 8 | Second odds feed (built, disabled until key exists, unverified against live responses) | M | Redundancy and more props; no sharp book |
+| 8 | Second odds feed (built, disabled until key exists, parser validated against documentation examples; still not against a live response) | M | Redundancy and more props; no sharp book |
 | 9 | CI that runs the test suite (done) | S | No automated check exists |
 | 10 | Legacy cleanup (done) | M | Dead code and confusing duplicates |
 | 11 | Fix `props_engine.load_baselines_from_db` (done) | S | It reads a SQLite file that does not exist |
@@ -64,23 +64,31 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 ## 2. Totals and props models, with settlement
 
-**Status**: Totals implemented (WP-T: settlement, same-book and Pinnacle CLV, reporting, and model-free `market_edge` paper bets); props models deliberately deferred.
+**Status**: Totals implemented (WP-T: settlement, same-book and Pinnacle CLV, reporting, and model-free `market_edge` paper bets; WP-S1: shadow totals forecasting model `totals_pace` with leak-free pace/efficiency estimation and closed-loop evaluation against Pinnacle's close); player props quotes persisted and shadow-evaluated (WP-S2: negative-binomial shadow model `props_nb` with settlement-free evaluation against same-book close; props BETS deliberately not built).
 
 **Why.** The 3-credit game-lines call already captures totals for every game, and one player-props event per closing run is stored. Research on closing totals lines revealed a forecast error standard deviation of ~17.7 points over 39 games (`scripts/market_audit.py`) with no verified evidence of an edge for statistical scoring models. Consequently, totals are handled through:
 - Complete settlement in `settlement.grade_bet` (over wins when total > line, under when total < line, push on equal).
 - Same-book and Pinnacle-referenced CLV at the exact matching total line.
 - Paper betting strictly via the model-free `market_edge` arm against Pinnacle de-vigged over/under lines (champion models and model-driven strategies never bet totals).
+- A pure statistical shadow totals forecasting model (`totals_pace` v1, role `'shadow'`, `analytics/totals_model.py`) recording leak-free pace/efficiency predictions at Pinnacle's lines without betting.
+- Closed-loop evaluation against Pinnacle's de-vigged closing line in `market_audit.py` and `paper_report.py` (Brier, log loss, paired bootstrap intervals, error mean and sd; "insufficient data" under n < 30).
 - Reporting in `paper_report` with per-market breakdowns (`h2h`, `spreads`, `totals`) and `/paper` bets table display in Spanish and English.
 
-Props models are deliberately deferred: player prop bets are not recorded anywhere in paper trading, and capturing one event per tick produces far too small and noisy of a sample to justify model development or paper trading.
+Props quotes and shadow evaluation are completed under WP-S2:
+- Closing player props quotes are persisted in `odds_history` across requested markets (`player_points`, `player_rebounds`, `player_assists`, `player_pra`) with truthful capture counts (`quotes_seen` and `quotes_inserted`). Player names are matched using diacritic and suffix normalization restricted to candidate players from the two game teams.
+- Shadow props model `props_nb` (v1, role `'shadow'`, negative-binomial engine) computes leak-free probabilities and stores predictions for quoted lines without betting.
+- Settlement-free evaluation derives actual outcomes from `player_game_log`, marks non-participants or 0-minute players as `VOID` (never guessed), excludes pushes, and measures calibration (Brier score, log loss, paired bootstrap 95% CIs) against the same book's closing de-vigged line (`devig_two_way`) with an $n < 30$ "insufficient data" guard.
+- Props paper BETS are deliberately not built: there is no sharp closing benchmark for player props and the sample is tiny. Revisit when shadow evaluation reaches $n \ge 200$.
 
 **Acceptance criteria.**
 
 - [x] `settlement.grade_bet` handles `totals` (over and under, with pushes on integer lines); CLV works for it; the paper report shows it.
 - [x] Pinnacle-referenced CLV supports totals (`_devig_totals` at matching line).
 - [x] Totals considered and paper-bet exclusively by the `market_edge` benchmark arm against Pinnacle de-vigged quotes, attached to benchmark model `market_pinnacle` (role `benchmark`); zero pollution of the model league or champion attribution.
+- [x] Pure shadow totals model (`totals_pace` v1, role `shadow`) records predictions at Pinnacle lines with zero betting and zero league pollution (WP-S1).
+- [x] Closed-loop evaluation of shadow totals against Pinnacle close in `market_audit.py` and `paper_report.py` with bootstrap 95% intervals and n < 30 guard.
 - [x] Per-market breakdown in `paper_report` and `/paper` bets table UI localized.
-- [ ] Props models and props grading (deferred: insufficient sample size at 1 event/tick).
+- [x] Props quotes persisted in `odds_history` and shadow-evaluated via `props_nb` (WP-S2); props paper bets deliberately deferred until evaluation reaches $n \ge 200$.
 
 ## 3. Frontend model-league page
 
@@ -153,7 +161,7 @@ Props models are deliberately deferred: player prop bets are not recorded anywhe
 
 **First step.** Add an attempt counter or an age rule in `results_sync` and test it.
 
-## 8. Second odds feed (built, disabled until key exists, unverified against live responses)
+## 8. Second odds feed (built, disabled until key exists, parser validated against documentation examples; still not against a live response)
 
 **Why.** Redundancy if The Odds API fails or the quota runs out, and more props/bookmaker coverage. Integrated SportsGameOdds (free "Amateur" tier, 2,500 objects a month, 10 req/min, 9 US books: FanDuel, DraftKings, BetMGM, Caesars, ESPN BET, Bovada, Unibet, PointsBet, William Hill; **no Pinnacle**).
 
@@ -161,11 +169,11 @@ Props models are deliberately deferred: player prop bets are not recorded anywhe
 
 - [x] A provider interface (`services/odds_providers/base.py`) with SportsGameOdds client (`services/odds_providers/sportsgameodds.py`); writes its own `sportsbook` rows and has its own quota guard.
 - [x] The sharp reference stays Pinnacle: a feed without a sharp book never creates bets alone.
-- [x] Idempotent ingestion into existing `Game` rows; never creates games; offline tests from documented fixtures (`tests/test_sportsgameodds.py`).
+- [x] Idempotent ingestion into existing `Game` rows; never creates games; offline tests from documented fixtures (`tests/test_sportsgameodds.py`) and validated against official documentation example responses (`tests/test_sgo_docs_validation.py`).
 - [x] Terms and free-tier limits read and recorded from primary documentation (`docs/DECISIONS.md` D-58, `docs/OPERATIONS.md`).
 - [ ] Owner supplies a valid `SPORTSGAMEODDS_API_KEY` and verifies live response shapes using `scripts/sgo_probe.py`.
 
-**Risks.** Live payload differences once a key is used (mitigated by `sgo_probe.py`); unverified against real live responses until the owner configures a key.
+**Risks.** Live payload differences once a key is used (mitigated by `sgo_probe.py`); parser is validated against official documentation examples but remains unverified against real live responses until the owner configures a key.
 
 **First step.** Owner registers at sportsgameodds.com, sets `SPORTSGAMEODDS_API_KEY` in `backend/.env`, and runs `python scripts/sgo_probe.py` to verify real response against assumed shapes.
 
@@ -249,7 +257,7 @@ Small items found while documenting (2026-10-26). Each is a few lines.
 | Hardcoded player filter in props | `_compute_today_props` analyses only 8 named star players; it limits credit use but is static data standing in for a rule |
 | Backend strings in English on Spanish pages | The league gate sentence and audit reason come from the backend untranslated |
 | `balldontlie` is not a free source of injuries | Injuries need the ALL-STAR tier ($9.99/month), lineups the GOAT tier; free tier is 5 requests/minute with basic data |
-| Items still open | 2 (totals and props models: measure first with `scripts/market_audit.py`), 8 (second odds feed, terms), 10 (legacy cleanup) |
+| Items still open | 2 (shadow totals model built; props handled in a separate package), 8 (second odds feed, terms), 10 (legacy cleanup) |
 
 ## Next step
 

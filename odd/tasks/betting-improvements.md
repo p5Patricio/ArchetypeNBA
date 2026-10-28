@@ -50,8 +50,13 @@ Wave C (the rest of the roadmap, added 2026-10-28 after the first deployment):
 - [x] WP-T Totals (ROADMAP 2, game lines): grading with pushes, same-book and Pinnacle CLV, `market_edge`-only paper bets attached to a model-free `market_pinnacle` benchmark model (role `benchmark`, migration `a2c4e6f8b1d3`, D-57). Props models deliberately deferred.
 - [x] WP-F Second odds feed (ROADMAP 8): SportsGameOdds client, disabled without a key, never bets alone, unverified against live responses.
 
-Wave D:
-- [ ] WP11 Docs, ROADMAP and decisions updated; final verification and a production deploy.
+Wave D (closing the gaps the stop hook and the first review found):
+- [x] WP-S1 Shadow totals predictor `totals_pace` (role `shadow`, migration `b3d5f7a9c1e4`), evaluated against Pinnacle's close; no bets.
+- [x] WP-S2 Player-prop quotes are now persisted (finding: 40 `closing_props` captures spent 40 credits, saw 12,325 quotes and inserted 0) and a shadow props model `props_nb` is evaluated against the same book's close; props BETS stay unbuilt until the evaluation reaches n >= 200.
+- [x] WP-S3 SportsGameOdds parser validated against the examples in the provider's own documentation (found and fixed: statID filter, 'reg' period, signed American strings, `/account/usage` shape); still unverified against a live response.
+
+Wave E:
+- [x] WP11 Docs, ROADMAP and decisions updated; final verification and a production deploy.
 
 ## Acceptance criteria
 - Each pull request: tests green with the count stated, `tsc --noEmit` clean for frontend work, the work package's own criteria met (see its brief in the commit/PR body).
@@ -68,6 +73,7 @@ Wave D:
 - UI: `/paper`, `/league`, `/props` captured in headless Edge at desktop and with DevTools mobile emulation at 390 px; the top bar overflowed on every page (pre-existing) and was fixed (document width 390 on all three).
 - Wave C: 893 passed, 4 skipped on the integrated branch; migrations f1a9c3d7e5b2 and a2c4e6f8b1d3 applied to a fresh copy of the production database (check constraint now lists benchmark; `v_closing_odds` 4070 rows; Pinnacle CLV unchanged at +0.34%); the real recorder run on that copy created `market_pinnacle` and the league report still lists only the champion and challengers.
 - WP-T first design (totals bets under the champion's model_version) was rejected in review: it attributed to the champion a prediction it never made (rule 8).
+- Wave D: 931 passed, 4 skipped on the combined branch; migration chain e3f8b1a4c9d2 -> b3d5f7a9c1e4 applied to a fresh copy of production; `totals_pace` and `props_nb` appear as shadow models, the league and the bets by market are unchanged. The `unmatched names` figure of the props audit on that copy (12,325) is just quotes seen minus quotes inserted by captures made before this release.
 - Not exercised on real quotes: totals bets and the presence rows (no fresh quotes were available when tested); the recorder with the two new strategies (it only reads scheduled games, so a replay is impossible); first real use is the first tick after deployment.
 
 ## Progress

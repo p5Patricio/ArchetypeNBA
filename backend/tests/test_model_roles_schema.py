@@ -75,6 +75,94 @@ def test_benchmark_role_is_accepted(db_session):
     assert row.id is not None
 
 
+def test_shadow_role_is_accepted(db_session):
+    row = _model(
+        db_session,
+        "totals_pace",
+        "1",
+        role="shadow",
+        notes="Pace-based rolling totals shadow model, not a bettor",
+    )
+    assert row.role == "shadow"
+    assert row.notes == "Pace-based rolling totals shadow model, not a bettor"
+    assert row.id is not None
+
+
+def test_migration_downgrade_check_raises_when_shadow_rows_exist(db_session):
+    from unittest.mock import MagicMock, patch
+    import importlib.util
+    import os
+    import sqlalchemy as sa
+
+    _model(db_session, "totals_pace", "1", role="shadow")
+    with db_session.get_bind().connect() as conn:
+        count = conn.execute(sa.text("SELECT count(*) FROM model_version WHERE role = 'shadow'")).scalar()
+    assert count == 1
+
+    mig_path = os.path.join(
+        os.path.dirname(__file__),
+        "../alembic/versions/b3d5f7a9c1e4_add_shadow_model_role.py",
+    )
+    spec = importlib.util.spec_from_file_location("mig_b3d5f7a9c1e4", mig_path)
+    mig = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mig)
+
+    mock_conn = MagicMock()
+    mock_conn.execute.return_value.scalar.return_value = 1
+    with patch.object(mig.op, "get_bind", return_value=mock_conn):
+        with pytest.raises(RuntimeError, match="Cannot downgrade: 1 model_version row\\(s\\) with role='shadow' exist"):
+            mig.downgrade()
+
+    mock_conn.execute.return_value.scalar.return_value = 0
+    with patch.object(mig.op, "get_bind", return_value=mock_conn), \
+         patch.object(mig.op, "drop_constraint") as mock_drop, \
+         patch.object(mig.op, "create_check_constraint") as mock_create:
+        mig.downgrade()
+        mock_drop.assert_called_once_with('ck_model_version_role', 'model_version', type_='check')
+        mock_create.assert_called_once()
+
+
+def test_shadow_and_benchmark_models_are_ignored_by_league_and_promotion(db_session):
+    from app.services import model_registry, model_promotion, league_report
+    champion = _model(db_session, "elo_538", "1.1", role="champion")
+    challenger = _model(db_session, "elo_538", "2.0", role="challenger")
+    benchmark = _model(db_session, "market_pinnacle", "1", role="benchmark")
+    shadow = _model(db_session, "totals_pace", "1", role="shadow")
+    props_shadow = _model(db_session, "props_nb", "1", role="shadow")
+
+    # list_active should return ONLY champion and challenger
+    active = model_registry.list_active(db_session)
+    active_ids = [m.id for m in active]
+    assert active_ids == [champion.id, challenger.id]
+    assert benchmark.id not in active_ids
+    assert shadow.id not in active_ids
+    assert props_shadow.id not in active_ids
+
+    # league_rows should NOT include benchmark or shadow
+    rows = model_promotion.league_rows(db_session)
+    row_ids = [r.model_id for r in rows]
+    assert champion.id in row_ids
+    assert challenger.id in row_ids
+    assert benchmark.id not in row_ids
+    assert shadow.id not in row_ids
+    assert props_shadow.id not in row_ids
+
+    # Manual promote / retire should refuse benchmark and shadow models
+    now = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    with pytest.raises(model_promotion.ManualOverrideRefused, match="is a benchmark model"):
+        model_promotion.manual_promote(db_session, benchmark.id, "test", now)
+    with pytest.raises(model_promotion.ManualOverrideRefused, match="is a shadow model"):
+        model_promotion.manual_promote(db_session, shadow.id, "test", now)
+    with pytest.raises(model_promotion.ManualOverrideRefused, match="is a shadow model"):
+        model_promotion.manual_promote(db_session, props_shadow.id, "test", now)
+    with pytest.raises(model_promotion.ManualOverrideRefused, match="is a benchmark model"):
+        model_promotion.manual_retire(db_session, benchmark.id, "test", now)
+    with pytest.raises(model_promotion.ManualOverrideRefused, match="is a shadow model"):
+        model_promotion.manual_retire(db_session, shadow.id, "test", now)
+    with pytest.raises(model_promotion.ManualOverrideRefused, match="is a shadow model"):
+        model_promotion.manual_retire(db_session, props_shadow.id, "test", now)
+
+
 def test_migration_downgrade_check_raises_when_benchmark_rows_exist(db_session):
     from unittest.mock import MagicMock, patch
     import importlib.util

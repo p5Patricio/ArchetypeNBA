@@ -21,7 +21,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, select
 
-from app.analytics.props_engine import normalize_player_key
+from app.analytics.props_engine import normalize_player_key, strip_player_suffix
 from app.models import (
     BetSide,
     Game,
@@ -29,6 +29,8 @@ from app.models import (
     OddsCapturePresence,
     OddsHistory,
     Player,
+    PlayerGameLog,
+    PlayerSeasonStats,
     Season,
     Sportsbook,
     Team,
@@ -42,6 +44,7 @@ EU_BOOKS = {"pinnacle"}  # every other tracked book is a US book
 
 _GAME_MARKETS = {key: MarketType(key) for key in GAME_LINE_MARKETS}
 _PROP_MARKETS = {key: MarketType(key) for key in MARKET_TO_STAT}
+_PROP_MARKETS["player_pra"] = MarketType.player_pra
 _SIDES = {side.value: side for side in BetSide}
 
 # Odds API franchise name -> abbreviations the `team` table may use. The first entry that exists wins.
@@ -125,6 +128,7 @@ class IngestResult:
     skipped_duplicate: int = 0
     skipped_unmatched: int = 0  # team/game or player that could not be resolved
     skipped_invalid: int = 0  # unknown market/side, bad price, missing timestamp
+    unmatched_names: int = 0  # player names that could not be mapped or were ambiguous
 
     def merge(self, other: "IngestResult") -> "IngestResult":
         return IngestResult(
@@ -132,6 +136,7 @@ class IngestResult:
             self.skipped_duplicate + other.skipped_duplicate,
             self.skipped_unmatched + other.skipped_unmatched,
             self.skipped_invalid + other.skipped_invalid,
+            self.unmatched_names + other.unmatched_names,
         )
 
 
@@ -148,6 +153,8 @@ class OddsIngestionService:
         self._games: Dict[str, Game] = {}
         self._teams: Optional[Dict[str, Team]] = None
         self._players: Optional[Dict[str, Optional[int]]] = None
+        self._global_player_maps: Optional[Tuple[Dict[str, Optional[int]], Dict[str, Optional[int]]]] = None
+        self._game_player_maps: Dict[int, Tuple[Dict[str, Optional[int]], Dict[str, Optional[int]]]] = {}
 
     # ------------------------------------------------------------------ dimensions
 
@@ -174,6 +181,8 @@ class OddsIngestionService:
             index: Dict[str, Team] = {}
             for team in self.session.exec(select(Team)).all():
                 index[(team.abbreviation or "").upper()] = team
+                if team.full_name:
+                    index.setdefault(_team_key(team.full_name), team)
                 canon = canonical_team_name(team.full_name or "")
                 if canon:
                     index.setdefault(_team_key(canon), team)
@@ -290,18 +299,78 @@ class OddsIngestionService:
                 self._games[event_id] = game
         return game
 
+    @staticmethod
+    def _build_player_maps(
+        candidates: Iterable[Tuple[int, str]]
+    ) -> Tuple[Dict[str, Optional[int]], Dict[str, Optional[int]]]:
+        exact_map: Dict[str, Optional[int]] = {}
+        stripped_map: Dict[str, Optional[int]] = {}
+        for player_id, full_name in candidates:
+            if not full_name:
+                continue
+            norm = normalize_player_key(full_name)
+            stripped = strip_player_suffix(norm)
+            exact_map[norm] = None if norm in exact_map and exact_map[norm] != player_id else player_id
+            stripped_map[stripped] = None if stripped in stripped_map and stripped_map[stripped] != player_id else player_id
+        return exact_map, stripped_map
+
+    def _candidate_players_for_game(self, game: Optional[Game]) -> List[Tuple[int, str]]:
+        if game is not None and game.home_team_id and game.away_team_id:
+            team_ids = (game.home_team_id, game.away_team_id)
+            # Try PlayerSeasonStats
+            pss_stmt = (
+                sa_select(Player.id, Player.full_name)
+                .join(PlayerSeasonStats, PlayerSeasonStats.player_id == Player.id)
+                .where(PlayerSeasonStats.team_id.in_(team_ids))
+            )
+            pss_players = self.session.execute(pss_stmt).all()
+
+            # Also PlayerGameLog
+            pgl_stmt = (
+                sa_select(Player.id, Player.full_name)
+                .join(PlayerGameLog, PlayerGameLog.player_id == Player.id)
+                .where(PlayerGameLog.team_id.in_(team_ids))
+            )
+            pgl_players = self.session.execute(pgl_stmt).all()
+
+            combined = {int(p_id): str(full_name) for p_id, full_name in [*pss_players, *pgl_players] if p_id is not None}
+            if combined:
+                return list(combined.items())
+
+        # Fallback to all players if no team players found or game is None
+        all_players = self.session.execute(sa_select(Player.id, Player.full_name)).all()
+        return [(int(p_id), str(full_name)) for p_id, full_name in all_players if p_id is not None]
+
     def _player_index(self) -> Dict[str, Optional[int]]:
         """normalized name -> player id; None marks an ambiguous name (never guessed)."""
-        if self._players is None:
-            index: Dict[str, Optional[int]] = {}
-            for player_id, full_name in self.session.exec(select(Player.id, Player.full_name)).all():
-                key = normalize_player_key(full_name)
-                index[key] = None if key in index and index[key] != player_id else player_id
-            self._players = index
-        return self._players
+        if self._global_player_maps is None:
+            candidates = self._candidate_players_for_game(None)
+            self._global_player_maps = self._build_player_maps(candidates)
+        return self._global_player_maps[0]
 
-    def resolve_player_id(self, name: str) -> Optional[int]:
-        return self._player_index().get(normalize_player_key(name))
+    def resolve_player_id(self, name: str, game: Optional[Game] = None) -> Optional[int]:
+        if not name:
+            return None
+        if game is not None and game.id is not None:
+            if game.id not in self._game_player_maps:
+                candidates = self._candidate_players_for_game(game)
+                self._game_player_maps[game.id] = self._build_player_maps(candidates)
+            exact_map, stripped_map = self._game_player_maps[game.id]
+        else:
+            if self._global_player_maps is None:
+                candidates = self._candidate_players_for_game(None)
+                self._global_player_maps = self._build_player_maps(candidates)
+            exact_map, stripped_map = self._global_player_maps
+
+        norm_name = normalize_player_key(name)
+        if norm_name in exact_map:
+            return exact_map[norm_name]
+
+        stripped_name = strip_player_suffix(norm_name)
+        if stripped_name in stripped_map:
+            return stripped_map[stripped_name]
+
+        return None
 
     # ------------------------------------------------------------------ ingestion
 
@@ -437,9 +506,11 @@ class OddsIngestionService:
                 result.skipped_invalid += 1
                 continue
 
-            player_id = self.resolve_player_id(q.player_name)
+            player_id = self.resolve_player_id(q.player_name, game=game)
             if player_id is None:
+                logger.info("OddsIngestion: player name %r unmatched or ambiguous for game %s; quote skipped", q.player_name, game.id)
                 result.skipped_unmatched += 1
+                result.unmatched_names += 1
                 continue
 
             book = self.upsert_sportsbook(q.bookmaker_key, q.bookmaker_key)

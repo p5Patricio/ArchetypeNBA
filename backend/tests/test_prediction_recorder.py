@@ -86,13 +86,14 @@ class World:
         self.session.commit()
         return game
 
-    def quote(self, game, book, market, side, line, price, captured=None, updated=None):
+    def quote(self, game, book, market, side, line, price, captured=None, updated=None, player_id=None):
         captured = captured or NOW - timedelta(minutes=10)
         self._updates += 1
         row = OddsHistory(
             game_id=game.id,
             sportsbook_id=self.books[book].id,
             market=market,
+            player_id=player_id,
             side=side,
             line=None if line is None else Decimal(str(line)),
             price_american=price,
@@ -119,6 +120,12 @@ class World:
         return (
             self.quote(game, book, MarketType.totals, BetSide.over, line, over_price, **kw),
             self.quote(game, book, MarketType.totals, BetSide.under, line, under_price, **kw),
+        )
+
+    def prop(self, game, book, player_id, market, line, over_price, under_price, **kw):
+        return (
+            self.quote(game, book, market, BetSide.over, line, over_price, player_id=player_id, **kw),
+            self.quote(game, book, market, BetSide.under, line, under_price, player_id=player_id, **kw),
         )
 
     def recorder(self, **kw):
@@ -654,6 +661,167 @@ def test_totals_are_bet_only_by_market_edge_and_never_model_strategies(world, db
     champ_stats = summary.models[champ.id]
     # In world, 1 game was predicted: 2 h2h predictions (home & away) stored, 0 totals attributed to champion
     assert champ_stats.predictions_written == 2
+
+
+def test_totals_shadow_model_predictions_recorded_and_no_bets_created(world, db_session):
+    game = world.game()
+    world.total(game, "pinnacle", 220.5, -110, -110)
+
+    summary1 = world.recorder().run()
+
+    # Model row totals_pace v1 exists with role='shadow'
+    shadow_model = db_session.exec(
+        select(ModelVersion).where(
+            ModelVersion.name == "totals_pace",
+            ModelVersion.version == "1",
+        )
+    ).one()
+    assert shadow_model.role == "shadow"
+    assert shadow_model.params == {"family": "totals", "window": 10, "prior_weight": 5.0}
+
+    # Predictions under totals_pace
+    shadow_preds = db_session.exec(
+        select(ModelPrediction).where(
+            ModelPrediction.model_version_id == shadow_model.id,
+            ModelPrediction.game_id == game.id,
+            ModelPrediction.market == MarketType.totals,
+        )
+    ).all()
+    assert len(shadow_preds) == 2
+    by_side = {p.side: p for p in shadow_preds}
+    assert BetSide.over in by_side and BetSide.under in by_side
+    pred_over, pred_under = by_side[BetSide.over], by_side[BetSide.under]
+    assert float(pred_over.line) == 220.5
+    assert float(pred_under.line) == 220.5
+    assert pred_over.projection is not None
+    assert float(pred_over.projection) == pytest.approx(220.0, abs=1.0)
+    assert float(pred_over.model_prob) + float(pred_under.model_prob) == pytest.approx(1.0, abs=1e-4)
+
+    # NO bets of any kind come from totals_pace
+    bets_from_shadow = db_session.exec(
+        select(SimulatedBet).join(ModelPrediction).where(
+            ModelPrediction.model_version_id == shadow_model.id
+        )
+    ).all()
+    assert bets_from_shadow == []
+
+    # Re-running is idempotent: 0 new predictions written for totals_pace
+    summary2 = world.recorder().run()
+    shadow_preds_after = db_session.exec(
+        select(ModelPrediction).where(
+            ModelPrediction.model_version_id == shadow_model.id,
+            ModelPrediction.game_id == game.id,
+        )
+    ).all()
+    assert len(shadow_preds_after) == 2
+
+
+def test_props_shadow_model_predictions_recorded_and_no_bets_created(world, db_session):
+    from app.models import Player, PlayerSeasonStats
+    game = world.game()
+
+    # Add a player with multi-season stats in DB so load_baselines_from_db finds him
+    player = Player(id=101, full_name="Luka Doncic")
+    db_session.add(player)
+    db_session.commit()
+    season = world.old
+    db_session.add(
+        PlayerSeasonStats(
+            player_id=player.id,
+            team_id=world.teams["AAA"].id,
+            season_id=season.id,
+            gp=20,
+            min=700.0,
+            pts=560.0,
+            reb=140.0,
+            ast=140.0,
+        )
+    )
+    db_session.commit()
+
+    # Add prop quote for this player
+    world.prop(game, "draftkings", player.id, MarketType.player_points, 27.5, -115, -105)
+
+    summary1 = world.recorder().run()
+
+    # Model row props_nb v1 exists with role='shadow'
+    shadow_model = db_session.exec(
+        select(ModelVersion).where(
+            ModelVersion.name == "props_nb",
+            ModelVersion.version == "1",
+        )
+    ).one()
+    assert shadow_model.role == "shadow"
+    assert shadow_model.params == {"family": "props", "distribution": "negative_binomial"}
+
+    # Predictions under props_nb: exactly 2 rows (over and under)
+    shadow_preds = db_session.exec(
+        select(ModelPrediction).where(
+            ModelPrediction.model_version_id == shadow_model.id,
+            ModelPrediction.game_id == game.id,
+            ModelPrediction.market == MarketType.player_points,
+            ModelPrediction.player_id == player.id,
+        )
+    ).all()
+    assert len(shadow_preds) == 2
+    by_side = {p.side: p for p in shadow_preds}
+    assert BetSide.over in by_side and BetSide.under in by_side
+    pred_over, pred_under = by_side[BetSide.over], by_side[BetSide.under]
+    assert float(pred_over.line) == 27.5
+    assert float(pred_under.line) == 27.5
+    assert pred_over.projection is not None
+    # 560 pts / 700 min = 0.80 pts/min * 35.0 avg min = 28.0 projected mean
+    assert float(pred_over.projection) == pytest.approx(28.0, abs=0.5)
+    assert float(pred_over.model_prob) + float(pred_under.model_prob) == pytest.approx(1.0, abs=1e-3)
+
+    # NO bets of any kind come from props_nb
+    bets_from_shadow = db_session.exec(
+        select(SimulatedBet).join(ModelPrediction).where(
+            ModelPrediction.model_version_id == shadow_model.id
+        )
+    ).all()
+    assert bets_from_shadow == []
+
+    # Re-running is idempotent: 0 new predictions written for props_nb
+    summary2 = world.recorder().run()
+    shadow_preds_after = db_session.exec(
+        select(ModelPrediction).where(
+            ModelPrediction.model_version_id == shadow_model.id,
+            ModelPrediction.game_id == game.id,
+            ModelPrediction.player_id == player.id,
+        )
+    ).all()
+    assert len(shadow_preds_after) == 2
+
+
+def test_props_shadow_skips_players_without_baselines(world, db_session):
+    from app.models import Player
+    game = world.game()
+
+    # Player has no PlayerSeasonStats in DB
+    player = Player(id=202, full_name="Unknown Prospect")
+    db_session.add(player)
+    db_session.commit()
+
+    world.prop(game, "draftkings", player.id, MarketType.player_points, 15.5, -110, -110)
+
+    summary = world.recorder().run()
+    assert summary.skipped["no_baseline"] >= 1
+
+    shadow_model = db_session.exec(
+        select(ModelVersion).where(
+            ModelVersion.name == "props_nb",
+            ModelVersion.version == "1",
+        )
+    ).one()
+    shadow_preds = db_session.exec(
+        select(ModelPrediction).where(
+            ModelPrediction.model_version_id == shadow_model.id,
+            ModelPrediction.game_id == game.id,
+            ModelPrediction.player_id == player.id,
+        )
+    ).all()
+    assert shadow_preds == []
 
 
 def test_totals_best_price_across_books_is_taken(world, db_session):

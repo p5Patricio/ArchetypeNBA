@@ -70,7 +70,9 @@ Entries are grouped by area below; the IDs follow the index. To change a decisio
 | [D-54](#d-54-one-pc-captures-at-a-time-in-a-fixed-cutover-order) | 2026-10-26 | One PC captures at a time, in a fixed cutover order | Operations |
 | [D-55](#d-55-everything-runs-in-wsl2-systemd-timers-replace-task-scheduler) | 2026-10-27 | Everything runs in WSL2; systemd timers replace Task Scheduler | Operations |
 | [D-56](#d-56-judge-the-paper-system-by-pinnacle-referenced-clv-per-game-add-two-staking-arms-and-a-report-only-selection-test) | 2026-10-28 | Judge the paper system by Pinnacle-referenced CLV per game | Method |
+| [D-57](#d-57-totals-paper-bets-via-model-free-market-benchmark-model-market_pinnacle) | 2026-10-28 | Totals paper bets via model-free market benchmark model | Model |
 | [D-58](#d-58-second-odds-feed-sportsgameodds-as-best-price-contributor-only) | 2026-10-28 | Second odds feed (SportsGameOdds) as best-price contributor only | Data |
+| [D-59](#d-59-shadow-totals-model-totals_pace-with-evaluation-against-pinnacles-close) | 2026-10-28 | Shadow totals model (`totals_pace`) with evaluation against Pinnacle's close | Model |
 
 ## Data and scope
 
@@ -554,6 +556,26 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Alternatives rejected**: Using SportsGameOdds for paper-trading fair value (rejected: lacks a sharp book like Pinnacle); creating `Game` entities from secondary feeds (rejected: avoids duplicating games or conflicting schedules); polling without quota guards.
 - **Consequences**: No database schema change needed. When enabled, more bookmakers are tracked in `sportsbook` and `odds_history`. The system remains offline and untouched during ticks until the owner configures a valid key.
 - **Source**: [`ROADMAP.md`](ROADMAP.md) item 8; `app/services/odds_providers/sportsgameodds.py`.
+
+### D-59 Shadow totals model (totals_pace) with evaluation against Pinnacle's close
+- **Date**: 2026-10-28
+- **Decision**: Introduce a pure statistical totals forecasting model (`totals_pace` v1, role `'shadow'`) implemented in `app/analytics/totals_model.py`. The model estimates expected total $\mu$ as the pace/efficiency average of each team's rolling combined points (scored + allowed over last N=10 games, shrunk toward the season league mean with prior weight 5.0) and residual standard deviation $\sigma$ from the same rolling procedure over past games only (default 17.7 points). Binary probability of over is computed as $p_{\text{over}}(\text{line}) = 1 - \Phi((\text{line} - \mu) / \sigma)$, ignoring push mass on half lines. The model runs in shadow mode only: the recorder idempotently creates `totals_pace` v1 and stores predictions for every game that has fresh totals quotes at Pinnacle's line, but NEVER generates paper bets of any kind. An evaluation service function and reporting sections in `scripts/market_audit.py` and `scripts/paper_report.py` measure $n$, Brier score, log loss, paired differences with bootstrap 95% intervals against Pinnacle's de-vigged closing line, and model mean total error with standard deviation (displaying "insufficient data" when $n < 30$). All model league components, promotion logic, and active forecasting model reports strictly ignore shadow models.
+- **Context**: Closing totals error has standard deviation ~17.7 points and public box-score models offer no proven edge over Pinnacle's closing lines. The shadow arm implements closed-loop measurement to test whether a simple model can approach the market before any model-driven betting policy is considered.
+- **Alternatives rejected**:
+  1. Paper betting totals with the totals model or champion (rejected: closing error sd ~17.7 points indicates no verified edge; betting would risk paper bankroll on unproven forecasts).
+  2. Registering totals model as a challenger in the model league (rejected: model league is strictly for head-to-head game outcome forecasting models competing for champion status; totals are an independent market).
+- **Consequences**: Hand-written Alembic migration `b3d5f7a9c1e4` updates `ck_model_version_role` to include `'shadow'`. The recorder stores totals predictions for `totals_pace` alongside `market_pinnacle`. The model league and promotion gates remain isolated.
+- **Source**: WP-S1; [`QUANT_MODULE.md`](QUANT_MODULE.md); [`DECISIONS.md`](DECISIONS.md); migration `b3d5f7a9c1e4`.
+
+### D-60 Persist player-prop quotes and evaluate props shadow model (props_nb) against book close
+- **Date**: 2026-10-28
+- **Decision**: Persist closing player-prop quotes in `odds_history` for requested markets (`player_points`, `player_rebounds`, `player_assists`, `player_pra`) with truthful `quotes_seen` / `quotes_inserted` capture tracking. Map player names to database players using diacritic and standard suffix stripping (`Jr.`, `Sr.`, `II`, `III`, `IV`, `V`), restricted to candidate players from the two teams of the game; ambiguous or unmatched names are skipped and counted. Register shadow model `props_nb` v1 with role `'shadow'` (`model_registry.py`). Record shadow predictions for quoted lines using negative-binomial machinery (`analytics/props_engine.py`); players lacking baselines are skipped without fabrication. Zero paper bets are created. Evaluate settled games against the SAME book's de-vigged closing over/under pair (`devig_two_way`) at or before tip-off; derive actual stats from `player_game_log`; classify as over/under/push, or `VOID` when player did not play (0 minutes or no log). Report $n$, Brier score, log loss, paired bootstrap 95% intervals, void count, and unmatched name count in `market_audit.py`, `paper_report.py`, and `GET /api/v1/paper/summary` (with $n < 30$ guard). Shadow model rows remain completely isolated from the model league, promotion, learn, and champion attribution.
+- **Context**: 40 closing props captures spent 40 credits and saw 12,325 quotes but inserted 0 due to missing name resolution and game scoping. Credits bought no empirical evidence. Props paper bets are deliberately deferred because there is no universal sharp reference for props and the sample is tiny; the shadow evaluation loop measures calibration before any betting is entertained.
+- **Alternatives rejected**:
+  1. Paper betting player props (rejected: soft books and no sharp closing benchmark; risk of false edge on tiny samples). Revisit only when shadow evaluation reaches $n \ge 200$.
+  2. Fabricating missing player baseline data or consensus odds (rejected: strict Rule 3 violation; uncalibrated or missing players are skipped and counted).
+- **Consequences**: `odds_history` captures high-fidelity closing player props quotes. Truthful quote metrics on capture markers. Clean, settlement-free evaluation of negative-binomial props calibration against bookmakers.
+- **Source**: WP-S2; [`QUANT_MODULE.md`](QUANT_MODULE.md); [`DECISIONS.md`](DECISIONS.md); [`ROADMAP.md`](ROADMAP.md).
 
 ## Next step
 

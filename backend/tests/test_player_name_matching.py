@@ -5,6 +5,7 @@ from app.analytics.props_engine import (
     PropsEngine,
     index_props_by_player,
     normalize_player_key,
+    strip_player_suffix,
 )
 
 
@@ -25,6 +26,16 @@ def test_normalize_player_key_ignores_accents_case_and_punctuation():
     assert normalize_player_key("P.J.  Washington Jr.") == "pj washington jr"
     assert normalize_player_key("Shai Gilgeous-Alexander") == "shai gilgeous alexander"
     assert normalize_player_key("De'Aaron Fox") == normalize_player_key("DeAaron Fox")
+
+
+def test_strip_player_suffix_removes_known_suffixes():
+    assert strip_player_suffix("pj washington jr") == "pj washington"
+    assert strip_player_suffix("marcus morris sr") == "marcus morris"
+    assert strip_player_suffix("trey murphy iii") == "trey murphy"
+    assert strip_player_suffix("gary payton ii") == "gary payton"
+    assert strip_player_suffix("lonnie walker iv") == "lonnie walker"
+    assert strip_player_suffix("luka doncic") == "luka doncic"
+    assert strip_player_suffix("") == ""
 
 
 def test_index_props_by_player_merges_names_that_normalize_alike():

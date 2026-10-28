@@ -1,0 +1,44 @@
+{
+  "eventID": "...",
+  "odds": {
+    "points-home-game-ml-home": {
+      "oddID": "points-home-game-ml-home",
+      "statID": "points",
+      "statEntityID": "home",
+      "periodID": "game",
+      "betTypeID": "ml",
+      "sideID": "home",
+      "fairOdds": "-110",
+      "bookOdds": "-115",
+      "byBookmaker": {
+        "draftkings": {
+          "odds": "-112",
+          "available": true
+        },
+        "fanduel": {
+          "odds": "-118",
+          "available": true
+        }
+      }
+    },
+    "points-all-game-ou-over": {
+      "oddID": "points-all-game-ou-over",
+      "statID": "points",
+      "statEntityID": "all",
+      "periodID": "game",
+      "betTypeID": "ou",
+      "sideID": "over",
+      "fairOdds": "-108",
+      "fairOverUnder": "224.5",
+      "bookOdds": "-110",
+      "bookOverUnder": "224.5",
+      "byBookmaker": {
+        "draftkings": {
+          "odds": "-110",
+          "overUnder": "224.5",
+          "available": true
+        }
+      }
+    }
+  }
+}
