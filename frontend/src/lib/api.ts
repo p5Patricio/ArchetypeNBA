@@ -1227,6 +1227,10 @@ export interface TodayPropsResponse {
   total_props: number;
   value_picks_count: number;
   items: PropItem[];
+  injury_report?: {
+    available: boolean;
+    reason?: string | null;
+  } | null;
 }
 
 export async function getTodayProps(params?: {

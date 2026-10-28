@@ -7,7 +7,7 @@ from app.analytics.props_engine import PropBetLine, PropsEngine
 from app.api.v1 import props as props_module
 from app.main import app
 from app.services.gemini_analyzer import GeminiAnalyzerService, SlateAnalysisResult
-from app.services.injury_scraper import InjuryScraperService
+from app.services.injury_scraper import InjuryReport, InjuryScraperService
 from app.services.odds_api_service import OddsApiService
 
 client = TestClient(app)
@@ -19,7 +19,11 @@ def isolated_props(monkeypatch, tmp_path):
     monkeypatch.setattr(props_module, "CACHE_FILE", tmp_path / "last_props_cache.json")
     monkeypatch.setattr(props_module, "_cached_response", None)
     monkeypatch.setattr(props_module, "_last_computed_time", None)
-    monkeypatch.setattr(InjuryScraperService, "fetch_injury_report", lambda self: [])
+    monkeypatch.setattr(
+        InjuryScraperService,
+        "fetch_injury_report",
+        lambda self: InjuryReport(available=False, reason="test: no official report", rows=[]),
+    )
     monkeypatch.setattr(
         GeminiAnalyzerService,
         "analyze_injuries_and_news",
@@ -58,6 +62,27 @@ def test_refresh_without_live_lines_returns_an_honest_empty_slate(monkeypatch):
     assert data["value_picks_count"] == 0
     assert "Sin líneas en vivo" in data["odds_source"]
     assert "Consenso" not in data["odds_source"]
+    assert data["injury_report"] is not None
+    assert data["injury_report"]["available"] is False
+    assert data["injury_report"]["reason"] == "test: no official report"
+
+
+def test_props_api_injury_report_unavailable_skips_qualitative_layer(monkeypatch):
+    _no_live_lines(monkeypatch)
+    qualitative_called = []
+
+    def fake_analyze(self, items):
+        qualitative_called.append(items)
+        return SlateAnalysisResult(modifiers=[], slate_summary="Fake")
+
+    monkeypatch.setattr(GeminiAnalyzerService, "analyze_injuries_and_news", fake_analyze)
+
+    response = client.get("/api/v1/props/today?refresh=true")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(qualitative_called) == 0  # skipped because injury report is unavailable
+    assert data["injury_report"]["available"] is False
+    assert "Omitido" in data["ai_engine"]
 
 
 def test_run_analysis_without_live_lines_never_invents_picks(monkeypatch):

@@ -161,17 +161,19 @@ def run_pipeline(dry_run: bool = False) -> bool:
     # 1. Scrape official injury report
     logger.info("Step 1: Ingesting official injury report...")
     scraper = InjuryScraperService()
-    injury_items = scraper.fetch_injury_report()
-    logger.info(f"Fetched {len(injury_items)} injury entries.")
+    injury_report = scraper.fetch_injury_report()
 
     # 2. Qualitative analysis with Gemini AI
-    logger.info("Step 2: Processing qualitative intelligence with Gemini...")
-    analyzer = GeminiAnalyzerService()
-    analysis = analyzer.analyze_injuries_and_news(injury_items)
-    logger.info(f"Gemini Slate Summary: {analysis.slate_summary}")
-
-    # Build lookup map for qualitative modifiers
-    modifier_map = {m.player_name.lower(): m for m in analysis.modifiers}
+    if injury_report.available and injury_report.rows:
+        logger.info(f"Fetched {len(injury_report.rows)} injury entries.")
+        logger.info("Step 2: Processing qualitative intelligence with Gemini...")
+        analyzer = GeminiAnalyzerService()
+        analysis = analyzer.analyze_injuries_and_news(injury_report.rows)
+        logger.info(f"Gemini Slate Summary: {analysis.slate_summary}")
+        modifier_map = {m.player_name.lower(): m for m in analysis.modifiers}
+    else:
+        logger.info(f"Injury report unavailable ({injury_report.reason}). Skipping qualitative intelligence.")
+        modifier_map = {}
 
     # 3. Retrieve live sportsbook lines via The Odds API
     logger.info("Step 3: Fetching sportsbook lines via The Odds API...")
