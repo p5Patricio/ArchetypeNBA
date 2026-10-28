@@ -93,6 +93,10 @@ def test_paper_summary_with_bets(client: TestClient, world):
     assert pclv["games"] == 1
     assert pclv["mean_clv"] is not None
 
+    markets = {m["market"]: m for m in data.get("markets", [])}
+    assert set(markets.keys()) == {"h2h", "spreads", "totals"}
+    assert markets["h2h"]["bets"] == 1
+
 
 def test_paper_bets_list_filters_and_pagination(client: TestClient, world):
     game = add_game(world, "BOS", "LAC", start=TIPOFF)
@@ -180,3 +184,30 @@ def test_paper_bankroll_series(client: TestClient, world):
 
     # kelly has no settled bets
     assert series["kelly_fractional"] == []
+
+
+def test_paper_bets_includes_totals_bets(client: TestClient, world):
+    game = add_game(world, "BOS", "LAC", start=TIPOFF)
+    bet = place_bet(
+        world,
+        game,
+        MarketType.totals,
+        BetSide.over,
+        line=224.5,
+        price="1.9500",
+        stake="1.000",
+        strategy=StakingStrategy.market_edge,
+        placed_at=PLACED,
+    )
+
+    resp = client.get("/api/v1/paper/bets")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    item = data["bets"][0]
+    assert item["id"] == bet.id
+    assert item["market"] == "totals"
+    assert item["side"] == "over"
+    assert item["line"] == 224.5
+    assert item["strategy"] == "market_edge"
+

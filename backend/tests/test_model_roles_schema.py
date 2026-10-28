@@ -62,6 +62,54 @@ def test_an_unknown_role_is_rejected(db_session):
     db_session.rollback()
 
 
+def test_benchmark_role_is_accepted(db_session):
+    row = _model(
+        db_session,
+        "market_pinnacle",
+        "1",
+        role="benchmark",
+        notes="Pinnacle's de-vigged probability, not a forecasting model",
+    )
+    assert row.role == "benchmark"
+    assert row.notes == "Pinnacle's de-vigged probability, not a forecasting model"
+    assert row.id is not None
+
+
+def test_migration_downgrade_check_raises_when_benchmark_rows_exist(db_session):
+    from unittest.mock import MagicMock, patch
+    import importlib.util
+    import os
+    import sqlalchemy as sa
+
+    _model(db_session, "market_pinnacle", "1", role="benchmark")
+    with db_session.get_bind().connect() as conn:
+        count = conn.execute(sa.text("SELECT count(*) FROM model_version WHERE role = 'benchmark'")).scalar()
+    assert count == 1
+
+    # Load the migration module dynamically and test downgrade() with mocked op
+    mig_path = os.path.join(
+        os.path.dirname(__file__),
+        "../alembic/versions/a2c4e6f8b1d3_add_benchmark_model_role.py",
+    )
+    spec = importlib.util.spec_from_file_location("mig_a2c4e6f8b1d3", mig_path)
+    mig = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mig)
+
+    mock_conn = MagicMock()
+    mock_conn.execute.return_value.scalar.return_value = 1
+    with patch.object(mig.op, "get_bind", return_value=mock_conn):
+        with pytest.raises(RuntimeError, match="Cannot downgrade: 1 model_version row\\(s\\) with role='benchmark' exist"):
+            mig.downgrade()
+
+    mock_conn.execute.return_value.scalar.return_value = 0
+    with patch.object(mig.op, "get_bind", return_value=mock_conn), \
+         patch.object(mig.op, "drop_constraint") as mock_drop, \
+         patch.object(mig.op, "create_check_constraint") as mock_create:
+        mig.downgrade()
+        mock_drop.assert_called_once_with('ck_model_version_role', 'model_version', type_='check')
+        mock_create.assert_called_once()
+
+
 def test_the_single_champion_index_is_partial_and_unique(db_session):
     indexes = {ix["name"]: ix for ix in inspect(db_session.get_bind()).get_indexes("model_version")}
     assert indexes["uq_model_version_single_champion"]["unique"]

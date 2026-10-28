@@ -77,6 +77,15 @@ class StrategyPerformance:
 
 
 @dataclass
+class MarketPerformance:
+    market: str
+    bets: int = 0
+    settled: int = 0
+    roi: Optional[float] = None
+    avg_clv: Optional[float] = None
+
+
+@dataclass
 class ClvCoverage:
     bets_tipped_off: int = 0
     bets_with_clv: int = 0
@@ -121,6 +130,7 @@ class ActiveModel:
 class PaperReport:
     now: datetime
     strategies: List[StrategyPerformance] = field(default_factory=list)
+    markets: List[MarketPerformance] = field(default_factory=list)
     clv: ClvCoverage = field(default_factory=ClvCoverage)
     pinnacle_clv: Optional[PinnacleClvReport] = None
     skill: ModelSkill = field(default_factory=ModelSkill)
@@ -133,6 +143,7 @@ def build_report(session: Session, now: Optional[datetime] = None) -> PaperRepor
     return PaperReport(
         now=now,
         strategies=_performance(session),
+        markets=_market_breakdown(session),
         clv=_clv_coverage(session, now),
         pinnacle_clv=build_pinnacle_clv_report(session, now),
         skill=_model_skill(session),
@@ -185,6 +196,39 @@ def _performance(session: Session) -> List[StrategyPerformance]:
             perf.beat_close_rate = sum(1 for value in clv[name] if value > 0) / len(clv[name])
         perf.bankroll = START_BANKROLL + perf.pnl_units
     return sorted(by_strategy.values(), key=lambda p: p.strategy)
+
+
+def _market_breakdown(session: Session) -> List[MarketPerformance]:
+    by_market = {m: MarketPerformance(m) for m in ("h2h", "spreads", "totals")}
+    rows = session.execute(
+        select(
+            ModelPrediction.market,
+            SimulatedBet.status,
+            SimulatedBet.stake_units,
+            SimulatedBet.profit_units,
+            SimulatedBet.clv_pct,
+        )
+        .join(ModelPrediction, ModelPrediction.id == SimulatedBet.prediction_id)
+    ).all()
+    stakes: Dict[str, float] = defaultdict(float)
+    pnl: Dict[str, float] = defaultdict(float)
+    clv: Dict[str, List[float]] = defaultdict(list)
+    for market, status, stake, profit, clv_pct in rows:
+        m_str = _enum_value(market)
+        perf = by_market.setdefault(m_str, MarketPerformance(m_str))
+        perf.bets += 1
+        if status in _SETTLED:
+            perf.settled += 1
+            pnl[m_str] += float(profit or 0)
+            stakes[m_str] += float(stake)
+        if clv_pct is not None:
+            clv[m_str].append(float(clv_pct))
+    for m_str, perf in by_market.items():
+        if stakes[m_str]:
+            perf.roi = pnl[m_str] / stakes[m_str]
+        if clv[m_str]:
+            perf.avg_clv = sum(clv[m_str]) / len(clv[m_str])
+    return [by_market[m] for m in ("h2h", "spreads", "totals")]
 
 
 # ------------------------------------------------------------------------------------------------- CLV
@@ -366,6 +410,14 @@ def format_report(report: PaperReport) -> str:
             f"  {perf.strategy:<18} bets {perf.bets} (settled {perf.settled}, pending {perf.pending}) | "
             f"win rate {_pct(perf.win_rate)} | P/L {perf.pnl_units:+.2f}u | ROI {_pct(perf.roi)} | "
             f"avg CLV {_pct(perf.avg_clv, 2)} | beat close {_pct(perf.beat_close_rate)} (over {perf.clv_bets} bets with CLV)"
+        )
+    lines.append("")
+
+    lines.append("Market breakdown (h2h / spreads / totals)")
+    for m in report.markets:
+        lines.append(
+            f"  {m.market:<18} bets {m.bets} (settled {m.settled}) | "
+            f"ROI {_pct(m.roi)} | avg CLV {_pct(m.avg_clv, 2)}"
         )
     lines.append("")
 

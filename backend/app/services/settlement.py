@@ -95,6 +95,16 @@ def grade_bet(
         if adjusted < 0:
             return BetStatus.lost
         return BetStatus.push
+    if market == MarketType.totals.value:
+        if side not in (BetSide.over.value, BetSide.under.value) or line is None:
+            return None
+        total = Decimal(home_score + away_score)
+        target = _dec(line)
+        if total > target:
+            return BetStatus.won if side == BetSide.over.value else BetStatus.lost
+        if total < target:
+            return BetStatus.won if side == BetSide.under.value else BetStatus.lost
+        return BetStatus.push
     return None
 
 
@@ -112,7 +122,7 @@ class SettlementSummary:
     dry_run: bool = False
     settled: Counter = field(default_factory=Counter)  # status value -> bets (would-be on a dry run)
     profit_units: Decimal = Decimal(0)
-    skipped_unsupported: int = 0  # markets this module does not settle (totals, props)
+    skipped_unsupported: int = 0  # markets this module does not settle (props)
     skipped_no_score: int = 0  # final game without both scores
 
     @property

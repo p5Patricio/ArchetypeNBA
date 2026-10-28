@@ -23,6 +23,7 @@ from app.models import (
     TeamEloRating,
 )
 from app.services.elo_service import MODEL_NAME, MODEL_VERSION
+from app.services import model_registry
 from app.services.prediction_recorder import PredictionRecorder, RecorderError
 
 NOW = datetime(2026, 10, 20, 18, 0, tzinfo=timezone.utc)
@@ -114,6 +115,12 @@ class World:
             self.quote(game, book, MarketType.spreads, BetSide.away, -home_line, away_price, **kw),
         )
 
+    def total(self, game, book, line, over_price, under_price, **kw):
+        return (
+            self.quote(game, book, MarketType.totals, BetSide.over, line, over_price, **kw),
+            self.quote(game, book, MarketType.totals, BetSide.under, line, under_price, **kw),
+        )
+
     def recorder(self, **kw):
         return PredictionRecorder(self.session, now=kw.pop("now", NOW), **kw)
 
@@ -181,7 +188,7 @@ def test_h2h_predictions_are_recorded_for_a_game_without_odds(world, db_session)
     assert float(home.projection) == pytest.approx(MU, abs=0.01)
     assert home.game_id == game.id and home.predicted_at is not None
     assert (summary.games_considered, summary.games_processed, summary.predictions_written) == (1, 1, 2)
-    assert summary.skipped["no_fresh_quotes"] == 2
+    assert summary.skipped["no_fresh_quotes"] == 3
     assert _bets(db_session) == []
 
 
@@ -598,3 +605,158 @@ def test_a_dry_run_computes_everything_and_writes_nothing(world, db_session):
     real = world.recorder().run()
     assert real.predictions_written == dry.predictions_written
     assert dict(real.bets_placed) == dict(dry.bets_placed)
+
+
+# --- totals bets and market_edge ---------------------------------------------------------------
+
+
+def test_totals_are_bet_only_by_market_edge_and_never_model_strategies(world, db_session):
+    game = world.game()
+    # Pinnacle devigged 50/50 at 220.5: -110 / -110
+    world.total(game, "pinnacle", 220.5, -110, -110)
+    # DraftKings offers Over 220.5 at +105 (price 2.05, EV = 0.5 * 2.05 - 1 = +2.5%)
+    world.total(game, "draftkings", 220.5, 105, -125)
+
+    summary = world.recorder().run()
+
+    # Flat, kelly_fractional, kelly_shrunk must NEVER bet totals
+    assert summary.bets_placed["flat"] == 0
+    assert summary.bets_placed["kelly_fractional"] == 0
+    assert summary.bets_placed["kelly_shrunk"] == 0
+    assert summary.bets_placed["market_edge"] == 1
+
+    bets = _bets_of(db_session, game)
+    assert set(bets) == {StakingStrategy.market_edge}
+    bet = bets[StakingStrategy.market_edge]
+    assert float(bet.price_taken) == pytest.approx(2.05)
+    assert float(bet.line_taken) == 220.5
+    assert float(bet.stake_units) == 1.0  # flat 1 unit
+    assert bet.status == BetStatus.pending
+
+    pred = db_session.get(ModelPrediction, bet.prediction_id)
+    assert pred.market == MarketType.totals
+    assert pred.side == BetSide.over
+    assert float(pred.line) == 220.5
+    assert float(pred.model_prob) == pytest.approx(0.5, abs=1e-5)
+    assert pred.projection is None
+
+    # Benchmark model verification: totals attach to market_pinnacle, never champion
+    champ = model_registry.get_champion(db_session)
+    assert champ is not None
+    assert pred.model_version_id != champ.id
+    benchmark = db_session.get(ModelVersion, pred.model_version_id)
+    assert benchmark.name == "market_pinnacle"
+    assert benchmark.version == "1"
+    assert benchmark.role == "benchmark"
+    assert benchmark.params == {"family": "market"}
+    assert benchmark.notes == "Pinnacle's de-vigged probability, not a forecasting model"
+    # Champion stats in recorder summary must not be inflated by totals
+    champ_stats = summary.models[champ.id]
+    # In world, 1 game was predicted: 2 h2h predictions (home & away) stored, 0 totals attributed to champion
+    assert champ_stats.predictions_written == 2
+
+
+def test_totals_best_price_across_books_is_taken(world, db_session):
+    game = world.game()
+    world.total(game, "pinnacle", 220.5, -110, -110)
+    world.quote(game, "draftkings", MarketType.totals, BetSide.under, 220.5, 105)
+    fd_under = world.quote(game, "fanduel", MarketType.totals, BetSide.under, 220.5, 110)  # +110 (2.10) > +105 (2.05)
+
+    summary = world.recorder().run()
+
+    assert summary.bets_placed["market_edge"] == 1
+    bet = next(b for b in _bets(db_session) if b.strategy == StakingStrategy.market_edge)
+    assert bet.odds_taken_id == fd_under.id
+    assert float(bet.price_taken) == pytest.approx(2.10)
+    assert float(bet.line_taken) == 220.5
+    pred = db_session.get(ModelPrediction, bet.prediction_id)
+    assert pred.side == BetSide.under
+
+
+def test_totals_idempotency_second_run_places_no_duplicate(world, db_session):
+    game = world.game()
+    world.total(game, "pinnacle", 220.5, -110, -110)
+    world.quote(game, "draftkings", MarketType.totals, BetSide.over, 220.5, 110)
+
+    summary1 = world.recorder().run()
+    assert summary1.bets_placed["market_edge"] == 1
+    n_preds_1 = len(_predictions(db_session))
+    n_bets_1 = len(_bets(db_session))
+
+    summary2 = world.recorder().run()
+    assert summary2.bets_placed["market_edge"] == 0
+    assert summary2.skipped["already_bet"] >= 1
+    assert len(_predictions(db_session)) == n_preds_1
+    assert len(_bets(db_session)) == n_bets_1
+
+
+def test_totals_no_edge_no_bet(world, db_session):
+    game = world.game()
+    # -110 / -110 at all books -> EV < 0
+    world.total(game, "pinnacle", 220.5, -110, -110)
+    world.total(game, "draftkings", 220.5, -110, -110)
+
+    summary = world.recorder().run()
+    assert summary.bets_placed["market_edge"] == 0
+    assert summary.skipped["ev_below_min"] >= 1
+    assert _bets(db_session) == []
+
+
+def test_totals_predictions_do_not_pollute_model_league(world, db_session):
+    from app.services.league_report import build_league
+    from app.services.model_promotion import (
+        ManualOverrideRefused,
+        league_rows,
+        manual_promote,
+        manual_retire,
+    )
+    from app.services.paper_report import _active_models
+
+    game = world.game()
+    world.total(game, "pinnacle", 220.5, -110, -110)
+    world.quote(game, "draftkings", MarketType.totals, BetSide.over, 220.5, 110)
+
+    # Place the totals bet and create prediction
+    world.recorder().run()
+
+    # Verify model league and promotion queries
+    all_league_rows = league_rows(db_session)
+    # The benchmark model MUST NOT appear in league_rows
+    assert not any(r.role == "benchmark" for r in all_league_rows)
+    assert not any("market_pinnacle" in r.label for r in all_league_rows)
+
+    rows = {r.label: r for r in all_league_rows}
+    champ_row = rows[f"{MODEL_NAME} {MODEL_VERSION}"]
+    # league_rows strictly counts h2h home predictions:
+    # Game had no h2h quotes so 1 h2h home prediction was recorded for AAA vs BBB
+    assert champ_row.predictions == 1
+
+    league = build_league(db_session, NOW)
+    assert league.champion is not None
+    assert league.champion.predictions == 1
+    assert not any(c.role == "benchmark" for c in league.challengers)
+
+    # Active models in paper_report must not list benchmark model
+    active = _active_models(db_session)
+    assert not any(a.role == "benchmark" for a in active)
+    champ_active = next(a for a in active if a.role == "champion")
+    # Champion has 2 predictions (home and away h2h), totals prediction is NOT counted
+    assert champ_active.predictions == 2
+
+    # Verify no totals prediction or bet is attached to champion
+    champ = model_registry.get_champion(db_session)
+    champ_totals_preds = db_session.exec(
+        select(ModelPrediction).where(
+            ModelPrediction.model_version_id == champ.id,
+            ModelPrediction.market == MarketType.totals,
+        )
+    ).all()
+    assert champ_totals_preds == []
+
+    # Manual override refusal on benchmark model
+    bench = db_session.exec(select(ModelVersion).where(ModelVersion.role == "benchmark")).one()
+    with pytest.raises(ManualOverrideRefused, match="is a benchmark model"):
+        manual_promote(db_session, bench.id, "try promote", NOW)
+    with pytest.raises(ManualOverrideRefused, match="is a benchmark model"):
+        manual_retire(db_session, bench.id, "try retire", NOW)
+

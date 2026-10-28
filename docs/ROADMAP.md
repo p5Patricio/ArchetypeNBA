@@ -13,7 +13,7 @@ What to build next and why, in priority order. Each item states the reason, how 
 | # | Item | Size | Why now |
 |---|------|------|---------|
 | 1 | Injuries and lineups as a model signal (partly done: fabrication removed, parser and lineup logger built; downloads disabled until the owner clears the NBA terms) | L | The one thing the baseline cannot see and the market can |
-| 2 | Totals and props models, with settlement | L | The data is already captured and paid for |
+| 2 | Totals (done: grading, CLV and market-edge paper bets; props models deferred) | L | The data is already captured and paid for |
 | 3 | Frontend model-league page (done) | M | The league is invisible outside a terminal |
 | 4 | Promotion notifications (done) | S | A champion change should not go unnoticed |
 | 5 | Shutdown endpoint CSRF and origin hardening (done) | S | An unauthenticated endpoint can stop the services |
@@ -64,19 +64,23 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 ## 2. Totals and props models, with settlement
 
-**Why.** The 3-credit game-lines call already captures totals for every game, and one player-props event per closing run is already stored. Nothing models or settles them, so that spend produces no evidence.
+**Status**: Totals implemented (WP-T: settlement, same-book and Pinnacle CLV, reporting, and model-free `market_edge` paper bets); props models deliberately deferred.
+
+**Why.** The 3-credit game-lines call already captures totals for every game, and one player-props event per closing run is stored. Research on closing totals lines revealed a forecast error standard deviation of ~17.7 points over 39 games (`scripts/market_audit.py`) with no verified evidence of an edge for statistical scoring models. Consequently, totals are handled through:
+- Complete settlement in `settlement.grade_bet` (over wins when total > line, under when total < line, push on equal).
+- Same-book and Pinnacle-referenced CLV at the exact matching total line.
+- Paper betting strictly via the model-free `market_edge` arm against Pinnacle de-vigged over/under lines (champion models and model-driven strategies never bet totals).
+- Reporting in `paper_report` with per-market breakdowns (`h2h`, `spreads`, `totals`) and `/paper` bets table display in Spanish and English.
+
+Props models are deliberately deferred: player prop bets are not recorded anywhere in paper trading, and capturing one event per tick produces far too small and noisy of a sample to justify model development or paper trading.
 
 **Acceptance criteria.**
 
-- [ ] Totals: a model registered through the same registry (the family protocol is currently `Prediction(p_home, mu, sigma)` for margins and needs a total-points form), recorded as shadow predictions with the same pre-tip-off guarantees.
-- [ ] `settlement.grade_bet` handles `totals` (over and under, with pushes on integer lines); CLV works for it; the paper report shows it.
-- [ ] Props: grading from `player_game_log` box scores, with `void` for players who did not play, after the name-matching rules are reviewed.
-- [ ] Betting policy thresholds re-derived for the new markets and registered as a new `model_version` (rule 8).
-- [ ] Offline tests; no extra credits beyond the guard.
-
-**Risks.** Props samples are tiny at one event per tick; name matching (diacritics, suffixes); voids and minutes; the aggressive policy could over-bet a market with no evidence yet.
-
-**First step.** Totals only: extend `grade_bet` and the report with tests, then a pace and scoring model scored on history by the lab.
+- [x] `settlement.grade_bet` handles `totals` (over and under, with pushes on integer lines); CLV works for it; the paper report shows it.
+- [x] Pinnacle-referenced CLV supports totals (`_devig_totals` at matching line).
+- [x] Totals considered and paper-bet exclusively by the `market_edge` benchmark arm against Pinnacle de-vigged quotes, attached to benchmark model `market_pinnacle` (role `benchmark`); zero pollution of the model league or champion attribution.
+- [x] Per-market breakdown in `paper_report` and `/paper` bets table UI localized.
+- [ ] Props models and props grading (deferred: insufficient sample size at 1 event/tick).
 
 ## 3. Frontend model-league page
 

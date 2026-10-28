@@ -43,6 +43,7 @@ from sqlalchemy import func, select
 from sqlmodel import Session
 
 from app.models import (
+    MODEL_ROLE_BENCHMARK,
     MODEL_ROLE_CHALLENGER,
     MODEL_ROLE_CHAMPION,
     MODEL_ROLE_RETIRED,
@@ -424,6 +425,8 @@ def manual_promote(
     champion = model_registry.get_champion(session)
     if champion is not None and champion.id == target.id:
         raise ManualOverrideRefused(f"{label(target)} is already the champion")
+    if target.role == MODEL_ROLE_BENCHMARK:
+        raise ManualOverrideRefused(f"{label(target)} is a benchmark model, not a forecasting model")
     if target.role == MODEL_ROLE_RETIRED and not force:
         raise ManualOverrideRefused(f"{label(target)} is retired; use --force to bring it back as champion")
     if champion is not None and champion.promoted_at is not None and not force:
@@ -462,6 +465,8 @@ def manual_retire(session: Session, model_id: int, reason: str, now: datetime, *
         raise ManualOverrideRefused(f"model {model_id} does not exist")
     if target.role == MODEL_ROLE_RETIRED:
         raise ManualOverrideRefused(f"{label(target)} is already retired")
+    if target.role == MODEL_ROLE_BENCHMARK:
+        raise ManualOverrideRefused(f"{label(target)} is a benchmark model, not a forecasting model")
     champion = model_registry.get_champion(session)
     if champion is not None and champion.id == target.id:
         raise ManualOverrideRefused(f"{label(target)} is the champion; promote another model before retiring it")
@@ -656,7 +661,9 @@ def league_rows(session: Session) -> List[LeagueRow]:
     """Every registered model: champion first, then challengers, then the retired, with its last evaluation."""
     champion = model_registry.get_champion(session)
     order = {MODEL_ROLE_CHAMPION: 0, MODEL_ROLE_CHALLENGER: 1, MODEL_ROLE_RETIRED: 2}
-    models = session.execute(select(ModelVersion)).scalars().all()
+    models = session.execute(
+        select(ModelVersion).where(ModelVersion.role != MODEL_ROLE_BENCHMARK)
+    ).scalars().all()
     models.sort(key=lambda m: (0 if champion is not None and m.id == champion.id else order.get(m.role, 3), m.id))
     rows = []
     for model in models:

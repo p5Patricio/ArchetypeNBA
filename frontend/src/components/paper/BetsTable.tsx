@@ -101,7 +101,18 @@ export function BetsTable({
     }
     if (m === "totals") {
       const lineStr = line != null ? `${line}` : "";
-      return `${s.toUpperCase()} ${lineStr}`;
+      const sideLabel = isEs
+        ? s === "over"
+          ? "Más de"
+          : s === "under"
+          ? "Menos de"
+          : s.toUpperCase()
+        : s === "over"
+        ? "Over"
+        : s === "under"
+        ? "Under"
+        : s.toUpperCase();
+      return `${sideLabel} ${lineStr}`.trim();
     }
     return `${targetTeam} (ML)`;
   };

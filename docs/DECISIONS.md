@@ -533,6 +533,17 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Consequences**: New enum values need the lockstep deploy; the two arms are hypotheses and carry no weight until their CLV against Pinnacle is positive with t above 2.
 - **Source**: [`RESEARCH_BETTING_IMPROVEMENTS.md`](RESEARCH_BETTING_IMPROVEMENTS.md); [`betting-improvements.md`](../odd/tasks/betting-improvements.md).
 
+### D-57 Totals paper bets via model-free market benchmark model (`market_pinnacle`)
+- **Date**: 2026-10-28
+- **Decision**: Totals (over/under) paper bets are evaluated and placed strictly by the model-free `market_edge` strategy (comparing best sportsbook odds against Pinnacle's de-vigged fair over/under at the exact same total line). The champion forecasting model and model-driven strategies (`flat`, `kelly_fractional`, `kelly_shrunk`) never bet totals. To satisfy the `simulated_bet.prediction_id` NOT NULL foreign key while upholding AGENTS.md rule 8 ("every bet must stay attributable") and preventing artificial inflation of champion prediction counts, totals predictions are attached to a dedicated model-free benchmark model (`name='market_pinnacle'`, `version='1'`, `params={"family": "market"}`, `role='benchmark'`, `notes="Pinnacle's de-vigged probability, not a forecasting model"`). The role `benchmark` is added to `MODEL_ROLES` in `app/models.py` and guarded by Alembic migration `a2c4e6f8b1d3`. All model league components, promotion logic, evaluation audits, and active forecasting model reports strictly ignore benchmark rows.
+- **Context**: In the initial draft of WP-T, totals predictions were attached to the champion's `model_version_id` to avoid a schema migration. That design was rejected because it violated AGENTS.md rule 8 by attributing to the champion predictions it never made, distorted the champion's prediction counts, and broke model attribution. The correct architecture introduces a distinct `benchmark` role and `market_pinnacle` row so totals predictions truthfully represent Pinnacle's fair probabilities.
+- **Alternatives rejected**:
+  1. Attaching totals predictions to the champion's `model_version_id` (rejected: violates AGENTS.md rule 8; falsifies champion attribution; inflates champion prediction tallies).
+  2. Making `simulated_bet.prediction_id` nullable (rejected: loses the audit trail of what probability justified the bet).
+  3. Forecasting model for totals: market audit demonstrated closing totals error sd ~17.7 points across 39 games and no verified evidence of statistical edge over Pinnacle's close.
+- **Consequences**: Hand-written Alembic migration `a2c4e6f8b1d3` updates `ck_model_version_role` to include `'benchmark'`. The model league and promotion gates remain 100% untouched and pure forecasting models (h2h/spreads). The champion's prediction counts remain strictly attributable to games it predicted.
+- **Source**: WP-T2; [`QUANT_MODULE.md`](QUANT_MODULE.md); [`DECISIONS.md`](DECISIONS.md); migration `a2c4e6f8b1d3`.
+
 ## Next step
 
 Planned work and the reasons behind it: [`ROADMAP.md`](ROADMAP.md).

@@ -72,7 +72,7 @@ DEFAULT_MAX_QUOTE_AGE_MINUTES = 360.0
 STALE_GAME_WINDOW = timedelta(hours=24)
 UNKNOWN_SEASON_ID = -1  # no team has ever played in it, so every rating gets the season carryover
 
-_RECORDED_MARKETS = (MarketType.h2h, MarketType.spreads)
+_RECORDED_MARKETS = (MarketType.h2h, MarketType.spreads, MarketType.totals)
 _STRATEGIES = (
     StakingStrategy.flat,
     StakingStrategy.kelly_fractional,
@@ -182,6 +182,7 @@ class PredictionRecorder:
         self.now = _aware_utc(now) if now is not None else datetime.now(timezone.utc)
         self.horizon = timedelta(hours=horizon_hours)
         self.max_quote_age = timedelta(minutes=max_quote_age_minutes)
+        self._benchmark: Optional[ModelVersion] = None
 
     # ------------------------------------------------------------------ entry point
 
@@ -189,6 +190,7 @@ class PredictionRecorder:
         summary = RecorderSummary(now=self.now, dry_run=dry_run)
         models = self._load_models(summary)
         champion, challengers = models[0], models[1:]
+        self._benchmark = model_registry.ensure_market_benchmark(self.session)
 
         games = self._window_games()
         summary.games_considered = len(games)
@@ -196,7 +198,7 @@ class PredictionRecorder:
             return summary
 
         self._dry_run = dry_run
-        self._load_ledger(games, [model.row.id for model in models])
+        self._load_ledger(games, [model.row.id for model in models] + [self._benchmark.id])
 
         game_ids = [g.id for g in games]
         quotes = self._load_quotes(game_ids)
@@ -499,7 +501,7 @@ class PredictionRecorder:
             }
 
         if not quotes:
-            summary.skipped["no_fresh_quotes"] += 2  # h2h and spreads
+            summary.skipped["no_fresh_quotes"] += 3  # h2h, spreads, totals
             return
 
         # h2h candidates
@@ -538,6 +540,25 @@ class PredictionRecorder:
                     p_win, p_push, p_loss, p_fair, summary,
                 )
 
+        # totals candidates, one per sharp pair line (considered ONLY by market_edge)
+        totals = [q for q in quotes if q.market == MarketType.totals.value]
+        total_pairs = self._sharp_totals_pairs(totals)
+        if not totals:
+            summary.skipped["no_fresh_quotes"] += 1
+        elif not total_pairs:
+            summary.skipped["no_sharp_reference"] += 1
+        for total_line, (price_over, price_under) in total_pairs.items():
+            fair_over, fair_under = devig_two_way(price_over, price_under)
+            for side, p_fair in (
+                (BetSide.over, fair_over),
+                (BetSide.under, fair_under),
+            ):
+                same_line = [q for q in totals if q.side == side.value and q.line == total_line]
+                best = self._best_quote(same_line)
+                self._consider_totals(
+                    game, side, total_line, best, p_fair, summary,
+                )
+
     @staticmethod
     def _best_quote(quotes: Sequence[_Quote]) -> Optional[_Quote]:
         # Highest price wins; ties go to the alphabetically first book so reruns pick the same row.
@@ -567,6 +588,22 @@ class PredictionRecorder:
             home, away = by_book[book].get(BetSide.home.value), by_book[book].get(BetSide.away.value)
             if home is not None and away is not None and home.line == -away.line:
                 pairs.setdefault(home.line, (home.price, away.price))
+        return pairs
+
+    @staticmethod
+    def _sharp_totals_pairs(totals: Sequence[_Quote]) -> Dict[Decimal, Tuple[float, float]]:
+        """total line -> (sharp over price, sharp under price) where both sides are quoted at the exact same line."""
+        by_book: Dict[str, Dict[Tuple[str, Decimal], float]] = defaultdict(dict)
+        for q in totals:
+            if q.is_sharp and q.line is not None:
+                by_book[q.book_key][(q.side, q.line)] = q.price
+        pairs: Dict[Decimal, Tuple[float, float]] = {}
+        for book in sorted(by_book):
+            prices = by_book[book]
+            lines = {line for (side, line) in prices if side == BetSide.over.value}
+            for line in sorted(lines):
+                if (BetSide.under.value, line) in prices:
+                    pairs.setdefault(line, (prices[(BetSide.over.value, line)], prices[(BetSide.under.value, line)]))
         return pairs
 
     # ------------------------------------------------------------------ writes
@@ -709,3 +746,119 @@ class PredictionRecorder:
                     placed_at=self.now,
                 )
             )
+
+    def _consider_totals(
+        self,
+        game: Game,
+        side: BetSide,
+        line: Decimal,
+        quote: Optional[_Quote],
+        p_fair: float,
+        summary: RecorderSummary,
+    ) -> None:
+        if quote is None:
+            summary.skipped["no_price_at_sharp_line"] += 1
+            return
+        market_decision = policy.evaluate_market_edge(p_fair, quote.price)
+        summary.candidates.append(
+            CandidateRecord(
+                game.id,
+                MarketType.totals.value,
+                side.value,
+                float(line),
+                quote.book_key,
+                quote.price,
+                p_fair,
+                p_fair,
+                market_decision.raw_edge,
+                market_decision.ev,
+                market_decision.eligible,
+                market_decision.reason,
+            )
+        )
+        if not market_decision.eligible:
+            summary.skipped[market_decision.reason] += 1
+            return
+
+        if _aware_utc(game.commence_time) <= self.now:  # hard guard: nothing at or after tip-off
+            summary.skipped["game_started"] += 1
+            return
+
+        name = StakingStrategy.market_edge.value
+        if (name, game.id, MarketType.totals.value, side.value) in self._placed:
+            summary.skipped["already_bet"] += 1
+            return
+
+        bankroll = self._bankroll[name]
+        today = _local_day(self.now)
+        day_room = policy.daily_room(bankroll, self._day_stake[name][today])
+        game_room = policy.game_room(bankroll, self._game_stake[name][game.id])
+        stake = policy.cap_stake(policy.flat_stake(), bankroll, daily_room=day_room, game_room=game_room)
+
+        if stake <= 0:
+            summary.skipped["stake_below_min"] += 1
+            return
+
+        prediction_id = self._store_totals_prediction(
+            game, side, line, p_fair, summary
+        )
+
+        summary.bets_placed[name] += 1
+        self._placed.add((name, game.id, MarketType.totals.value, side.value))
+        self._game_stake[name][game.id] += stake
+        self._day_stake[name][today] += stake
+        if self._dry_run:
+            return
+        self.session.add(
+            SimulatedBet(
+                prediction_id=prediction_id,
+                odds_taken_id=quote.id,
+                price_taken=Decimal(f"{quote.price:.4f}"),
+                line_taken=_line(quote.line),
+                fair_prob_at_bet=_prob(p_fair),
+                ev_per_unit=Decimal(f"{market_decision.ev:.5f}"),
+                strategy=StakingStrategy.market_edge,
+                kelly_multiplier=None,
+                stake_units=Decimal(f"{stake:.3f}"),
+                bankroll_before=Decimal(f"{bankroll:.3f}"),
+                status=BetStatus.pending,
+                placed_at=self.now,
+            )
+        )
+
+    def _store_totals_prediction(
+        self,
+        game: Game,
+        side: BetSide,
+        line: Optional[Decimal],
+        model_prob: float,
+        summary: RecorderSummary,
+    ) -> int:
+        norm_line = _line(line)
+        benchmark_id = self._benchmark.id if self._benchmark is not None else None
+        key = (benchmark_id, game.id, MarketType.totals.value, side.value, norm_line)
+        existing = self._predictions.get(key)
+        if existing is not None:
+            summary.predictions_existing += 1
+            return existing
+
+        summary.predictions_written += 1
+        if self._dry_run:
+            pid = -len(self._predictions) - 1
+            self._predictions[key] = pid
+            return pid
+
+        row = ModelPrediction(
+            model_version_id=benchmark_id,
+            game_id=game.id,
+            market=MarketType.totals,
+            player_id=None,
+            side=side,
+            line=line,
+            model_prob=Decimal(f"{model_prob:.5f}"),
+            projection=None,
+        )
+        self.session.add(row)
+        self.session.flush()
+        self._predictions[key] = row.id
+        return row.id
