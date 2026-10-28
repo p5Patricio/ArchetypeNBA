@@ -63,6 +63,11 @@ class PropItemResponse(BaseModel):
     fair_prob: Optional[float] = None
 
 
+class InjuryReportStatus(BaseModel):
+    available: bool = False
+    reason: Optional[str] = None
+
+
 class TodayPropsResponse(BaseModel):
     date: str
     ai_engine: str
@@ -71,6 +76,7 @@ class TodayPropsResponse(BaseModel):
     total_props: int
     value_picks_count: int
     items: List[PropItemResponse]
+    injury_report: Optional[InjuryReportStatus] = None
 
 
 def _save_cache_to_file(response: TodayPropsResponse) -> None:
@@ -162,14 +168,22 @@ def _send_telegram_report(response: TodayPropsResponse) -> bool:
 def _compute_today_props() -> TodayPropsResponse:
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    # 1. Scrape injury report
+    # 1. Fetch official injury report
     scraper = InjuryScraperService()
-    injury_items = scraper.fetch_injury_report()
+    injury_report = scraper.fetch_injury_report()
 
     # 2. Qualitative analysis with Gemini AI
-    analyzer = GeminiAnalyzerService()
-    analysis = analyzer.analyze_injuries_and_news(injury_items)
-    modifier_map = {m.player_name.lower(): m for m in analysis.modifiers}
+    if injury_report.available and injury_report.rows:
+        analyzer = GeminiAnalyzerService()
+        analysis = analyzer.analyze_injuries_and_news(injury_report.rows)
+        modifier_map = {m.player_name.lower(): m for m in analysis.modifiers}
+        model_label = settings.GEMINI_MODEL.replace("models/", "").replace("-", " ").title()
+        ai_label = model_label if analysis.engine_source == "GEMINI" else "Modo Heurístico Local"
+        slate_summary = analysis.slate_summary
+    else:
+        modifier_map = {}
+        ai_label = "Omitido (sin reporte oficial)"
+        slate_summary = f"Reporte de lesiones no disponible ({injury_report.reason or 'deshabilitado'}). Capa cualitativa omitida."
 
     # 3. Retrieve live sportsbook lines via The Odds API
     odds_service = OddsApiService()
@@ -247,18 +261,20 @@ def _compute_today_props() -> TodayPropsResponse:
                 )
             )
 
-    model_label = settings.GEMINI_MODEL.replace("models/", "").replace("-", " ").title()
-    ai_label = model_label if analysis.engine_source == "GEMINI" else "Modo Heurístico Local"
     odds_label = ODDS_SOURCE_LIVE if odds_service.last_fetch_live else ODDS_SOURCE_NO_LIVE
 
     resp = TodayPropsResponse(
         date=today_str,
         ai_engine=ai_label,
         odds_source=odds_label,
-        slate_summary=analysis.slate_summary,
+        slate_summary=slate_summary,
         total_props=len(items),
         value_picks_count=value_count,
         items=items,
+        injury_report=InjuryReportStatus(
+            available=injury_report.available,
+            reason=injury_report.reason,
+        ),
     )
 
     # Persist to disk cache
@@ -297,6 +313,7 @@ def get_today_props(
             total_props=0,
             value_picks_count=0,
             items=[],
+            injury_report=InjuryReportStatus(available=False, reason="En pausa"),
         )
 
     response_data = _cached_response
@@ -316,6 +333,7 @@ def get_today_props(
         total_props=len(filtered_items),
         value_picks_count=sum(1 for i in filtered_items if i.edge_pct > 0 and "PASS" not in i.recommendation),
         items=filtered_items,
+        injury_report=response_data.injury_report,
     )
 
 

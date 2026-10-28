@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     THE_ODDS_API_KEY: str = ""
     PROPS_SIMULATION_RUNS: int = 10000
 
+    # Official NBA Injury Report PDF automated download (disabled until owner clears NBA terms)
+    INJURY_PDF_ENABLED: bool = False
+
     # Model learning loop (app.services.model_evaluation / model_promotion). The defaults mirror the module
     # constants in model_evaluation; LEARNING_AUTOPROMOTE is the kill switch (off = evaluate and report only).
     LEARNING_MIN_GAMES: int = 150

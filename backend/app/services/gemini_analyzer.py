@@ -48,6 +48,13 @@ class GeminiAnalyzerService:
         Processes injury reports through Gemini 2.5 Flash with structured output.
         Falls back to rule-based heuristics if no API key is present or on API error.
         """
+        if not injury_items:
+            return SlateAnalysisResult(
+                modifiers=[],
+                slate_summary="No injury items to analyze.",
+                engine_source="HEURISTIC",
+            )
+
         if not self.is_configured:
             logger.info("GeminiAnalyzer: API Key not set. Using statistical heuristic analysis.")
             return self._heuristic_analysis(injury_items)

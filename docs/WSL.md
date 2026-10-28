@@ -13,6 +13,7 @@ Since 2026-10-27 the whole project lives in WSL2 (Ubuntu 24.04) on the owner's W
 | Backend / frontend | `127.0.0.1:38921` / `127.0.0.1:38920` | `scripts/start_services_wsl.sh`, `scripts/stop_services_wsl.sh`. |
 | Tick | `nba-tick.timer` (systemd **user** unit, every 15 min) | Logs to `logs/tick.log`. |
 | Backups | `nba-backup.timer`, daily 03:30, to `~/ArchetypeNBA-backups` | Keeps the newest 7 automatic dumps. |
+| Lineups | `nba-lineups.timer` (systemd **user** unit, every 10 min) | Logs starters and inactives to `logs/lineups.jsonl`. |
 | Unit files | `scripts/systemd/` (copy into `~/.config/systemd/user/`) | Then `systemctl --user daemon-reload && systemctl --user enable --now nba-tick.timer nba-backup.timer` and `loginctl enable-linger $USER`. |
 
 ## 2. What starts at boot
@@ -32,6 +33,22 @@ journalctl --user -u nba-tick.service -n 50                    # tick output see
 bash scripts/backup_db_wsl.sh                                  # backup now
 bash scripts/stop_services_wsl.sh                              # same as the "Detener Servicios" buttons
 bash scripts/start_services_wsl.sh                             # start the web services
+```
+
+### Enabling the lineup logger (research item 6)
+
+The lineup logger records starters and inactives before tip-off to measure empirical announcement timing:
+
+```bash
+cp scripts/systemd/nba-lineups.* ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now nba-lineups.timer
+systemctl --user list-timers nba-lineups.timer                 # verify next run
+```
+
+Dry-run test (prints to stdout without file append or network writes):
+```bash
+cd backend && ../.venv/bin/python scripts/log_lineups.py --dry-run
 ```
 
 The "Detener Servicios" buttons call `POST /api/v1/system/shutdown`, which runs `stop_services_wsl.sh` on Linux and `delayed_stop.ps1` on Windows. After a code change restart the backend (stop, then start). The frontend is a production build: after editing `frontend/` run `NEXT_PUBLIC_API_BASE=http://localhost:38921 npm run build` in `frontend/` (the API base is baked in at build time).
