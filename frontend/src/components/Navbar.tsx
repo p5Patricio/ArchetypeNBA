@@ -38,6 +38,9 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
     if (pathname.startsWith("/hall-of-fame")) return language === "es" ? "Salón de la Fama" : "Hall of Fame";
     if (pathname.startsWith("/timeline")) return language === "es" ? "Línea del Tiempo NBA" : "NBA Historical Timeline";
     if (pathname.startsWith("/teams")) return language === "es" ? "Franquicias NBA" : "NBA Franchises";
+    if (pathname.startsWith("/props")) return language === "es" ? "Player Props & +EV" : "Player Props & +EV";
+    if (pathname.startsWith("/paper")) return language === "es" ? "Paper Trading Dashboard" : "Paper Trading Dashboard";
+    if (pathname.startsWith("/league")) return language === "es" ? "Model League" : "Model League";
     if (pathname.startsWith("/player")) return language === "es" ? "Scouting Lab de Jugador" : "Player Scouting Lab";
     return "ArchetypeNBA";
   };
