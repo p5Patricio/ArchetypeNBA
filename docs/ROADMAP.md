@@ -21,7 +21,7 @@ What to build next and why, in priority order. Each item states the reason, how 
 | 7 | Postponed-game polling (done) | S | Wasted calls and noise for up to 14 days |
 | 8 | Second odds feed | M | Redundancy and more props; no sharp book |
 | 9 | CI that runs the test suite (done) | S | No automated check exists |
-| 10 | Legacy cleanup | M | Dead code and confusing duplicates |
+| 10 | Legacy cleanup (done) | M | Dead code and confusing duplicates |
 | 11 | Fix `props_engine.load_baselines_from_db` (done) | S | It reads a SQLite file that does not exist |
 
 Small fixes found while writing these docs are listed at the end ([hygiene](#hygiene-fixes)).
@@ -178,26 +178,20 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 **First step.** Add `.github/workflows/tests.yml` on a branch and open a pull request.
 
-## 10. Legacy cleanup
+## 10. Legacy cleanup (done)
 
-**Why.** The repository still carries the pre-PostgreSQL prototype: root `api.py`, `nba_data_processor.py`, `nba_player_analyzer.py`, `nba_player_data.py` and tracked `.xlsx` files, copies of the same modules in `backend/`, the Excel ETL (`backend/app/etl/pipeline.py`) and `seed_database.py`. A cleanup was proposed and not executed.
+**Why.** The repository carried pre-PostgreSQL prototype files from early development. Safely cleaned up under WP-L without breaking live report generation or data updates.
 
-**Do not delete blindly (verified 2026-10-26).**
-
-| Piece | Still used by |
-|-------|---------------|
-| `nba_player_analyzer` (and through it `nba_data_processor`) | `backend/app/services/report.py` (PDF scouting reports) and the root `api.py` |
-| `app/etl/pipeline.py` | `app/services/data_update.py` and `backend/scripts/seed_database.py` |
+**Completed 2026-10-28:**
+- Moved report generation logic (`generate_player_report_pdf`, `create_radar_chart_to_file`, `STAT_NAMES_MAP`, `radar_stats_categories`, `assign_cluster_roles`) into `backend/app/services/scouting_report/` and verified with offline tests (`backend/tests/test_report.py`).
+- Deleted dead root files and backend copies with zero live callers: `api.py`, `nba_player_analyzer.py`, `nba_data_processor.py`, `nba_player_data.py`, `cluster_means_report.xlsx`, root `app/`, and tracked bytecode files (`*.pyc`).
+- **Deliberately kept**: `backend/app/etl/pipeline.py` and the three `nba_active_player_stats_*.xlsx` data files because `backend/scripts/seed_database.py`, `backend/app/services/data_update.py`, and `backend/tests/test_data_update_api.py` actively read them.
 
 **Acceptance criteria.**
 
-- [ ] An inventory of importers (the table above, completed with a code search).
-- [ ] `report.py` no longer imports a root-level module (move what it needs into `app/`).
-- [ ] Removal in small pull requests, tests green after each; `README.md` updated.
-
-**Risks.** The PDF report and the data-update endpoint break silently.
-
-**First step.** Search for every importer and write the inventory into the plan file.
+- [x] An inventory of importers (`odd/tasks/legacy-cleanup.md`).
+- [x] `report.py` no longer imports a root-level module (moved to `app/services/scouting_report/`).
+- [x] Removal verified with offline tests and full suite green; `README.md`, `AGENTS.md`, and docs updated.
 
 ## 11. Fix `props_engine.load_baselines_from_db`
 

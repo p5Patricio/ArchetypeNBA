@@ -14,7 +14,7 @@ from app.repositories.stats import StatsRepository
 import matplotlib
 matplotlib.use("Agg")
 
-from nba_player_analyzer import (
+from app.services.scouting_report import (
     generate_player_report_pdf,
     STAT_NAMES_MAP,
     radar_stats_categories,
