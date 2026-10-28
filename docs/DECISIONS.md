@@ -68,6 +68,9 @@ Entries are grouped by area below; the IDs follow the index. To change a decisio
 | [D-52](#d-52-a-manifest-with-exact-row-counts-checked-on-both-ends) | 2026-10-26 | A manifest with exact row counts, checked on both ends | Operations |
 | [D-53](#d-53-dumps-and-secrets-never-in-git) | 2026-10-26 | Dumps and secrets never in git | Security |
 | [D-54](#d-54-one-pc-captures-at-a-time-in-a-fixed-cutover-order) | 2026-10-26 | One PC captures at a time, in a fixed cutover order | Operations |
+| [D-55](#d-55-everything-runs-in-wsl2-systemd-timers-replace-task-scheduler) | 2026-10-27 | Everything runs in WSL2; systemd timers replace Task Scheduler | Operations |
+| [D-56](#d-56-judge-the-paper-system-by-pinnacle-referenced-clv-per-game-add-two-staking-arms-and-a-report-only-selection-test) | 2026-10-28 | Judge the paper system by Pinnacle-referenced CLV per game | Method |
+| [D-58](#d-58-second-odds-feed-sportsgameodds-as-best-price-contributor-only) | 2026-10-28 | Second odds feed (SportsGameOdds) as best-price contributor only | Data |
 
 ## Data and scope
 
@@ -543,6 +546,14 @@ Added after the first version of this log: decisions of PR #18 (portable install
   3. Forecasting model for totals: market audit demonstrated closing totals error sd ~17.7 points across 39 games and no verified evidence of statistical edge over Pinnacle's close.
 - **Consequences**: Hand-written Alembic migration `a2c4e6f8b1d3` updates `ck_model_version_role` to include `'benchmark'`. The model league and promotion gates remain 100% untouched and pure forecasting models (h2h/spreads). The champion's prediction counts remain strictly attributable to games it predicted.
 - **Source**: WP-T2; [`QUANT_MODULE.md`](QUANT_MODULE.md); [`DECISIONS.md`](DECISIONS.md); migration `a2c4e6f8b1d3`.
+
+### D-58 Second odds feed (SportsGameOdds) as best-price contributor only
+- **Date**: 2026-10-28
+- **Decision**: Integrate SportsGameOdds as a second odds provider (free Amateur tier: 2,500 objects/month, 10 requests/minute, 9 US books, no Pinnacle) behind a generic `OddsProvider` protocol (`services/odds_providers/base.py`). The feed is completely disabled until `SPORTSGAMEODDS_API_KEY` is provided. It NEVER creates games (events match existing `Game` rows by team names/abbreviations and commence time within a 6-hour tolerance; unmatched events are logged and skipped), and because it lacks a sharp bookmaker, it NEVER generates paper bets or fair probability references on its own. Its quotes are stored as ordinary `odds_history` rows to serve solely as best-price execution candidates and market cross-checks. A conservative quota guard checks `/account/usage` and tracks monthly objects consumed in `logs/sportsgameodds_usage.json`, stopping at `SPORTSGAMEODDS_MIN_REMAINING_OBJECTS` (default 100). A probe CLI `scripts/sgo_probe.py` allows inspecting live API responses safely without scheduling.
+- **Context**: The Odds API 500 credit/month quota provides 1 props event per closing run; a second free feed adds redundancy and best-price line shopping across books like Caesars and ESPN BET that are not in our primary feed call.
+- **Alternatives rejected**: Using SportsGameOdds for paper-trading fair value (rejected: lacks a sharp book like Pinnacle); creating `Game` entities from secondary feeds (rejected: avoids duplicating games or conflicting schedules); polling without quota guards.
+- **Consequences**: No database schema change needed. When enabled, more bookmakers are tracked in `sportsbook` and `odds_history`. The system remains offline and untouched during ticks until the owner configures a valid key.
+- **Source**: [`ROADMAP.md`](ROADMAP.md) item 8; `app/services/odds_providers/sportsgameodds.py`.
 
 ## Next step
 

@@ -126,6 +126,34 @@ Check the balance: `Select-String -Path logs\tick.log -Pattern 'Quota Remaining'
 
 Raising the props events per run from 1 to 3 would cost up to 3 + 3 x (3 + 3 x 2) = 30 credits a day and would exhaust the quota before month end. Do not.
 
+## 2.1 Second odds feed: SportsGameOdds (optional)
+
+An integrated second odds feed from SportsGameOdds (https://sportsgameodds.com) provides game lines (moneyline, spreads, totals) across additional US bookmakers (Caesars, ESPN BET, BetMGM, DraftKings, FanDuel, Bovada, Unibet, PointsBet, William Hill). It is completely disabled until the owner configures an API key.
+
+### How to enable it
+1. Register for an API key at https://sportsgameodds.com (the free "Amateur" plan provides 2,500 objects/month, 10 requests/minute, update interval 10 min, NBA included; **no Pinnacle**).
+2. Add your key to `backend/.env`:
+   ```env
+   SPORTSGAMEODDS_API_KEY=your_actual_key_here
+   ```
+3. Test your key and verify live response structure using the probe CLI:
+   ```bash
+   cd backend
+   python scripts/sgo_probe.py --dry-run    # Preview request without network
+   python scripts/sgo_probe.py              # Send 1 small probe request (2 events) and inspect schema
+   ```
+
+### Limits and Quota Guard
+- **Monthly Limit**: 2,500 objects/month. In SportsGameOdds pricing, 1 "object" is an entire game/event containing its full tree of odds across all bookmakers.
+- **Rate Limit**: 10 requests/minute on Amateur plan.
+- **Account Usage Endpoint**: The API provides `GET /account/usage`, which returns quota limits and consumption. Calls to this endpoint do **not** count against request or object quotas.
+- **Quota Guard**: Configured via `SPORTSGAMEODDS_MIN_REMAINING_OBJECTS` in `config.py` (default floor 100). If remaining objects drop below this floor, fetches are blocked with `InsufficientQuotaError`. Usage is also tracked and persisted locally in `logs/sportsgameodds_usage.json`.
+
+### Why it never bets alone
+- **No Sharp Book**: SportsGameOdds free tier does not include Pinnacle (the sharp benchmark of true market probabilities).
+- **No Independent Bets**: The betting policy generates wagers only when model probabilities beat Pinnacle's de-vigged fair price by at least 2 pp. A feed without Pinnacle can never establish a fair market baseline.
+- **Best-Price Execution & Cross-Check Only**: Quotes from this feed are matched only to existing `Game` rows (it never creates new games) and stored as ordinary `odds_history` rows under their respective sportsbooks. They provide additional liquidity candidates for the best available market price and serve as cross-feed verification.
+
 ## 3. Daily and weekly checks
 
 ### Daily

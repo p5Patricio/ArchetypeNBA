@@ -19,7 +19,7 @@ What to build next and why, in priority order. Each item states the reason, how 
 | 5 | Shutdown endpoint CSRF and origin hardening (done) | S | An unauthenticated endpoint can stop the services |
 | 6 | Closing-quote presence record (done) | M | Stale closes bias CLV |
 | 7 | Postponed-game polling (done) | S | Wasted calls and noise for up to 14 days |
-| 8 | Second odds feed | M | Redundancy and more props; no sharp book |
+| 8 | Second odds feed (built, disabled until key exists, unverified against live responses) | M | Redundancy and more props; no sharp book |
 | 9 | CI that runs the test suite (done) | S | No automated check exists |
 | 10 | Legacy cleanup (done) | M | Dead code and confusing duplicates |
 | 11 | Fix `props_engine.load_baselines_from_db` (done) | S | It reads a SQLite file that does not exist |
@@ -153,20 +153,21 @@ Props models are deliberately deferred: player prop bets are not recorded anywhe
 
 **First step.** Add an attempt counter or an age rule in `results_sync` and test it.
 
-## 8. Second odds feed
+## 8. Second odds feed (built, disabled until key exists, unverified against live responses)
 
-**Why.** Redundancy if The Odds API fails or the quota runs out, and more props coverage. The candidate found in 2026-10 is SportsGameOdds (free "Amateur" tier, about 2,500 events a month, props, 9 US books, **no Pinnacle**).
+**Why.** Redundancy if The Odds API fails or the quota runs out, and more props/bookmaker coverage. Integrated SportsGameOdds (free "Amateur" tier, 2,500 objects a month, 10 req/min, 9 US books: FanDuel, DraftKings, BetMGM, Caesars, ESPN BET, Bovada, Unibet, PointsBet, William Hill; **no Pinnacle**).
 
 **Acceptance criteria.**
 
-- [ ] A provider interface; the second feed writes its own `sportsbook` rows and has its own quota guard.
-- [ ] The sharp reference stays Pinnacle: a feed without a sharp book never creates bets alone.
-- [ ] Idempotent ingestion; offline tests from recorded fixtures.
-- [ ] Terms and free-tier limits read and recorded first (the figures above date from the original research and may have changed).
+- [x] A provider interface (`services/odds_providers/base.py`) with SportsGameOdds client (`services/odds_providers/sportsgameodds.py`); writes its own `sportsbook` rows and has its own quota guard.
+- [x] The sharp reference stays Pinnacle: a feed without a sharp book never creates bets alone.
+- [x] Idempotent ingestion into existing `Game` rows; never creates games; offline tests from documented fixtures (`tests/test_sportsgameodds.py`).
+- [x] Terms and free-tier limits read and recorded from primary documentation (`docs/DECISIONS.md` D-58, `docs/OPERATIONS.md`).
+- [ ] Owner supplies a valid `SPORTSGAMEODDS_API_KEY` and verifies live response shapes using `scripts/sgo_probe.py`.
 
-**Risks.** Terms; duplicate games across feeds; accounting for two quotas.
+**Risks.** Live payload differences once a key is used (mitigated by `sgo_probe.py`); unverified against real live responses until the owner configures a key.
 
-**First step.** Re-read the provider's current terms and free-tier limits, then ask the user before integrating.
+**First step.** Owner registers at sportsgameodds.com, sets `SPORTSGAMEODDS_API_KEY` in `backend/.env`, and runs `python scripts/sgo_probe.py` to verify real response against assumed shapes.
 
 ## 9. CI that runs the test suite (done)
 

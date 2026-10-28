@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     THE_ODDS_API_KEY: str = ""
     PROPS_SIMULATION_RUNS: int = 10000
 
+    # Second odds feed: SportsGameOdds (free Amateur tier; disabled until owner sets key)
+    SPORTSGAMEODDS_API_KEY: str = ""
+    SPORTSGAMEODDS_BASE_URL: str = "https://api.sportsgameodds.com/v2"
+    SPORTSGAMEODDS_MIN_REMAINING_OBJECTS: int = 100
+
     # Official NBA Injury Report PDF automated download (disabled until owner clears NBA terms)
     INJURY_PDF_ENABLED: bool = False
 
