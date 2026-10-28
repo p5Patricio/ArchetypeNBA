@@ -17,7 +17,7 @@ What to build next and why, in priority order. Each item states the reason, how 
 | 3 | Frontend model-league page (done) | M | The league is invisible outside a terminal |
 | 4 | Promotion notifications (done) | S | A champion change should not go unnoticed |
 | 5 | Shutdown endpoint CSRF and origin hardening (done) | S | An unauthenticated endpoint can stop the services |
-| 6 | Closing-quote presence record | M | Stale closes bias CLV |
+| 6 | Closing-quote presence record (done) | M | Stale closes bias CLV |
 | 7 | Postponed-game polling (done) | S | Wasted calls and noise for up to 14 days |
 | 8 | Second odds feed | M | Redundancy and more props; no sharp book |
 | 9 | CI that runs the test suite (done) | S | No automated check exists |
@@ -121,15 +121,15 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 **First step.** Add an origin and host dependency to the router and its tests.
 
-## 6. Closing-quote presence record
+## 6. Closing-quote presence record (done)
 
 **Why.** The feed stores a row only when a book's own update stamp changes. A book that dropped a market looks "unchanged", so a stale quote can pass as the close and produce a false 0 CLV.
 
 **Acceptance criteria.**
 
-- [ ] Each capture records which (game, book, market, side) were present in the payload.
-- [ ] CLV ignores or flags a closing quote that was absent at the closing capture; the report shows how many.
-- [ ] A migration deployed in lockstep ([`OPERATIONS.md`](OPERATIONS.md), section 4); tests.
+- [x] Each capture records which (game, book, market, side) were present in the payload.
+- [x] CLV ignores or flags a closing quote that was absent at the closing capture; the report shows how many.
+- [x] A migration deployed in lockstep ([`OPERATIONS.md`](OPERATIONS.md), section 4); tests.
 
 **Risks.** Table growth (small: tens of rows per game per capture); touching the capture path that spends credits.
 
@@ -241,6 +241,7 @@ Small items found while documenting (2026-10-26). Each is a few lines.
 | Postponed games and props baselines (items 7 and 11) | Games 48 h past tip-off with no result become `postponed` and are no longer polled; a new commence time returns them to `scheduled`. Props baselines come from the database ordered by season label; no static fallback. Props refresh respects the credit floor (HTTP 429) and the cached slate reports its age |
 | Fabricated injuries removed (part of item 1) | `fetch_injury_report()` returns `available=false` with a reason; the NBA PDF download is behind `INJURY_PDF_ENABLED` (default off), the parser works on text and is tested offline; `scripts/log_lineups.py` measures how early `nba_api` publishes starters |
 | Multiple-comparison control in the lab (research item 4) | Reality Check, SPA and DM-HLN p-values recorded for every lab run; `LAB_MULTITEST_GATE` (default off) makes SPA p < 0.2 a registration condition |
+| Closing-quote presence record (item 6) | `odds_capture_presence` table (migration `f1a9c3d7e5b2`) records quotes seen in closing capture payloads; `fill_clv` and Pinnacle CLV report require presence when presence rows exist, counting absent quotes as `absent_at_close`; `v_closing_odds` updated |
 
 ### Found while doing this work (2026-10-28)
 
@@ -249,7 +250,7 @@ Small items found while documenting (2026-10-26). Each is a few lines.
 | Hardcoded player filter in props | `_compute_today_props` analyses only 8 named star players; it limits credit use but is static data standing in for a rule |
 | Backend strings in English on Spanish pages | The league gate sentence and audit reason come from the backend untranslated |
 | `balldontlie` is not a free source of injuries | Injuries need the ALL-STAR tier ($9.99/month), lineups the GOAT tier; free tier is 5 requests/minute with basic data |
-| Items still open | 2 (totals and props models: measure first with `scripts/market_audit.py`), 6 (closing-quote presence, schema plus capture path), 8 (second odds feed, terms), 10 (legacy cleanup) |
+| Items still open | 2 (totals and props models: measure first with `scripts/market_audit.py`), 8 (second odds feed, terms), 10 (legacy cleanup) |
 
 ## Next step
 
