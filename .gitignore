@@ -58,6 +58,8 @@ backend/app/data/last_props_cache.json
 
 # Tick lock and rotated tick logs (tick.log itself is covered by *.log)
 logs/tick.lock
+# Runtime files written by the lineup logger and the injury report cache (any extension)
+logs/
 logs/tick.log.*
 
 # Database dumps and transfer manifests hold private data: never commit them (see docs/DB_TRANSFER.md)
