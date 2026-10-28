@@ -16,11 +16,11 @@ What to build next and why, in priority order. Each item states the reason, how 
 | 2 | Totals and props models, with settlement | L | The data is already captured and paid for |
 | 3 | Frontend model-league page | M | The league is invisible outside a terminal |
 | 4 | Promotion notifications | S | A champion change should not go unnoticed |
-| 5 | Shutdown endpoint CSRF and origin hardening | S | An unauthenticated endpoint can stop the services |
+| 5 | Shutdown endpoint CSRF and origin hardening (done) | S | An unauthenticated endpoint can stop the services |
 | 6 | Closing-quote presence record | M | Stale closes bias CLV |
 | 7 | Postponed-game polling | S | Wasted calls and noise for up to 14 days |
 | 8 | Second odds feed | M | Redundancy and more props; no sharp book |
-| 9 | CI that runs the test suite | S | No automated check exists |
+| 9 | CI that runs the test suite (done) | S | No automated check exists |
 | 10 | Legacy cleanup | M | Dead code and confusing duplicates |
 | 11 | Fix `props_engine.load_baselines_from_db` | S | It reads a SQLite file that does not exist |
 
@@ -107,15 +107,15 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 **First step.** In `learn_step`, after a committed role change, call a notifier with the `PassEntry` returned by the evaluation pass.
 
-## 5. Shutdown endpoint CSRF and origin hardening
+## 5. Shutdown endpoint CSRF and origin hardening (done)
 
 **Why.** `POST /api/v1/system/shutdown` stops both services and takes no parameters and no credentials. A request needs no CORS permission to be sent, only to be read (derived from the handler's signature), so another page open in the browser could stop the platform. It also relies on Windows-only `subprocess.CREATE_NO_WINDOW` and PowerShell.
 
 **Acceptance criteria.**
 
-- [ ] The handler rejects requests whose `Origin` or `Referer` is not in `CORS_ORIGINS`, and checks the `Host` header (DNS rebinding).
-- [ ] The UI button keeps working; tests cover allowed and blocked origins.
-- [ ] The backend stays bound to `127.0.0.1`.
+- [x] The handler rejects requests whose `Origin` or `Referer` is not in `CORS_ORIGINS`, and checks the `Host` header (DNS rebinding).
+- [x] The UI button keeps working; tests cover allowed and blocked origins.
+- [x] The backend stays bound to `127.0.0.1`.
 
 **Risks.** Breaking the production port setup (38920 and 38921); some browsers omit `Origin` on same-origin GET but not on POST.
 
@@ -164,15 +164,15 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 **First step.** Re-read the provider's current terms and free-tier limits, then ask the user before integrating.
 
-## 9. CI that runs the test suite
+## 9. CI that runs the test suite (done)
 
 **Why.** There is no CI; every pull request relies on someone running `pytest` by hand and saying so. The suite is offline and deterministic (757 tests, about 2 minutes), so it fits a hosted runner.
 
 **Acceptance criteria.**
 
-- [ ] A GitHub Actions workflow on pull requests and pushes to `main`: Python 3.12, install `backend/requirements.txt`, `cd backend && python -m pytest -q`.
-- [ ] Optionally `npx tsc --noEmit` in `frontend/`.
-- [ ] Decide the runner: on Linux the four PowerShell tests skip; on `windows-latest` all 757 run.
+- [x] A GitHub Actions workflow on pull requests and pushes to `main`: Python 3.12, install `backend/requirements.txt`, `cd backend && python -m pytest -q`.
+- [x] Optionally `npx tsc --noEmit` in `frontend/`.
+- [x] Decide the runner: on Linux the four PowerShell tests skip; on `windows-latest` all 757 run.
 
 **Risks.** Dependency drift (the requirements pin only lower bounds); minutes.
 
@@ -233,6 +233,8 @@ Small items found while documenting (2026-10-26). Each is a few lines.
 | Missing driver in the dependency list | PR #18: `backend/requirements.txt` and `backend/pyproject.toml` declare `psycopg[binary]>=3.1`; a clean virtualenv installs and passes the suite |
 | Tick registration needed a hardcoded interpreter | PR #18: `register_tick_task.ps1` discovers Python (`-PythonExe`, `backend/.venv`, the `run_pipeline.bat` path only if it exists, then `PATH` ignoring the WindowsApps stub) and stops with a clear error otherwise |
 | Dumps were not git-ignored and there was no backup tool | PR #19: `scripts/db_transfer.py` (export, verify, import with exact row-count checks), `docs/DB_TRANSFER.md`, `.gitignore` entries for `*.dump`, `*.manifest.json` and `backups/` |
+| Shutdown endpoint CSRF and origin hardening (item 5) | `verify_shutdown_safety` guard on `POST /system/shutdown` rejecting missing/unlisted Origin/Referer and foreign Host (403); covered by offline tests |
+| CI that runs the test suite (item 9) | `.github/workflows/tests.yml` runs backend pytest on Python 3.12 and frontend typecheck (`tsc --noEmit`) on Node 22 for PRs and push to `main` |
 
 ## Next step
 
