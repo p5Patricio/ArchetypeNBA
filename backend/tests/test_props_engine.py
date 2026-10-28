@@ -263,3 +263,55 @@ def test_one_sided_integer_line_still_uses_the_refund_ev():
     assert result.expected_value_pct == pytest.approx(
         (p_win * (dec - 1.0) - (1.0 - p_win - p_push)) * 100.0, abs=0.1
     )
+
+
+def test_load_baselines_from_db_with_in_memory_sqlite(db_session):
+    from app.models import Player, PlayerSeasonStats, Season, Team
+
+    # Notice: season ids are intentionally non-chronological to test ordering by season_label!
+    s1 = Season(id=42, season_label="2023-24", is_active=False)
+    s2 = Season(id=5, season_label="2024-25", is_active=False)
+    s3 = Season(id=1, season_label="2025-26", is_active=True)
+    t1 = Team(id=1, abbreviation="DAL", full_name="Dallas Mavericks", city="Dallas", conference="West", division="Southwest")
+    t2 = Team(id=2, abbreviation="LAL", full_name="Los Angeles Lakers", city="LA", conference="West", division="Pacific")
+    p1 = Player(id=100, full_name="Luka Doncic")
+    p2 = Player(id=200, full_name="Role Player")
+
+    db_session.add_all([s1, s2, s3, t1, t2, p1, p2])
+    db_session.commit()
+
+    # Luka played for DAL in 2023-24 (older) and LAL in 2025-26 (latest)
+    # 2023-24: 1000 min, 1000 pts (1.0 pts/min), 300 reb, 300 ast, 30 gp
+    # 2024-25: 1000 min, 800 pts (0.8 pts/min), 200 reb, 200 ast, 30 gp
+    # 2025-26: 1000 min, 600 pts (0.6 pts/min), 100 reb, 100 ast, 30 gp
+    db_session.add_all([
+        PlayerSeasonStats(player_id=100, team_id=1, season_id=42, gp=30, min=1000.0, pts=1000.0, reb=300.0, ast=300.0),
+        PlayerSeasonStats(player_id=100, team_id=1, season_id=5, gp=30, min=1000.0, pts=800.0, reb=200.0, ast=200.0),
+        PlayerSeasonStats(player_id=100, team_id=2, season_id=1, gp=30, min=1000.0, pts=600.0, reb=100.0, ast=100.0),
+        # p2 has < 200 min total, so should be filtered out
+        PlayerSeasonStats(player_id=200, team_id=1, season_id=1, gp=5, min=50.0, pts=20.0, reb=10.0, ast=5.0),
+    ])
+    db_session.commit()
+
+    engine = PropsEngine()
+    baselines = engine.load_baselines_from_db(session=db_session, min_minutes=200.0)
+
+    assert len(baselines) == 1
+    luka = baselines[0]
+    assert luka.player_id == 100
+    assert luka.name == "Luka Doncic"
+    # Latest team is from 2025-26 (LAL), despite season id 1 < 42
+    assert luka.team == "Los Angeles Lakers"
+
+    # Default weights: 2025-26 -> 0.5, 2024-25 -> 0.3, 2023-24 -> 0.2
+    # weighted mins = 1000*0.5 + 1000*0.3 + 1000*0.2 = 1000.0
+    # weighted pts = 600*0.5 + 800*0.3 + 1000*0.2 = 300 + 240 + 200 = 740.0
+    # pts_per_min = 740 / 1000 = 0.740
+    assert luka.pts_per_min == pytest.approx(0.74, abs=0.01)
+    assert luka.avg_minutes == pytest.approx(1000.0 * 3 / 90, abs=0.5)
+
+
+def test_load_baselines_from_db_empty_returns_empty_never_static_stars(db_session):
+    engine = PropsEngine()
+    baselines = engine.load_baselines_from_db(session=db_session)
+    assert baselines == []

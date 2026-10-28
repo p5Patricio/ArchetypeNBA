@@ -42,6 +42,7 @@ from app.services.odds_ingestion import OddsIngestionService
 logger = logging.getLogger(__name__)
 
 RESULT_GRACE = timedelta(hours=3)  # a game is expected to be over this long after tip-off
+POSTPONED_AGE = timedelta(hours=48)  # unresolved games older than this past scheduled tip-off are marked postponed
 LOOKBACK = timedelta(days=14)  # older unresolved games are no longer chased (postponed or lost)
 MATCH_TOLERANCE_DAYS = 1
 # Tip-off in UTC minus this offset gives the US date NBA uses as ``game_date``; 6 h covers EST/EDT evenings and
@@ -138,6 +139,7 @@ class ResultsSyncSummary:
     games_pending: int = 0  # scheduled, tipped off > grace ago, inside the look-back
     games_stale: int = 0  # ... older than the look-back: not chased any more
     games_finalized: int = 0
+    games_postponed: int = 0  # scheduled games older than POSTPONED_AGE with no result found
     unmatched: List[str] = field(default_factory=list)  # pending games without a result yet
     logs_inserted: int = 0
     rows_skipped: int = 0  # rows without result, with an unknown team or without a date
@@ -148,7 +150,7 @@ class ResultsSyncSummary:
 
     @property
     def did_work(self) -> bool:
-        return bool(self.games_finalized or self.rating_rows_added or self.logs_inserted)
+        return bool(self.games_finalized or self.rating_rows_added or self.logs_inserted or self.games_postponed)
 
 
 # --------------------------------------------------------------------------------------------------- helpers
@@ -485,6 +487,10 @@ def _fetch_and_finalize(
             result = matched.get(game.id)
             if result is None:
                 summary.unmatched.append(_describe(game, abbreviations))
+                if _aware_utc(game.commence_time) <= _aware_utc(summary.now) - POSTPONED_AGE:
+                    game.status = "postponed"
+                    session.add(game)
+                    summary.games_postponed += 1
                 continue
             game.nba_game_id = result.nba_game_id
             game.home_score = result.points[game.home_team_id]

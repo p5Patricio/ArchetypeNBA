@@ -1231,6 +1231,11 @@ export interface TodayPropsResponse {
     available: boolean;
     reason?: string | null;
   } | null;
+  baselines_available?: boolean;
+  stale?: boolean;
+  generated_at?: string;
+  age?: string;
+  age_seconds?: number;
 }
 
 export async function getTodayProps(params?: {

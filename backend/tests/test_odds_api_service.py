@@ -252,6 +252,36 @@ def test_failed_refetch_resets_last_fetch_live(monkeypatch):
     assert service.get_slate_props_map() == {}
     assert service.last_fetch_live is False
 
+
+def test_get_slate_props_map_credit_guard_breach_raises_insufficient_quota(monkeypatch):
+    from app.services.odds_api_service import InsufficientQuotaError
+
+    def handler(request):
+        if request.url.path.endswith("/events"):
+            return httpx.Response(200, json=[{"id": "evt1"}, {"id": "evt2"}], headers={"x-requests-remaining": "28"})
+        return httpx.Response(200, json=EVENT_PAYLOAD)
+
+    _patch_client(monkeypatch, handler)
+    service = OddsApiService(api_key="real-key")
+
+    # 2 events * 3 markets = 6 credits; 28 - 6 = 22 < 25 floor -> raises InsufficientQuotaError
+    with pytest.raises(InsufficientQuotaError, match="Credit guard refused props fetch"):
+        service.get_slate_props_map(min_remaining=25)
+
+
+def test_get_slate_props_map_credit_guard_allowed_when_above_floor(monkeypatch):
+    def handler(request):
+        if request.url.path.endswith("/events"):
+            return httpx.Response(200, json=[{"id": "evt1"}], headers={"x-requests-remaining": "50"})
+        return httpx.Response(200, json=EVENT_PAYLOAD)
+
+    _patch_client(monkeypatch, handler)
+    service = OddsApiService(api_key="real-key")
+
+    props_map = service.get_slate_props_map(min_remaining=25)
+    assert props_map
+    assert service.last_fetch_live is True
+
 # --- game lines (/odds: h2h, spreads, totals) ---------------------------------
 
 GAME_EVENT = {
