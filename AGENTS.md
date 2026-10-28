@@ -12,7 +12,7 @@ Context for any AI coding agent (or human) picking this project up. **Snapshot d
 | Repo | `github.com/p5Patricio/ArchetypeNBA` (`main` is the only long-lived branch; PRs #1–#19 merged as of this snapshot). |
 | Production | Since 2026-10-27 everything runs in **WSL2 Ubuntu** on the owner's Windows 11 PC: PostgreSQL 18 on port 5433, the web services on 38920/38921 and a systemd user timer (`nba-tick.timer`) that runs the tick every 15 minutes. **That checkout executes `main`**, so unmerged code must never live there. See [`docs/WSL.md`](docs/WSL.md). |
 | State | Pipeline live since the 2026-10-20 opener. Baseline Elo champion + one shadow challenger. Too little data to judge anything yet (see §9). |
-| Next task | Replace the broken injury scraper with a real free source of injuries/lineups and test it as a model signal (see §10). |
+| Next task | Injuries/lineups as a model signal (see §10): the fabricated fallback is gone and the NBA PDF parser exists behind `INJURY_PDF_ENABLED=false`; it needs the owner's answer on the NBA terms. Meanwhile judge the system by the Pinnacle-referenced CLV in `paper_report.py` / `/paper` (research: `docs/RESEARCH_BETTING_IMPROVEMENTS.md`; plan: `odd/tasks/betting-improvements.md`). |
 
 First five commands on a fresh machine (details in [`docs/SETUP.md`](docs/SETUP.md)):
 
@@ -149,7 +149,7 @@ Rejected/not done: paid odds feeds (OpticOdds ~$5k/mo), scraping ESPN/OddsPortal
 
 | Metric | Value |
 |--------|-------|
-| Tests | 757 backend tests pass (2026-10-26, includes the db_transfer tests); frontend `tsc --noEmit` clean |
+| Tests | 843 backend tests pass (2026-10-28, integrated betting-improvements branch); frontend `tsc --noEmit` clean |
 | Database | PostgreSQL 18.4, 229 MB, Alembic head `e3f8b1a4c9d2`; 23 seasons of game logs (2003-04..2025-26), 59k Elo rows per model |
 | Capture | Since 2026-10-06 (opening lines) and 2026-10-20 (full tick); Odds API credits left: 371 (resets on the 1st of each month); task healthy, 0 failed ticks |
 | Paper trading (2026-10-20 → 10-26) | flat: 56 bets (49 settled), P/L −5.28 u, ROI −11.4%; ¼ Kelly: 44 bets, −13.34 u. Bankrolls 94.7 u / 86.7 u. **Tiny samples, not evidence of anything.** |
