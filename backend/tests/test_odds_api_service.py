@@ -471,3 +471,25 @@ def test_last_call_ok_distinguishes_an_empty_success_from_a_failed_call(monkeypa
     _patch_status(monkeypatch, 422, {"message": "bad"})
     assert service.fetch_event_prop_quotes("evt", markets=["player_points"]) == []
     assert service.last_call_ok is False
+
+
+def test_prop_quotes_take_the_market_stamp_when_the_bookmaker_has_none(monkeypatch):
+    """Regression: the live API stamps the market, not the bookmaker; every prop quote used to lose its timestamp."""
+    payload = {
+        "bookmakers": [
+            {
+                "key": "alpha",
+                "markets": [{
+                    "key": "player_points",
+                    "last_update": "2026-10-30T20:00:00Z",
+                    "outcomes": [_outcome("Over", "Test Player", 24.5, -115), _outcome("Under", "Test Player", 24.5, -105)],
+                }],
+            },
+        ]
+    }
+    _patch_client(monkeypatch, lambda request: httpx.Response(200, json=payload))
+
+    quotes = OddsApiService(api_key="real-key").fetch_event_prop_quotes("evt1")
+
+    assert len(quotes) == 2
+    assert {q.book_last_update for q in quotes} == {"2026-10-30T20:00:00Z"}

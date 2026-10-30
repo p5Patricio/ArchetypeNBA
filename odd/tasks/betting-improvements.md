@@ -87,3 +87,6 @@ Wave E:
 
 ## Next step
 Open the pull requests, get the owner's approval to merge, then deploy in lockstep (pause the tick, backup, pull, `alembic upgrade head`, dry runs, resume, one real tick) and check the first tick with the two new strategies.
+
+## Progress addendum (2026-10-30): the props storage did not work on real data
+Two days after deploying WP-S2, production still showed `closing_props` captures with quotes_seen > 0 and quotes_inserted = 0; the tick log reported every quote as `invalid`. Root cause: `fetch_event_prop_quotes` read only the bookmaker-level `last_update` while the live API stamps the market (the game-lines parser already used `market.last_update or book.last_update`), so `book_last_update` was empty and the ingestion dropped every quote. The unit tests and the agent's fixtures all put the stamp on the bookmaker, which is why 931 tests were green. Fixed with a one-line change plus a regression test whose payload carries the stamp only on the market. Lesson: fixtures must come from real payloads; the first production capture after a deploy is part of the verification.
