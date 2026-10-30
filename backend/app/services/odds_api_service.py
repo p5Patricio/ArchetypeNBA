@@ -331,6 +331,9 @@ class OddsApiService:
                         stat_type = MARKET_TO_STAT.get(m_key)
                         if not stat_type:
                             continue
+                        # Same rule as the game lines: the market stamp wins, the bookmaker's is the fallback. The live
+                        # API sends the stamp on the market, so reading only the bookmaker's dropped every prop quote.
+                        updated = market.get("last_update") or book_updated
 
                         for o in market.get("outcomes", []):
                             side = (o.get("name") or "").lower()
@@ -349,7 +352,7 @@ class OddsApiService:
                                     side=side,
                                     line=float(point),
                                     price_american=int(price),
-                                    book_last_update=book_updated,
+                                    book_last_update=updated,
                                 )
                             )
         except Exception as e:
