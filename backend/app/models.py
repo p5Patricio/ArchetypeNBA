@@ -862,3 +862,105 @@ class OddsCapturePresence(SQLModel, table=True):
     side: BetSide = Field(sa_column=Column(_BET_SIDE, nullable=False))
     line: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
 
+
+class InjuryReportSnapshot(SQLModel, table=True):
+    """Snapshot of an official NBA injury report document."""
+
+    __tablename__ = "injury_report_snapshot"
+
+    __table_args__ = (
+        UniqueConstraint("sha256", name="uq_injury_report_snapshot_sha256"),
+        Index("ix_injury_report_snapshot_report_timestamp", "report_timestamp"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    source: str = Field(
+        default="nba_official_pdf",
+        sa_column=Column(Text, nullable=False, server_default=text("'nba_official_pdf'")),
+    )
+    report_url: str = Field(sa_column=Column(Text, nullable=False))
+    report_timestamp: datetime = Field(sa_column=_timestamptz(nullable=False))
+    fetched_at: datetime = Field(
+        sa_column=_timestamptz(nullable=False, server_default=func.now())
+    )
+    sha256: str = Field(sa_column=Column(Text, nullable=False))
+    entries_count: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+
+    entries: List["InjuryEntry"] = Relationship(
+        back_populates="snapshot",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+
+
+class InjuryEntry(SQLModel, table=True):
+    """Single player entry in an NBA injury report snapshot."""
+
+    __tablename__ = "injury_entry"
+
+    __table_args__ = (
+        Index("ix_injury_entry_snapshot_id", "snapshot_id"),
+        Index("ix_injury_entry_player_id", "player_id"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    snapshot_id: int = Field(
+        sa_column=Column(
+            _BIG_ID,
+            ForeignKey("injury_report_snapshot.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    game_date: str = Field(sa_column=Column(Text, nullable=False))
+    game_time_et: Optional[str] = Field(default=None, sa_column=Column(Text))
+    matchup: Optional[str] = Field(default=None, sa_column=Column(Text))
+    team_name: Optional[str] = Field(default=None, sa_column=Column(Text))
+    player_name_raw: str = Field(sa_column=Column(Text, nullable=False))
+    player_id: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, ForeignKey("player.id"), nullable=True)
+    )
+    status: str = Field(sa_column=Column(Text, nullable=False))
+    reason: Optional[str] = Field(default=None, sa_column=Column(Text))
+    availability_prob: Optional[Decimal] = Field(
+        default=None, sa_column=Column(Numeric(3, 2))
+    )
+
+    snapshot: Optional[InjuryReportSnapshot] = Relationship(back_populates="entries")
+
+
+class LineupSnapshot(SQLModel, table=True):
+    """Pre-game lineup and inactives snapshot captured before tip-off."""
+
+    __tablename__ = "lineup_snapshot"
+
+    __table_args__ = (
+        UniqueConstraint("game_id", "captured_at", "side", name="uq_lineup_snapshot_game_captured_side"),
+        CheckConstraint("side IN ('home', 'away')", name="ck_lineup_snapshot_side"),
+        Index("ix_lineup_snapshot_game_id", "game_id"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    game_id: int = Field(
+        sa_column=Column(_BIG_ID, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    )
+    captured_at: datetime = Field(sa_column=_timestamptz(nullable=False))
+    minutes_to_tipoff: Optional[Decimal] = Field(
+        default=None, sa_column=Column(Numeric(6, 1))
+    )
+    side: str = Field(sa_column=Column(Text, nullable=False))
+    starters_count: int = Field(
+        default=0, sa_column=Column(SmallInteger, nullable=False, server_default=text("0"))
+    )
+    not_playing_count: int = Field(
+        default=0, sa_column=Column(SmallInteger, nullable=False, server_default=text("0"))
+    )
+    payload: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(_JSON, nullable=False))
+
+
