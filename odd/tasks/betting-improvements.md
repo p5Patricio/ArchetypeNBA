@@ -90,3 +90,12 @@ Open the pull requests, get the owner's approval to merge, then deploy in lockst
 
 ## Progress addendum (2026-10-30): the props storage did not work on real data
 Two days after deploying WP-S2, production still showed `closing_props` captures with quotes_seen > 0 and quotes_inserted = 0; the tick log reported every quote as `invalid`. Root cause: `fetch_event_prop_quotes` read only the bookmaker-level `last_update` while the live API stamps the market (the game-lines parser already used `market.last_update or book.last_update`), so `book_last_update` was empty and the ingestion dropped every quote. The unit tests and the agent's fixtures all put the stamp on the bookmaker, which is why 931 tests were green. Fixed with a one-line change plus a regression test whose payload carries the stamp only on the market. Lesson: fixtures must come from real payloads; the first production capture after a deploy is part of the verification.
+
+## Progress addendum (2026-10-31): injuries, lineups, SGO capture and the Gemini model
+Owner decisions: automated NBA injury report downloads allowed (game days only, at most 3 per day, personal research); SportsGameOdds used for a daily capture plus a later staged historical backfill; `gemini-3.6-flash` replaced by `gemini-3.8-flash` (3.6 as fallback).
+- Verified live before building: SportsGameOdds does NOT return player injury status on the free plan (players carry only name, team, id); its documentation does. Historical data from 2024 is available on the free plan with final scores, per-player stats and the last odds of 4-6 books, but open/close odds fields come back empty.
+- Verified on the real report: the NBA PDF text must be extracted in layout mode; the new parser reads a real report as 95 rows, the same as an independent count of data lines, and the staging copy stored them with 83 of 95 players matched.
+- Verified live on a staging copy of production: the `sgo` tick step captured 8 events for 8 objects and stored 1,724 quotes (main markets and props for about 55 players per market, nine books) plus 24 consensus rows kept outside `odds_history`.
+- Tests: 970 passed, 4 skipped on the integrated branch; migrations `c5e7a9b1d3f6` and `d6f8b0c2e4a7` applied to a fresh copy of production.
+- Still to do: the injury-aware shadow model and the weekly view (need a few days of stored injury reports), the SportsGameOdds historical backfill and its evaluation against the consensus.
+
