@@ -7,12 +7,16 @@ Purpose: measure empirically how early starters and inactives appear (research i
 
 import argparse
 from datetime import datetime, timezone
+from decimal import Decimal
 import json
 import logging
 from pathlib import Path
 import sys
 import time
 from typing import Callable, Dict, List, Optional
+
+from sqlmodel import Session, select
+from app.models import Game, LineupSnapshot, Team
 
 logger = logging.getLogger("lineup_logger")
 
@@ -111,6 +115,74 @@ def default_boxscore_fetcher(game_id: str, timeout: float = 30.0) -> Dict:
     return {}
 
 
+def store_lineup_snapshot_in_db(
+    session: Session,
+    nba_game_id: str,
+    away_info: Dict,
+    home_info: Dict,
+    tipoff_utc: datetime,
+    now_utc: datetime,
+    minutes_to_tip: float,
+) -> bool:
+    """Stores home and away lineup snapshots idempotently in the database."""
+    try:
+        # Match game by nba_game_id first
+        db_game = session.exec(select(Game).where(Game.nba_game_id == str(nba_game_id))).first()
+        if db_game is None:
+            # Match by teams and approximate commence time
+            away_tricode = away_info.get("tricode", "")
+            home_tricode = home_info.get("tricode", "")
+            away_t = session.exec(select(Team).where(Team.abbreviation == away_tricode)).first()
+            home_t = session.exec(select(Team).where(Team.abbreviation == home_tricode)).first()
+            if away_t and home_t:
+                candidates = session.exec(
+                    select(Game).where(
+                        Game.away_team_id == away_t.id,
+                        Game.home_team_id == home_t.id,
+                    )
+                ).all()
+                for c in candidates:
+                    c_time = c.commence_time if c.commence_time.tzinfo else c.commence_time.replace(tzinfo=timezone.utc)
+                    if abs((c_time - tipoff_utc).total_seconds()) < 12 * 3600:
+                        db_game = c
+                        if db_game.nba_game_id is None:
+                            db_game.nba_game_id = str(nba_game_id)
+                            session.add(db_game)
+                        break
+
+        if db_game is None or db_game.id is None:
+            logger.info("Lineup logger: No DB game matching NBA gameId=%s. Skipping DB snapshot.", nba_game_id)
+            return False
+
+        # Idempotent write for away and home
+        for side, side_data in [("away", away_info), ("home", home_info)]:
+            existing = session.exec(
+                select(LineupSnapshot).where(
+                    LineupSnapshot.game_id == db_game.id,
+                    LineupSnapshot.captured_at == now_utc,
+                    LineupSnapshot.side == side,
+                )
+            ).first()
+            if existing is None:
+                snap = LineupSnapshot(
+                    game_id=db_game.id,
+                    captured_at=now_utc,
+                    minutes_to_tipoff=Decimal(str(round(minutes_to_tip, 1))),
+                    side=side,
+                    starters_count=side_data.get("starters_count", 0),
+                    not_playing_count=side_data.get("not_playing_count", 0),
+                    payload=side_data,
+                )
+                session.add(snap)
+
+        session.commit()
+        return True
+    except Exception as e:
+        logger.warning("Could not store lineup snapshot in database: %s", e)
+        session.rollback()
+        return False
+
+
 def log_lineups(
     window_minutes: int = 60,
     dry_run: bool = False,
@@ -118,6 +190,7 @@ def log_lineups(
     now: Optional[datetime] = None,
     scoreboard_fetcher: Optional[Callable[[], List[Dict]]] = None,
     boxscore_fetcher: Optional[Callable[[str], Dict]] = None,
+    session: Optional[Session] = None,
 ) -> int:
     """
     Main lineup logging pipeline.
@@ -132,69 +205,95 @@ def log_lineups(
     fetch_sb = scoreboard_fetcher or default_scoreboard_fetcher
     fetch_bs = boxscore_fetcher or default_boxscore_fetcher
 
-    # Fetch scoreboard with 1 retry
-    games = None
-    for attempt in range(2):
+    db_session = session
+    close_db_session = False
+    if db_session is None and not dry_run:
         try:
-            games = fetch_sb()
-            break
+            from app.deps import engine
+            db_session = Session(engine)
+            close_db_session = True
         except Exception as e:
-            logger.warning(f"Failed to fetch live scoreboard (attempt {attempt + 1}/2): {e}")
-            if attempt == 0:
-                time.sleep(1.0)
+            logger.warning("Could not initialize DB session for lineup logger: %s", e)
 
-    if games is None:
-        logger.error("Could not retrieve live scoreboard after retry. Exiting cleanly.")
-        return 0
-
-    logged_count = 0
-
-    for game in games:
-        game_id = game.get("gameId")
-        if not game_id:
-            continue
-
-        tipoff_utc = parse_game_tipoff(game)
-        if not tipoff_utc:
-            continue
-
-        minutes_to_tip = (tipoff_utc - now_utc).total_seconds() / 60.0
-        # Check window: tipping off within the next window_minutes
-        if not (0 <= minutes_to_tip <= window_minutes):
-            continue
-
-        # Fetch boxscore with 1 retry
-        boxscore_data = None
+    try:
+        # Fetch scoreboard with 1 retry
+        games = None
         for attempt in range(2):
             try:
-                boxscore_data = fetch_bs(game_id)
+                games = fetch_sb()
                 break
             except Exception as e:
-                logger.warning(f"Failed to fetch live boxscore for game {game_id} (attempt {attempt + 1}/2): {e}")
+                logger.warning(f"Failed to fetch live scoreboard (attempt {attempt + 1}/2): {e}")
                 if attempt == 0:
                     time.sleep(1.0)
 
-        if not boxscore_data:
-            logger.warning(f"Skipping game {game_id}: no boxscore data available.")
-            continue
+        if games is None:
+            logger.error("Could not retrieve live scoreboard after retry. Exiting cleanly.")
+            return 0
 
-        record = build_lineup_record(game, boxscore_data, tipoff_utc, now_utc)
-        json_line = json.dumps(record, ensure_ascii=False)
+        logged_count = 0
 
-        if dry_run:
-            print(f"[dry-run] {json_line}")
-        else:
-            try:
-                log_file.parent.mkdir(parents=True, exist_ok=True)
-                with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(json_line + "\n")
-            except Exception as e:
-                logger.error(f"Failed writing to {log_file}: {e}")
+        for game in games:
+            game_id = game.get("gameId")
+            if not game_id:
+                continue
 
-        logged_count += 1
+            tipoff_utc = parse_game_tipoff(game)
+            if not tipoff_utc:
+                continue
 
-    logger.info(f"Lineup logger: logged {logged_count} game(s) within window {window_minutes}m.")
-    return logged_count
+            minutes_to_tip = (tipoff_utc - now_utc).total_seconds() / 60.0
+            # Check window: tipping off within the next window_minutes
+            if not (0 <= minutes_to_tip <= window_minutes):
+                continue
+
+            # Fetch boxscore with 1 retry
+            boxscore_data = None
+            for attempt in range(2):
+                try:
+                    boxscore_data = fetch_bs(game_id)
+                    break
+                except Exception as e:
+                    logger.warning(f"Failed to fetch live boxscore for game {game_id} (attempt {attempt + 1}/2): {e}")
+                    if attempt == 0:
+                        time.sleep(1.0)
+
+            if not boxscore_data:
+                logger.warning(f"Skipping game {game_id}: no boxscore data available.")
+                continue
+
+            record = build_lineup_record(game, boxscore_data, tipoff_utc, now_utc)
+            json_line = json.dumps(record, ensure_ascii=False)
+
+            if dry_run:
+                print(f"[dry-run] {json_line}")
+            else:
+                try:
+                    log_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(log_file, "a", encoding="utf-8") as f:
+                        f.write(json_line + "\n")
+                except Exception as e:
+                    logger.error(f"Failed writing to {log_file}: {e}")
+
+                if db_session is not None:
+                    store_lineup_snapshot_in_db(
+                        session=db_session,
+                        nba_game_id=game_id,
+                        away_info=record["away_team"],
+                        home_info=record["home_team"],
+                        tipoff_utc=tipoff_utc,
+                        now_utc=now_utc,
+                        minutes_to_tip=minutes_to_tip,
+                    )
+
+            logged_count += 1
+
+        logger.info(f"Lineup logger: logged {logged_count} game(s) within window {window_minutes}m.")
+        return logged_count
+    finally:
+        if close_db_session and db_session is not None:
+            db_session.close()
+
 
 
 def main():
