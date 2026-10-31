@@ -161,7 +161,7 @@ Props quotes and shadow evaluation are completed under WP-S2:
 
 **First step.** Add an attempt counter or an age rule in `results_sync` and test it.
 
-## 8. Second odds feed (built, disabled until key exists, parser validated against documentation examples; still not against a live response)
+## 8. Second odds feed (built, probed live 2026-10-31, main-market filter fixed; tick ingestion still NOT wired)
 
 **Why.** Redundancy if The Odds API fails or the quota runs out, and more props/bookmaker coverage. Integrated SportsGameOdds (free "Amateur" tier, 2,500 objects a month, 10 req/min, 9 US books: FanDuel, DraftKings, BetMGM, Caesars, ESPN BET, Bovada, Unibet, PointsBet, William Hill; **no Pinnacle**).
 
@@ -171,11 +171,12 @@ Props quotes and shadow evaluation are completed under WP-S2:
 - [x] The sharp reference stays Pinnacle: a feed without a sharp book never creates bets alone.
 - [x] Idempotent ingestion into existing `Game` rows; never creates games; offline tests from documented fixtures (`tests/test_sportsgameodds.py`) and validated against official documentation example responses (`tests/test_sgo_docs_validation.py`).
 - [x] Terms and free-tier limits read and recorded from primary documentation (`docs/DECISIONS.md` D-58, `docs/OPERATIONS.md`).
-- [ ] Owner supplies a valid `SPORTSGAMEODDS_API_KEY` and verifies live response shapes using `scripts/sgo_probe.py`.
+- [x] Exercised against live API response on 2026-10-31 via `scripts/sgo_probe.py`: confirmed 9 US books (no Pinnacle) and plan-limited `notice` field (logged at INFO); identified and fixed filter bug where team totals and player props leaked into `totals` (restricted `ou` to `statEntityID == 'all'` and `ml`/`sp` to `home`/`away`).
+- [ ] Ingestion into scheduled tick remains deliberately NOT wired (the feed is probed solely via `scripts/sgo_probe.py`).
 
-**Risks.** Live payload differences once a key is used (mitigated by `sgo_probe.py`); parser is validated against official documentation examples but remains unverified against real live responses until the owner configures a key.
+**Risks.** Live payload density (846–1056 odds per event); plan-limited book coverage; feed lacks Pinnacle.
 
-**First step.** Owner registers at sportsgameodds.com, sets `SPORTSGAMEODDS_API_KEY` in `backend/.env`, and runs `python scripts/sgo_probe.py` to verify real response against assumed shapes.
+**First step.** Keep feed un-wired to tick until owner determines whether secondary cross-feed liquidity justifies monthly object budget.
 
 ## 9. CI that runs the test suite (done)
 

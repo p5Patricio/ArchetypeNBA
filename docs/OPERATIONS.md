@@ -128,7 +128,13 @@ Raising the props events per run from 1 to 3 would cost up to 3 + 3 x (3 + 3 x 2
 
 ## 2.1 Second odds feed: SportsGameOdds (optional)
 
-An integrated second odds feed from SportsGameOdds (https://sportsgameodds.com) provides game lines (moneyline, spreads, totals) across additional US bookmakers (Caesars, ESPN BET, BetMGM, DraftKings, FanDuel, Bovada, Unibet, PointsBet, William Hill). The client and parser have been validated against official documentation example responses (`tests/test_sgo_docs_validation.py`), but remain unverified against a real live network response until an API key is configured. It is completely disabled until the owner configures an API key.
+An integrated second odds feed from SportsGameOdds (https://sportsgameodds.com) provides game lines (moneyline, spreads, totals) across additional US bookmakers (Caesars, ESPN BET, BetMGM, DraftKings, FanDuel, Bovada, Unibet, PointsBet, William Hill). The client and parser have been validated against official documentation example responses (`tests/test_sgo_docs_validation.py`) and exercised against a live response on 2026-10-31 via `scripts/sgo_probe.py`. It is disabled until the owner configures an API key, and ingestion into the scheduled tick remains **NOT** wired (the feed is only probed with `scripts/sgo_probe.py`).
+
+### Live Probe Findings (2026-10-31)
+- **Books and Coverage**: The free "Amateur" tier returned 9 US bookmakers (DraftKings, FanDuel, BetMGM, Caesars, ESPN BET, Bovada, PointsBet, Unibet, William Hill) and **no Pinnacle**.
+- **Plan Notice**: The live response returned a top-level string field `notice` ("Response is missing N bookmaker odds. Upgrade your API key to access all data from this query.") indicating plan-limited bookmaker availability; this notice is logged once per call at INFO (key masked, no payload dumped).
+- **Odds Map Density & Filter Bug**: Each event's `odds` map contained 846–1056 entries, including team totals, quarter/half totals (1q, 1h), eo (even/odd), ml3way (regulation 3-way moneyline), and player props (e.g. `AARON_WIGGINS_1_NBA`). A filter bug where `parse_sgo_events` accepted any `statEntityID` for `betTypeID: ou` was identified and fixed: full-game totals strictly require `statEntityID == 'all'` (and `statID == 'points'`, `periodID == 'game'`); moneylines and spreads strictly require `statEntityID in ('home', 'away')` with matching `sideID`. All team totals, player props, eo, and partial periods are cleanly filtered out.
+- **Tick Status**: Ingestion into the scheduled tick is still **NOT** wired; the feed is only probed manually using `scripts/sgo_probe.py`.
 
 ### How to enable it
 1. Register for an API key at https://sportsgameodds.com (the free "Amateur" plan provides 2,500 objects/month, 10 requests/minute, update interval 10 min, NBA included; **no Pinnacle**).

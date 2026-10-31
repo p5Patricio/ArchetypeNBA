@@ -166,7 +166,11 @@ def parse_sgo_events(payload: Any) -> List[GameQuote]:
     """
     Parses a SportsGameOdds /events response payload into GameQuote instances.
     Skips missing, incomplete or malformed odds without raising.
-    Only extracts full game period ('game') quotes for 'ml' (h2h), 'sp' (spreads), and 'ou' (totals).
+    Only extracts full game / regulation quotes for main markets:
+      - 'ml' (h2h): statID points, statEntityID in ('home', 'away'), sideID in ('home', 'away')
+      - 'sp' (spreads): statID points, statEntityID in ('home', 'away'), sideID in ('home', 'away')
+      - 'ou' (totals): statID points, periodID game/reg, statEntityID 'all', sideID in ('over', 'under')
+    Excludes team totals, player props, partial periods (1h, 1q), eo, and ml3way.
     """
     quotes: List[GameQuote] = []
     if not isinstance(payload, dict):
@@ -222,7 +226,7 @@ def parse_sgo_events(payload: Any) -> List[GameQuote]:
             stat_entity_id = odd_obj.get("statEntityID")
 
             # Fallback to parsing odd_id if fields omitted: {statID}-{statEntityID}-{periodID}-{betTypeID}-{sideID}
-            if not (period_id and bet_type_id and stat_id):
+            if not (period_id and bet_type_id and stat_id and stat_entity_id and side_id):
                 parts = odd_id.split("-")
                 if len(parts) >= 5:
                     stat_id = stat_id or parts[0]
@@ -239,31 +243,30 @@ def parse_sgo_events(payload: Any) -> List[GameQuote]:
             if period_id not in ("game", "reg"):
                 continue
 
-            # Determine market and side
+            # Determine market and side (main markets only; excludes team totals, player props, eo, ml3way)
             market_key: str
             side: str
             if bet_type_id == "ml":
+                if stat_entity_id not in ("home", "away"):
+                    continue
+                if side_id not in ("home", "away"):
+                    continue
                 market_key = "h2h"
-                if side_id in ("home", "away"):
-                    side = side_id
-                elif stat_entity_id in ("home", "away"):
-                    side = stat_entity_id
-                else:
-                    continue
+                side = side_id
             elif bet_type_id == "sp":
+                if stat_entity_id not in ("home", "away"):
+                    continue
+                if side_id not in ("home", "away"):
+                    continue
                 market_key = "spreads"
-                if side_id in ("home", "away"):
-                    side = side_id
-                elif stat_entity_id in ("home", "away"):
-                    side = stat_entity_id
-                else:
-                    continue
+                side = side_id
             elif bet_type_id == "ou":
-                market_key = "totals"
-                if side_id in ("over", "under"):
-                    side = side_id
-                else:
+                if stat_entity_id != "all":
                     continue
+                if side_id not in ("over", "under"):
+                    continue
+                market_key = "totals"
+                side = side_id
             else:
                 continue
 
@@ -524,6 +527,12 @@ class SportsGameOddsService:
         except Exception as e:
             logger.error(f"SportsGameOddsService: Failed to parse JSON response: {e}")
             return []
+
+        if isinstance(payload, dict):
+            notice = payload.get("notice")
+            if notice:
+                sanitized_notice = sanitize_message(str(notice), self.api_key)
+                logger.info(f"SportsGameOddsService notice: {sanitized_notice}")
 
         quotes = parse_sgo_events(payload)
         events_returned = len(payload.get("data") or [])
