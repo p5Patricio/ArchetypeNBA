@@ -550,12 +550,17 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Source**: WP-T2; [`QUANT_MODULE.md`](QUANT_MODULE.md); [`DECISIONS.md`](DECISIONS.md); migration `a2c4e6f8b1d3`.
 
 ### D-58 Second odds feed (SportsGameOdds) as best-price contributor only
-- **Date**: 2026-10-28
+- **Date**: 2026-10-28 (updated 2026-10-31 after first live response probe)
 - **Decision**: Integrate SportsGameOdds as a second odds provider (free Amateur tier: 2,500 objects/month, 10 requests/minute, 9 US books, no Pinnacle) behind a generic `OddsProvider` protocol (`services/odds_providers/base.py`). The feed is completely disabled until `SPORTSGAMEODDS_API_KEY` is provided. It NEVER creates games (events match existing `Game` rows by team names/abbreviations and commence time within a 6-hour tolerance; unmatched events are logged and skipped), and because it lacks a sharp bookmaker, it NEVER generates paper bets or fair probability references on its own. Its quotes are stored as ordinary `odds_history` rows to serve solely as best-price execution candidates and market cross-checks. A conservative quota guard checks `/account/usage` and tracks monthly objects consumed in `logs/sportsgameodds_usage.json`, stopping at `SPORTSGAMEODDS_MIN_REMAINING_OBJECTS` (default 100). A probe CLI `scripts/sgo_probe.py` allows inspecting live API responses safely without scheduling.
+- **Live Response Probe (2026-10-31)**:
+  - The parser was exercised against a live response on 2026-10-31 via `scripts/sgo_probe.py` (`GET /events?leagueID=NBA&oddsAvailable=true&limit=2`).
+  - Findings: Confirmed 9 US books (FanDuel, DraftKings, BetMGM, Caesars, ESPN BET, Bovada, PointsBet, Unibet, William Hill) and **no Pinnacle**. The live response contained a top-level string field `notice` ("Response is missing N bookmaker odds. Upgrade your API key to access all data from this query.") indicating plan limits, which is logged once per call at INFO without dumping the payload.
+  - Filter bug fix: Each event's `odds` map contained 846–1056 entries with team totals, quarter/half totals, eo, ml3way, and player props. The initial parser accepted any `statEntityID` for `betTypeID: ou`, causing team totals and player props to pollute game totals quotes. Fixed so that `ou` game totals require `statEntityID == 'all'`, and `ml`/`sp` require `statEntityID in ('home', 'away')` with consistent `sideID`.
+  - Tick status: Ingestion into the scheduled tick remains **NOT** wired; the feed is only probed with `scripts/sgo_probe.py`.
 - **Context**: The Odds API 500 credit/month quota provides 1 props event per closing run; a second free feed adds redundancy and best-price line shopping across books like Caesars and ESPN BET that are not in our primary feed call.
 - **Alternatives rejected**: Using SportsGameOdds for paper-trading fair value (rejected: lacks a sharp book like Pinnacle); creating `Game` entities from secondary feeds (rejected: avoids duplicating games or conflicting schedules); polling without quota guards.
 - **Consequences**: No database schema change needed. When enabled, more bookmakers are tracked in `sportsbook` and `odds_history`. The system remains offline and untouched during ticks until the owner configures a valid key.
-- **Source**: [`ROADMAP.md`](ROADMAP.md) item 8; `app/services/odds_providers/sportsgameodds.py`.
+- **Source**: [`ROADMAP.md`](ROADMAP.md) item 8; `app/services/odds_providers/sportsgameodds.py`; WP-S4.
 
 ### D-59 Shadow totals model (totals_pace) with evaluation against Pinnacle's close
 - **Date**: 2026-10-28
