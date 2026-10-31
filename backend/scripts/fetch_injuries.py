@@ -35,7 +35,8 @@ def run_fetch_injuries(
     Main routine deciding and executing injury report fetch.
     Returns 0 on success or when exiting cleanly doing nothing.
     """
-    now_local = (now or datetime.now()).astimezone()
+    # An explicit aware `now` keeps its own zone (tests); otherwise use the machine's local zone, like the tick.
+    now_local = now if (now is not None and now.tzinfo is not None) else (now or datetime.now()).astimezone()
 
     # 1. Config check
     if not settings.INJURY_PDF_ENABLED:
