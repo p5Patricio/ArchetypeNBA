@@ -943,6 +943,26 @@ class LineupSnapshot(SQLModel, table=True):
         UniqueConstraint("game_id", "captured_at", "side", name="uq_lineup_snapshot_game_captured_side"),
         CheckConstraint("side IN ('home', 'away')", name="ck_lineup_snapshot_side"),
         Index("ix_lineup_snapshot_game_id", "game_id"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    game_id: int = Field(
+        sa_column=Column(_BIG_ID, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    )
+    captured_at: datetime = Field(sa_column=_timestamptz(nullable=False))
+    minutes_to_tipoff: Optional[Decimal] = Field(
+        default=None, sa_column=Column(Numeric(6, 1))
+    )
+    side: str = Field(sa_column=Column(Text, nullable=False))
+    starters_count: int = Field(
+        default=0, sa_column=Column(SmallInteger, nullable=False, server_default=text("0"))
+    )
+    not_playing_count: int = Field(
+        default=0, sa_column=Column(SmallInteger, nullable=False, server_default=text("0"))
+    )
+    payload: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(_JSON, nullable=False))
 
 class MarketConsensusSnapshot(SQLModel, table=True):
     """
@@ -971,19 +991,6 @@ class MarketConsensusSnapshot(SQLModel, table=True):
     game_id: int = Field(
         sa_column=Column(_BIG_ID, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
     )
-    captured_at: datetime = Field(sa_column=_timestamptz(nullable=False))
-    minutes_to_tipoff: Optional[Decimal] = Field(
-        default=None, sa_column=Column(Numeric(6, 1))
-    )
-    side: str = Field(sa_column=Column(Text, nullable=False))
-    starters_count: int = Field(
-        default=0, sa_column=Column(SmallInteger, nullable=False, server_default=text("0"))
-    )
-    not_playing_count: int = Field(
-        default=0, sa_column=Column(SmallInteger, nullable=False, server_default=text("0"))
-    )
-    payload: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(_JSON, nullable=False))
-
     captured_at: Optional[datetime] = Field(
         default=None, sa_column=_timestamptz(nullable=False, server_default=func.now())
     )
@@ -996,5 +1003,3 @@ class MarketConsensusSnapshot(SQLModel, table=True):
     line: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
     fair_price_american: int = Field(sa_column=Column(Integer, nullable=False))
     book_price_american: Optional[int] = Field(default=None, sa_column=Column(Integer))
-
-
