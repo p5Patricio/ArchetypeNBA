@@ -246,6 +246,16 @@ Every manual change writes an audit row whose reason starts with `manual:`. A re
 - **Promotion notifications (Telegram)**: Whenever a role change commits during the `learn` step (`promote`, `rollback`, `retire`, or a new challenger is registered by the candidate lab), the system dispatches a plain-text Telegram message summarizing what happened, model names, evidence numbers (paired $n$, gain and CI), and the date.
 - **How to enable notifications**: Notifications are opt-in. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `backend/.env` to valid Telegram bot credentials (real values; placeholders containing `your_` are treated as unset). If either is unset, notifications are skipped. A notification failure never causes the tick to fail or roll back: any error is logged as a warning with the token masked, and the tick proceeds normally.
 
+### Qualitative Gemini AI Layer
+
+- **Configuration location**: Configured in `backend/.env` via `GEMINI_MODEL` (default: `gemini-3.8-flash`) and `GEMINI_FALLBACK_MODEL` (default: `gemini-3.6-flash`).
+- **Primary & Fallback Execution**: The qualitative injury analyzer (`app.services.gemini_analyzer.GeminiAnalyzerService`) queries `GEMINI_MODEL`. If the primary model responds with HTTP 404 (model retired or unknown) or HTTP 429 (quota exhaustion or rate limit), it automatically retries once with `GEMINI_FALLBACK_MODEL`. It never retries more than once.
+- **Free-Tier Caveat (No Search Grounding)**: Grounding with Google Search is **not available** on the free tier API for these models. The analyzer must not request search grounding.
+- **Thinking Tokens & Token Allocation**: `gemini-3.8-flash` spends thinking tokens during structured reasoning; requests allocate a generous `maxOutputTokens` (8,192) to avoid truncation.
+- **No Unversioned Aliases**: Aliases such as `gemini-flash-latest` are prohibited because Google hot-swaps underlying model versions without notice, risking uncalibrated shifts in qualitative modifiers.
+- **Heuristic Fallback**: If both Gemini models fail or `GEMINI_API_KEY` is unconfigured/empty, the system falls back seamlessly to deterministic rule-based quantitative heuristics (`engine_source="HEURISTIC"`, `model_used=None`).
+- **Credential Hygiene**: API keys are supplied via HTTP headers (`x-goog-api-key`) rather than query parameters, and exception logging redacts the API key to guarantee zero key leakage in logs.
+
 ## 6. Web services (backend 38921, frontend 38920)
 
 | Action | Command |

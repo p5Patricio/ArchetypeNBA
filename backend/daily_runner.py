@@ -59,9 +59,11 @@ def build_telegram_message(
     results: list[PropSimulationResult],
     gemini_active: bool,
     odds_source: str = "The Odds API",
+    model_name: str | None = None,
 ) -> str:
     """Formats an executive summary report optimized for Telegram Markdown."""
-    model_label = settings.GEMINI_MODEL.replace("models/", "").replace("-", " ").title()
+    active_model = model_name or settings.GEMINI_MODEL
+    model_label = active_model.replace("models/", "").replace("-", " ").title()
     header = (
         f"🏀 *NBA PROPS INTEL — {date_str}*\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -202,6 +204,7 @@ def run_pipeline(dry_run: bool = False) -> bool:
         results=results,
         gemini_active=(analysis.engine_source == "GEMINI"),
         odds_source=odds_label,
+        model_name=analysis.model_used if analysis else None,
     )
 
     logger.info("\n--- GENERATED TELEGRAM REPORT PREVIEW ---\n" + report_text + "\n-----------------------------------------")
