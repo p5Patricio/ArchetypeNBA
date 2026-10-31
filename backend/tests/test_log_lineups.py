@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 import json
 from pathlib import Path
 import pytest
@@ -193,3 +194,83 @@ def test_log_lineups_resilience_and_retry(tmp_path):
         boxscore_fetcher=lambda gid: {},
     )
     assert count_fatal == 0
+
+
+def test_log_lineups_db_storage_and_idempotency(db_session, tmp_path):
+    from sqlmodel import select
+    from app.models import Game, LineupSnapshot, Season, Team
+
+    session = db_session
+    log_file = tmp_path / "lineups.jsonl"
+    fixed_now = datetime(2026, 10, 28, 19, 0, 0, tzinfo=timezone.utc)
+    tipoff = datetime(2026, 10, 28, 19, 30, 0, tzinfo=timezone.utc)
+
+    # Seed Season, Teams and Game
+    season = Season(season_label="2026-27", is_active=True)
+    session.add(season)
+    session.flush()
+
+    home_t = Team(abbreviation="DET", full_name="Detroit Pistons", city="Detroit", conference="East", division="Central")
+    away_t = Team(abbreviation="BOS", full_name="Boston Celtics", city="Boston", conference="East", division="Atlantic")
+    session.add_all([home_t, away_t])
+    session.flush()
+
+    game = Game(
+        season_id=season.id,
+        home_team_id=home_t.id,
+        away_team_id=away_t.id,
+        commence_time=tipoff,
+        nba_game_id="0022600001",
+        status="scheduled",
+    )
+    session.add(game)
+    session.commit()
+
+    mock_games = [{"gameId": "0022600001", "gameTimeUTC": "2026-10-28T19:30:00Z"}]
+    mock_boxscore = {
+        "homeTeam": {
+            "teamTricode": "DET",
+            "players": [{"name": "Cade Cunningham", "starter": "1", "status": "ACTIVE"}],
+        },
+        "awayTeam": {
+            "teamTricode": "BOS",
+            "players": [{"name": "Jaylen Brown", "starter": "1", "status": "ACTIVE"}],
+        },
+    }
+
+    # First call: writes to JSONL AND inserts DB rows
+    count = log_lineups(
+        window_minutes=60,
+        dry_run=False,
+        log_file=log_file,
+        now=fixed_now,
+        scoreboard_fetcher=lambda: mock_games,
+        boxscore_fetcher=lambda gid: mock_boxscore,
+        session=session,
+    )
+    assert count == 1
+    assert log_file.exists()
+
+    db_snaps = session.exec(select(LineupSnapshot).where(LineupSnapshot.game_id == game.id)).all()
+    assert len(db_snaps) == 2
+    sides = {s.side for s in db_snaps}
+    assert sides == {"home", "away"}
+    for s in db_snaps:
+        assert s.starters_count == 1
+        assert s.not_playing_count == 0
+        assert s.minutes_to_tipoff == Decimal("30.0")
+
+    # Second call (same captured_at): idempotent, no duplicate rows created
+    count2 = log_lineups(
+        window_minutes=60,
+        dry_run=False,
+        log_file=log_file,
+        now=fixed_now,
+        scoreboard_fetcher=lambda: mock_games,
+        boxscore_fetcher=lambda gid: mock_boxscore,
+        session=session,
+    )
+    assert count2 == 1
+    db_snaps2 = session.exec(select(LineupSnapshot).where(LineupSnapshot.game_id == game.id)).all()
+    assert len(db_snaps2) == 2
+

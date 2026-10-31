@@ -66,6 +66,8 @@ class PropItemResponse(BaseModel):
 class InjuryReportStatus(BaseModel):
     available: bool = False
     reason: Optional[str] = None
+    entries_count: Optional[int] = None
+    snapshot_timestamp: Optional[str] = None
 
 
 class TodayPropsResponse(BaseModel):
@@ -323,6 +325,10 @@ def _compute_today_props() -> TodayPropsResponse:
         injury_report=InjuryReportStatus(
             available=injury_report.available,
             reason=injury_report.reason,
+            entries_count=len(injury_report.rows) if injury_report.available else None,
+            snapshot_timestamp=injury_report.snapshot_timestamp.isoformat()
+            if injury_report.snapshot_timestamp
+            else None,
         ),
         baselines_available=baselines_available,
         stale=False,

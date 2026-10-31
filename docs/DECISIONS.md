@@ -593,6 +593,17 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Consequences**: No database schema change. Zero regression in props workflow. Offline tests verify primary success, fallback upon 404/429, heuristic fallback on total exhaustion, and zero key leakage in logging streams.
 - **Source**: WP-G; `backend/app/config.py`; `backend/app/services/gemini_analyzer.py`; `docs/OPERATIONS.md`.
 
+### D-62 Official NBA injury report automated download, storage and pre-game lineup snapshots
+- **Date**: 2026-10-31
+- **Decision**: Authorize automated download of the official NBA injury report PDFs for personal research under strict operational limits: game days only, at most 3 times per day (`INJURY_MAX_DOWNLOADS_PER_DAY=3`), honest User-Agent `"ArchetypeNBA-research/1.0 (personal, low frequency)"`, guarded by `INJURY_PDF_ENABLED` (default `false` in code, enabled in `.env`). Store reports idempotently in `injury_report_snapshot` (unique by sha256) with detailed player rows in `injury_entry` (player_id mapped with `normalize_player_key`, team-scoped when possible; unresolved remain null and counted). Capture pre-game starters and inactives as `lineup_snapshot` rows via `scripts/log_lineups.py`. The props pipeline (`services/injury_scraper.py`) queries the latest snapshot (< 36 hours old, else returns `available=False` with reason `'stale'`) to feed real items to Gemini without data fabrication. Read API `GET /api/v1/injuries/latest` exposes the latest snapshot grouped by team.
+- **Context**: Statuses are published by 5:00 PM Eastern the day before and updated every 15 minutes on game days, so a weekly look would be stale. Three downloads (first after 09:00 local, second after 14:00, third 60–120 min before first tip-off, never two closer than 60 minutes) capture morning shootaround, afternoon updates, and pre-tip status changes while keeping request frequency negligible.
+- **Alternatives rejected**:
+  1. Polling every 15 minutes (rejected: unnecessary load and risk of IP restriction; 3 daily checks on game days capture all material status updates).
+  2. Scraping third-party sites like ESPN or RotoWire (rejected: terms of service violations; official NBA reports are the primary source).
+  3. Fabricating fallback injuries (rejected: strict Rule 3 violation).
+- **Consequences**: Hand-written Alembic migration `c5e7a9b1d3f6` adds `injury_report_snapshot`, `injury_entry`, and `lineup_snapshot`. Background timer `nba-injuries.timer` executes `scripts/fetch_injuries.py` every 30 minutes.
+- **Source**: WP-I; [`ROADMAP.md`](ROADMAP.md) item 1; [`OPERATIONS.md`](OPERATIONS.md); migration `c5e7a9b1d3f6`.
+
 ## Next step
 
 Planned work and the reasons behind it: [`ROADMAP.md`](ROADMAP.md).

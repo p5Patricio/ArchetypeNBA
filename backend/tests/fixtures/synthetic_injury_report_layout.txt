@@ -1,0 +1,18 @@
+# SYNTHETIC TEST FIXTURE - NOT real player data. Invented player names and statuses shaped from official NBA layout mode text.
+                                                                                                    Page 1 of 2
+                                                                                                                                                                           Reaction
+                                                                                                           Taylor,  Alex                             Out
+                                                                                                                                                                           Injury/Illness - Knee Injury
+                          06:00  (ET)          PHI@CHA          Philadelphia  76ers                        Doe,  Jane                                Questionable          Injury/Illness - Ankle Sprain
+                                                                Utah  Jazz                                 Smith  III,Robert                         Available             Injury/Illness - Shoulder Soreness
+                                                                                                                                                                           Management
+                                                                                                           Baker  Jr.,Ethan                          Out
+                                                                                                                                                                           Injury/Illness - Hamstring Strain
+10/31/2026               03:00  (ET)          POR@UTA          Portland  Trail Blazers                    Kent,  Jordan                             Out                   G League  - Two-Way
+Game   Date              Game    Time         Matchup          Team                                       Player  Name                              Current   Status     Reason
+                                                                      Injury           Report:               10/31/26                   06:45            PM
+                                                                            Page  2 of 2
+Charlotte  Hornets                                                                                                                                                           NOT   YET   SUBMITTED
+                                                                                   Miller,  David                              Probable              Illness
+                                                                                                                                                     Surgery
+                                              Injury            Report:                10/31/26                   06:45            PM
