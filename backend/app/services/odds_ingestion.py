@@ -25,6 +25,7 @@ from app.analytics.props_engine import normalize_player_key, strip_player_suffix
 from app.models import (
     BetSide,
     Game,
+    MarketConsensusSnapshot,
     MarketType,
     OddsCapturePresence,
     OddsHistory,
@@ -485,6 +486,148 @@ class OddsIngestionService:
             rows.append(row)
 
         return result.merge(self._insert_rows(rows))
+
+    def ingest_sgo_daily_events(
+        self,
+        events: Sequence[dict],
+        captured_at: datetime,
+        tolerance_hours: float = 6.0,
+    ) -> Tuple[IngestResult, int, List[Game]]:
+        """
+        Ingests a batch of SGO event dictionaries:
+        - Main market quotes under sgo_<book> in odds_history.
+        - Player props (points, rebounds, assists, pra) under sgo_<book> in odds_history
+          with player_id resolved via resolve_player_id(player_name, game=game).
+        - Consensus quotes in market_consensus_snapshot (NEVER in odds_history).
+        - Matches events to existing Game rows; NEVER creates game rows.
+        Returns (ingest_result, consensus_count, matched_games).
+        """
+        from app.services.odds_providers.sportsgameodds import (
+            BOOKMAKER_TITLES,
+            parse_sgo_consensus,
+            parse_sgo_events,
+            parse_sgo_props,
+        )
+
+        result = IngestResult()
+        rows: List[dict] = []
+        consensus_rows: List[dict] = []
+        matched_games: List[Game] = []
+
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            event_id = event.get("eventID")
+            status = event.get("status") or {}
+            commence = parse_api_datetime(status.get("startsAt"))
+            teams = event.get("teams") or {}
+            home_node = teams.get("home") or {}
+            away_node = teams.get("away") or {}
+            home_names = home_node.get("names") or {}
+            away_names = away_node.get("names") or {}
+            home_team = (
+                home_names.get("long")
+                or home_names.get("medium")
+                or home_names.get("short")
+                or home_node.get("teamID")
+            )
+            away_team = (
+                away_names.get("long")
+                or away_names.get("medium")
+                or away_names.get("short")
+                or away_node.get("teamID")
+            )
+
+            if not (event_id and commence and home_team and away_team):
+                result.skipped_invalid += 1
+                continue
+
+            game = self.find_existing_game(str(home_team), str(away_team), commence, tolerance_hours)
+            if game is None:
+                logger.warning(
+                    f"OddsIngestion: unmatched SGO daily event {event_id} "
+                    f"({away_team} @ {home_team} at {commence}); skipped (never created)."
+                )
+                result.skipped_unmatched += 1
+                continue
+
+            matched_games.append(game)
+            single_payload = {"data": [event]}
+
+            # 1. Main markets (sgo_book_prefix=True)
+            game_quotes = parse_sgo_events(single_payload, sgo_book_prefix=True)
+            for q in game_quotes:
+                market = _GAME_MARKETS.get(q.market_key)
+                side = _SIDES.get(q.side)
+                updated = parse_api_datetime(q.book_last_update) or _aware_utc(captured_at)
+                if market is None or side is None:
+                    result.skipped_invalid += 1
+                    continue
+                book = self.upsert_sportsbook(q.bookmaker_key, q.bookmaker_title)
+                row = self._row(game, book, market, None, side, q.line, q.price_american, updated, captured_at)
+                if row is None:
+                    result.skipped_invalid += 1
+                    continue
+                rows.append(row)
+
+            # 2. Player props (sgo_book_prefix=True)
+            prop_quotes = parse_sgo_props(single_payload, sgo_book_prefix=True)
+            for pq in prop_quotes:
+                market = _PROP_MARKETS.get(pq.market_key)
+                side = _SIDES.get(pq.side)
+                updated = parse_api_datetime(pq.book_last_update) or _aware_utc(captured_at)
+                if market is None or side not in (BetSide.over, BetSide.under):
+                    result.skipped_invalid += 1
+                    continue
+
+                player_id = self.resolve_player_id(pq.player_name, game=game)
+                if player_id is None:
+                    logger.info(
+                        "OddsIngestion: player name %r unmatched or ambiguous for game %s; quote skipped",
+                        pq.player_name,
+                        game.id,
+                    )
+                    result.skipped_unmatched += 1
+                    result.unmatched_names += 1
+                    continue
+
+                raw_key = pq.bookmaker_key.removeprefix("sgo_")
+                raw_title = BOOKMAKER_TITLES.get(raw_key, raw_key.replace("_", " ").title())
+                book = self.upsert_sportsbook(pq.bookmaker_key, f"{raw_title} (SportsGameOdds)")
+                row = self._row(game, book, market, player_id, side, pq.line, pq.price_american, updated, captured_at)
+                if row is None:
+                    result.skipped_invalid += 1
+                    continue
+                rows.append(row)
+
+            # 3. Consensus quotes (into market_consensus_snapshot, NEVER odds_history)
+            consensus_quotes = parse_sgo_consensus(single_payload)
+            for cq in consensus_quotes:
+                line_val = None if cq.line is None else Decimal(str(cq.line)).quantize(Decimal("0.1"))
+                consensus_rows.append({
+                    "game_id": game.id,
+                    "captured_at": _aware_utc(captured_at),
+                    "source": "sgo_fair",
+                    "market": cq.market,
+                    "side": cq.side,
+                    "line": line_val,
+                    "fair_price_american": int(cq.fair_price_american),
+                    "book_price_american": int(cq.book_price_american) if cq.book_price_american is not None else None,
+                })
+
+        # Insert odds_history rows
+        stored_result = self._insert_rows(rows)
+        final_result = result.merge(stored_result)
+
+        # Insert market_consensus_snapshot rows
+        consensus_inserted = 0
+        if consensus_rows:
+            for r in consensus_rows:
+                self.session.add(MarketConsensusSnapshot(**r))
+            self.session.commit()
+            consensus_inserted = len(consensus_rows)
+
+        return final_result, consensus_inserted, matched_games
 
     def ingest_prop_quotes(
         self, event_id: str, quotes: Sequence[OddsQuote], captured_at: datetime

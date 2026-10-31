@@ -50,6 +50,7 @@ from app.models import (
     CAPTURE_CLOSING_PROPS,
     CAPTURE_KINDS,
     CAPTURE_OPENING,
+    CAPTURE_SGO_DAILY,
     Game,
     OddsSnapshotCapture,
 )
@@ -197,7 +198,7 @@ def record_capture(
     """
     if kind not in CAPTURE_KINDS:
         raise ValueError(f"unknown capture kind: {kind}")
-    if kind != CAPTURE_OPENING:
+    if kind not in (CAPTURE_OPENING, CAPTURE_SGO_DAILY):
         existing = session.exec(
             select(OddsSnapshotCapture.id)
             .where(OddsSnapshotCapture.game_id == game_id)

@@ -51,9 +51,11 @@ from sqlalchemy import exists
 from sqlmodel import Session, select
 
 from app.config import settings
-from app.models import CAPTURE_CLOSING, CAPTURE_OPENING, Game, OddsSnapshotCapture
+from app.models import CAPTURE_CLOSING, CAPTURE_OPENING, CAPTURE_SGO_DAILY, Game, OddsSnapshotCapture
 from app.services import model_evaluation, model_promotion
 from app.services.model_lab import LabError
+from app.services.odds_ingestion import OddsIngestionService
+from app.services.odds_providers.sportsgameodds import SportsGameOddsService
 from app.services.odds_snapshot import (
     DEFAULT_MIN_REMAINING,
     DEFAULT_PROPS_MARKETS,
@@ -61,6 +63,7 @@ from app.services.odds_snapshot import (
     format_plan,
     format_summary,
     plan_snapshot,
+    record_capture,
     run_snapshot,
 )
 from app.services.prediction_recorder import PredictionRecorder
@@ -225,6 +228,19 @@ def opening_captured_today(session: Session, now: datetime, local_tz: Optional[t
     return row is not None
 
 
+def sgo_captured_today(session: Session, now: datetime, local_tz: Optional[tzinfo] = None) -> bool:
+    """True when an ``sgo_daily`` marker was written during the machine-local calendar day of ``now``."""
+    _, start, end = local_day_bounds_utc(_aware_utc(now), local_tz)
+    row = session.exec(
+        select(OddsSnapshotCapture.id)
+        .where(OddsSnapshotCapture.kind == CAPTURE_SGO_DAILY)
+        .where(OddsSnapshotCapture.captured_at >= start)
+        .where(OddsSnapshotCapture.captured_at < end)
+        .limit(1)
+    ).first()
+    return row is not None
+
+
 def count_missed_closing(
     session: Session, now: datetime, lookback_hours: float = MISSED_CLOSING_LOOKBACK_HOURS
 ) -> int:
@@ -260,6 +276,7 @@ class TickContext:
     clock: Callable[[], float] = time.monotonic  # injectable so the learn budget can be tested
     learn_budget_seconds: float = LEARN_BUDGET_SECONDS
     notifier: Optional[object] = None  # PromotionNotifier or fake sender; None uses default PromotionNotifier
+    sgo_service: Optional[object] = None  # SportsGameOddsService (or fake); None creates default
 
 
 Step = Callable[[TickContext], StepResult]
@@ -302,6 +319,84 @@ def opening_step(ctx: TickContext) -> StepResult:
         # A paid call that left no marker would be repeated by the next tick: make it loud.
         return replace(result, status=STEP_ERROR, message="paid opening call wrote no marker (no game resolved); it will retry")
     return result
+
+
+def sgo_step(ctx: TickContext) -> StepResult:
+    """
+    Daily capture step for SportsGameOdds (free Amateur tier).
+    Runs once per local day after the opening capture succeeded, only when SPORTSGAMEODDS_API_KEY is configured.
+    Captures upcoming game lines, player props, and consensus quotes within the daily budget.
+    """
+    day, _, _ = local_day_bounds_utc(ctx.now, ctx.local_tz)
+
+    if not getattr(settings, "SGO_CAPTURE_ENABLED", True):
+        return StepResult("", STEP_SKIPPED, "SGO daily capture disabled by SGO_CAPTURE_ENABLED=False")
+
+    sgo_svc = ctx.sgo_service if ctx.sgo_service is not None else SportsGameOddsService()
+    if not sgo_svc.is_configured:
+        return StepResult("", STEP_SKIPPED, "SPORTSGAMEODDS_API_KEY is not configured (backend/.env); SGO daily capture skipped.")
+
+    if sgo_captured_today(ctx.session, ctx.now, ctx.local_tz):
+        return StepResult("", STEP_SKIPPED, f"SGO daily capture already completed for {day.isoformat()}")
+
+    if not opening_captured_today(ctx.session, ctx.now, ctx.local_tz):
+        return StepResult("", STEP_SKIPPED, f"waiting for opening capture before SGO daily capture on {day.isoformat()}")
+
+    budget = getattr(settings, "SGO_DAILY_OBJECT_BUDGET", 30)
+    if ctx.dry_run:
+        return StepResult(
+            "",
+            STEP_OK,
+            f"would capture SGO daily odds (up to {budget} objects) for {day.isoformat()}",
+            f"budget: {budget} objects; endpoints: GET /events (startsAfter now, startsBefore now+36h, limit 50, cursor pagination)",
+        )
+
+    allowed, reason = sgo_svc.check_quota(expected_objects=1)
+    if not allowed:
+        return StepResult("", STEP_SKIPPED, f"SGO quota guard blocked daily capture: {reason}")
+
+    try:
+        events, objects_used = sgo_svc.fetch_daily_events(now=ctx.now, max_objects=budget)
+    except Exception as exc:
+        logger.exception("tick: SGO fetch_daily_events failed")
+        return StepResult("", STEP_ERROR, f"SGO API request failed: {type(exc).__name__}: {exc}")
+
+    if not events:
+        return StepResult("", STEP_SKIPPED, f"no SGO events returned for horizon ({objects_used} object(s) used)")
+
+    ingestion = OddsIngestionService(ctx.session)
+    try:
+        ingest_res, consensus_count, matched_games = ingestion.ingest_sgo_daily_events(events, ctx.now)
+    except Exception as exc:
+        logger.exception("tick: SGO ingestion failed")
+        ctx.session.rollback()
+        return StepResult("", STEP_ERROR, f"SGO ingestion failed: {type(exc).__name__}: {exc}")
+
+    if matched_games:
+        for idx, game in enumerate(matched_games):
+            credits_for_game = objects_used if idx == 0 else 0
+            record_capture(
+                ctx.session,
+                game.id,
+                CAPTURE_SGO_DAILY,
+                ctx.now,
+                credits_spent=credits_for_game,
+                quotes_seen=ingest_res.inserted + ingest_res.skipped_duplicate + ingest_res.skipped_invalid,
+                quotes_inserted=ingest_res.inserted,
+            )
+        ctx.session.commit()
+
+    detail = (
+        f"events: {len(events)} seen, {len(matched_games)} matched to games; "
+        f"quotes inserted: {ingest_res.inserted}, duplicate: {ingest_res.skipped_duplicate}, "
+        f"unmatched: {ingest_res.skipped_unmatched}, invalid: {ingest_res.skipped_invalid}; "
+        f"consensus rows: {consensus_count}"
+    )
+    message = (
+        f"captured {len(events)} event(s) ({objects_used} object(s)); "
+        f"inserted {ingest_res.inserted} quote(s), {consensus_count} consensus row(s)"
+    )
+    return StepResult("", STEP_OK, message, detail)
 
 
 def closing_step(ctx: TickContext) -> StepResult:
@@ -580,11 +675,28 @@ DEFAULT_STEPS: List[Tuple[str, Step]] = [
 ]
 
 
-def default_steps(skip: Sequence[str] = ()) -> List[Tuple[str, Step]]:
-    unknown = set(skip) - {name for name, _ in DEFAULT_STEPS}
+def is_sgo_configured() -> bool:
+    key = getattr(settings, "SPORTSGAMEODDS_API_KEY", "") or ""
+    return bool(key and "your_" not in key and getattr(settings, "SGO_CAPTURE_ENABLED", True))
+
+
+def default_steps(skip: Sequence[str] = (), include_sgo: Optional[bool] = None) -> List[Tuple[str, Step]]:
+    skip_set = set(skip)
+    should_include_sgo = is_sgo_configured() if include_sgo is None else include_sgo
+    if not should_include_sgo:
+        skip_set.add("sgo")
+    valid_names = {name for name, _ in DEFAULT_STEPS} | {"sgo"}
+    unknown = set(skip) - valid_names
     if unknown:
         raise ValueError(f"unknown step(s) to skip: {', '.join(sorted(unknown))}")
-    return [(name, fn) for name, fn in DEFAULT_STEPS if name not in set(skip)]
+
+    steps: List[Tuple[str, Step]] = []
+    for name, fn in DEFAULT_STEPS:
+        if name == "closing" and "sgo" not in skip_set and should_include_sgo:
+            steps.append(("sgo", sgo_step))
+        if name not in skip_set:
+            steps.append((name, fn))
+    return steps
 
 
 def _run_step(name: str, step: Step, ctx: TickContext) -> StepResult:
@@ -615,6 +727,7 @@ def run_tick(
     lock_path: Optional[Path] = None,
     results_provider: Optional[object] = None,
     notifier: Optional[object] = None,
+    sgo_service: Optional[object] = None,
 ) -> TickSummary:
     """
     Runs every step once and returns the summary. A dry run takes no lock, never touches ``odds_service`` or the
@@ -647,9 +760,11 @@ def run_tick(
 
         ctx = TickContext(
             session, odds_service, now, dry_run, window_minutes, props_events, min_remaining, local_tz, results_provider,
-            notifier=notifier,
+            notifier=notifier, sgo_service=sgo_service,
         )
-        for name, step in default_steps() if steps is None else steps:
+        sgo_active = getattr(sgo_service, "is_configured", False) if sgo_service is not None else is_sgo_configured()
+        resolved_steps = default_steps(include_sgo=sgo_active) if steps is None else steps
+        for name, step in resolved_steps:
             result = _run_step(name, step, ctx)
             logger.info(f"tick: step {result.name} -> {result.status}: {result.message}")
             summary.steps.append(result)

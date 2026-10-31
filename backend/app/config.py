@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     SPORTSGAMEODDS_API_KEY: str = ""
     SPORTSGAMEODDS_BASE_URL: str = "https://api.sportsgameodds.com/v2"
     SPORTSGAMEODDS_MIN_REMAINING_OBJECTS: int = 100
+    SGO_DAILY_OBJECT_BUDGET: int = 30
+    SGO_CAPTURE_ENABLED: bool = True
 
     # Official NBA Injury Report PDF automated download (disabled until owner clears NBA terms)
     INJURY_PDF_ENABLED: bool = False

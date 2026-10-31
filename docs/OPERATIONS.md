@@ -126,39 +126,45 @@ Check the balance: `Select-String -Path logs\tick.log -Pattern 'Quota Remaining'
 
 Raising the props events per run from 1 to 3 would cost up to 3 + 3 x (3 + 3 x 2) = 30 credits a day and would exhaust the quota before month end. Do not.
 
-## 2.1 Second odds feed: SportsGameOdds (optional)
+## 2.1 Second odds feed: SportsGameOdds (daily capture enabled)
 
-An integrated second odds feed from SportsGameOdds (https://sportsgameodds.com) provides game lines (moneyline, spreads, totals) across additional US bookmakers (Caesars, ESPN BET, BetMGM, DraftKings, FanDuel, Bovada, Unibet, PointsBet, William Hill). The client and parser have been validated against official documentation example responses (`tests/test_sgo_docs_validation.py`) and exercised against a live response on 2026-10-31 via `scripts/sgo_probe.py`. It is disabled until the owner configures an API key, and ingestion into the scheduled tick remains **NOT** wired (the feed is only probed with `scripts/sgo_probe.py`).
+An integrated second odds feed from SportsGameOdds (https://sportsgameodds.com) provides game lines (moneyline, spreads, totals) and player props (points, rebounds, assists, pra) across additional US bookmakers (Caesars, ESPN BET, BetMGM, DraftKings, FanDuel, Bovada, Unibet, PointsBet, William Hill). The client and parser have been validated against official documentation example responses (`tests/test_sgo_docs_validation.py`) and live responses via `scripts/sgo_probe.py`.
 
-### Live Probe Findings (2026-10-31)
-- **Books and Coverage**: The free "Amateur" tier returned 9 US bookmakers (DraftKings, FanDuel, BetMGM, Caesars, ESPN BET, Bovada, PointsBet, Unibet, William Hill) and **no Pinnacle**.
-- **Plan Notice**: The live response returned a top-level string field `notice` ("Response is missing N bookmaker odds. Upgrade your API key to access all data from this query.") indicating plan-limited bookmaker availability; this notice is logged once per call at INFO (key masked, no payload dumped).
-- **Odds Map Density & Filter Bug**: Each event's `odds` map contained 846–1056 entries, including team totals, quarter/half totals (1q, 1h), eo (even/odd), ml3way (regulation 3-way moneyline), and player props (e.g. `AARON_WIGGINS_1_NBA`). A filter bug where `parse_sgo_events` accepted any `statEntityID` for `betTypeID: ou` was identified and fixed: full-game totals strictly require `statEntityID == 'all'` (and `statID == 'points'`, `periodID == 'game'`); moneylines and spreads strictly require `statEntityID in ('home', 'away')` with matching `sideID`. All team totals, player props, eo, and partial periods are cleanly filtered out.
-- **Tick Status**: Ingestion into the scheduled tick is still **NOT** wired; the feed is only probed manually using `scripts/sgo_probe.py`.
+The daily capture is wired as step `sgo` in the scheduled tick (`app/services/tick.py`). It runs once per machine-local day directly after the `opening` capture succeeds, when `SPORTSGAMEODDS_API_KEY` is configured and `SGO_CAPTURE_ENABLED=true`.
+
+### Quota and Budget Math
+- **Amateur Quota**: 2,500 objects/month, 10 requests/minute. In SportsGameOdds pricing, 1 "object" is an entire game/event containing its full tree of odds across all bookmakers and markets.
+- **Daily Consumption**: The daily capture requests NBA events with `oddsAvailable=true`, `startsAfter=now`, and `startsBefore=now+36h` (typically 5 to 15 games per day).
+- **Daily Budget**: Capped by `SGO_DAILY_OBJECT_BUDGET` (default 30 objects). At ~12–15 objects per day over 30 days, monthly consumption is ~360–450 objects, consuming only ~15–18% of the 2,500 monthly quota and preserving >2,000 objects for backfills or high-volume slates.
+- **Quota Guard**: Configured via `SPORTSGAMEODDS_MIN_REMAINING_OBJECTS` in `config.py` (default floor 100). If remaining objects drop below this floor, fetches are blocked with `InsufficientQuotaError`. Usage is also checked against `GET /account/usage` (which does not consume quota) and tracked locally in `logs/sportsgameodds_usage.json`.
 
 ### How to enable it
-1. Register for an API key at https://sportsgameodds.com (the free "Amateur" plan provides 2,500 objects/month, 10 requests/minute, update interval 10 min, NBA included; **no Pinnacle**).
-2. Add your key to `backend/.env`:
+1. Register for an API key at https://sportsgameodds.com (the free "Amateur" plan provides 2,500 objects/month, 10 requests/minute, NBA included; **no Pinnacle**).
+2. Add your key and optional overrides to `backend/.env`:
    ```env
    SPORTSGAMEODDS_API_KEY=your_actual_key_here
+   SGO_CAPTURE_ENABLED=true
+   SGO_DAILY_OBJECT_BUDGET=30
    ```
 3. Test your key and verify live response structure using the probe CLI:
    ```bash
    cd backend
-   python scripts/sgo_probe.py --dry-run    # Preview request without network
-   python scripts/sgo_probe.py              # Send 1 small probe request (2 events) and inspect schema
+   python scripts/sgo_probe.py --dry-run          # Preview request without network
+   python scripts/sgo_probe.py --capture-dry-run  # Preview daily capture window and budget
+   python scripts/sgo_probe.py                    # Send 1 small probe request (2 events) and inspect schema
    ```
 
-### Limits and Quota Guard
-- **Monthly Limit**: 2,500 objects/month. In SportsGameOdds pricing, 1 "object" is an entire game/event containing its full tree of odds across all bookmakers.
-- **Rate Limit**: 10 requests/minute on Amateur plan.
-- **Account Usage Endpoint**: The API provides `GET /account/usage`, which returns quota limits and consumption. Calls to this endpoint do **not** count against request or object quotas.
-- **Quota Guard**: Configured via `SPORTSGAMEODDS_MIN_REMAINING_OBJECTS` in `config.py` (default floor 100). If remaining objects drop below this floor, fetches are blocked with `InsufficientQuotaError`. Usage is also tracked and persisted locally in `logs/sportsgameodds_usage.json`.
+### Data Storage & Provenance
+- **Dedicated Sportsbooks**: Main-market quotes and player props are stored in `odds_history` under dedicated sportsbooks prefixed with `sgo_` (e.g., `sgo_draftkings`, `sgo_fanduel`) with display name format `<Name> (SportsGameOdds)`. This isolates SGO quotes from The Odds API quotes.
+- **Game Mapping**: Events are matched strictly to existing `Game` rows by team names/abbreviations and commence time within a 6-hour tolerance. SGO never creates games.
+- **Player Props**: SGO player props (`statEntityID = <playerID>`) resolve the player name via the event's `players` map and match DB players using the same team-scoped, diacritic- and suffix-aware resolver (`resolve_player_id`). Unmatched players are counted, logged, and skipped—never fabricated.
+- **Consensus Snapshot Isolation**: SGO full-game consensus quotes (`fairOdds`, `fairSpread`, `fairOverUnder`, and `bookOdds`) are stored in `market_consensus_snapshot` with `source='sgo_fair'`. Consensus lines are **strictly forbidden** from entering `odds_history` so they can never be mistaken for bookable best prices by the paper betting recorder.
+- **Capture Idempotency**: Successful captures write an `OddsSnapshotCapture` marker of kind `'sgo_daily'` with `credits_spent = objects_used`, preventing duplicate daily runs.
 
 ### Why it never bets alone
 - **No Sharp Book**: SportsGameOdds free tier does not include Pinnacle (the sharp benchmark of true market probabilities).
 - **No Independent Bets**: The betting policy generates wagers only when model probabilities beat Pinnacle's de-vigged fair price by at least 2 pp. A feed without Pinnacle can never establish a fair market baseline.
-- **Best-Price Execution & Cross-Check Only**: Quotes from this feed are matched only to existing `Game` rows (it never creates new games) and stored as ordinary `odds_history` rows under their respective sportsbooks. They provide additional liquidity candidates for the best available market price and serve as cross-feed verification.
+- **Best-Price Execution & Cross-Check Only**: SGO quotes act solely as execution candidates when a sharp edge exists and the quote is younger than `max_quote_age_minutes` (360 min). Daily quotes captured in the morning will naturally age out before evening tip-offs unless fresh, ensuring safety.
 
 ## 3. Daily and weekly checks
 
