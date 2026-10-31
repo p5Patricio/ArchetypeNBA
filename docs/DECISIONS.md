@@ -73,6 +73,8 @@ Entries are grouped by area below; the IDs follow the index. To change a decisio
 | [D-57](#d-57-totals-paper-bets-via-model-free-market-benchmark-model-market_pinnacle) | 2026-10-28 | Totals paper bets via model-free market benchmark model | Model |
 | [D-58](#d-58-second-odds-feed-sportsgameodds-as-best-price-contributor-only) | 2026-10-28 | Second odds feed (SportsGameOdds) as best-price contributor only | Data |
 | [D-59](#d-59-shadow-totals-model-totals_pace-with-evaluation-against-pinnacles-close) | 2026-10-28 | Shadow totals model (`totals_pace`) with evaluation against Pinnacle's close | Model |
+| [D-60](#d-60-persist-player-prop-quotes-and-evaluate-props-shadow-model-props_nb-against-book-close) | 2026-10-28 | Persist player-prop quotes and evaluate props shadow model | Model |
+| [D-63](#d-63-sportsgameodds-daily-capture-player-props-and-consensus-snapshot-in-scheduled-tick) | 2026-10-31 | SportsGameOdds daily capture, player props, and consensus snapshot in scheduled tick | Capture |
 
 ## Data and scope
 
@@ -581,6 +583,45 @@ Added after the first version of this log: decisions of PR #18 (portable install
   2. Fabricating missing player baseline data or consensus odds (rejected: strict Rule 3 violation; uncalibrated or missing players are skipped and counted).
 - **Consequences**: `odds_history` captures high-fidelity closing player props quotes. Truthful quote metrics on capture markers. Clean, settlement-free evaluation of negative-binomial props calibration against bookmakers.
 - **Source**: WP-S2; [`QUANT_MODULE.md`](QUANT_MODULE.md); [`DECISIONS.md`](DECISIONS.md); [`ROADMAP.md`](ROADMAP.md).
+
+### D-61 Qualitative Gemini layer model upgrade to gemini-3.8-flash with gemini-3.6-flash fallback
+- **Date**: 2026-10-31
+- **Decision**: Upgrade default `GEMINI_MODEL` from `gemini-3.6-flash` to `gemini-3.8-flash`. Introduce `GEMINI_FALLBACK_MODEL` defaulting to `gemini-3.6-flash`. When calling the Gemini API, attempt the primary model; on HTTP 404 (model id unknown or retired) or HTTP 429 (quota/rate limit), retry exactly once with `GEMINI_FALLBACK_MODEL`. Never retry more than once. Log the model that answered successfully at INFO level without exposing credentials. Include the resolved model id (`model_used`) in `SlateAnalysisResult` so the props UI and daily runner report reflect actual execution provenance. Preserve the deterministic heuristic fallback when both models fail or credentials are unset. Grounding with Google Search is deliberately not requested (not supported on the free tier API).
+- **Context**: Verified on 2026-10-31: `gemini-3.8-flash` is a GA (stable) model in the Gemini API model list, free of charge on the free tier, offering 1,048,576 input and 65,536 output tokens with structured JSON output. Because the model allocates thinking tokens during reasoning, `maxOutputTokens` is generously allocated (8,192). `gemini-3.6-flash` remains fully functional without a shutdown date and serves as an ideal resilient fallback.
+- **Alternatives rejected**:
+  1. Dynamic aliases like `gemini-flash-latest` (rejected: aliases hot-swap underlying weights without notice, breaking repeatability and auditability).
+  2. Google Search grounding (rejected: unavailable on the free tier API for these models; would trigger API rejection).
+  3. Indefinite model cycling or unbounded retries (rejected: limits latency and preserves quota; strictly at most one fallback retry).
+- **Consequences**: No database schema change. Zero regression in props workflow. Offline tests verify primary success, fallback upon 404/429, heuristic fallback on total exhaustion, and zero key leakage in logging streams.
+- **Source**: WP-G; `backend/app/config.py`; `backend/app/services/gemini_analyzer.py`; `docs/OPERATIONS.md`.
+
+### D-62 Official NBA injury report automated download, storage and pre-game lineup snapshots
+- **Date**: 2026-10-31
+- **Decision**: Authorize automated download of the official NBA injury report PDFs for personal research under strict operational limits: game days only, at most 3 times per day (`INJURY_MAX_DOWNLOADS_PER_DAY=3`), honest User-Agent `"ArchetypeNBA-research/1.0 (personal, low frequency)"`, guarded by `INJURY_PDF_ENABLED` (default `false` in code, enabled in `.env`). Store reports idempotently in `injury_report_snapshot` (unique by sha256) with detailed player rows in `injury_entry` (player_id mapped with `normalize_player_key`, team-scoped when possible; unresolved remain null and counted). Capture pre-game starters and inactives as `lineup_snapshot` rows via `scripts/log_lineups.py`. The props pipeline (`services/injury_scraper.py`) queries the latest snapshot (< 36 hours old, else returns `available=False` with reason `'stale'`) to feed real items to Gemini without data fabrication. Read API `GET /api/v1/injuries/latest` exposes the latest snapshot grouped by team.
+- **Context**: Statuses are published by 5:00 PM Eastern the day before and updated every 15 minutes on game days, so a weekly look would be stale. Three downloads (first after 09:00 local, second after 14:00, third 60–120 min before first tip-off, never two closer than 60 minutes) capture morning shootaround, afternoon updates, and pre-tip status changes while keeping request frequency negligible.
+- **Alternatives rejected**:
+  1. Polling every 15 minutes (rejected: unnecessary load and risk of IP restriction; 3 daily checks on game days capture all material status updates).
+  2. Scraping third-party sites like ESPN or RotoWire (rejected: terms of service violations; official NBA reports are the primary source).
+  3. Fabricating fallback injuries (rejected: strict Rule 3 violation).
+- **Consequences**: Hand-written Alembic migration `c5e7a9b1d3f6` adds `injury_report_snapshot`, `injury_entry`, and `lineup_snapshot`. Background timer `nba-injuries.timer` executes `scripts/fetch_injuries.py` every 30 minutes.
+- **Source**: WP-I; [`ROADMAP.md`](ROADMAP.md) item 1; [`OPERATIONS.md`](OPERATIONS.md); migration `c5e7a9b1d3f6`.
+
+### D-63 SportsGameOdds daily capture, player props, and consensus snapshot in scheduled tick
+- **Date**: 2026-10-31
+- **Decision**: Integrate SportsGameOdds into the scheduled tick as an isolated daily step (`sgo`) running once per machine-local day directly after a successful `opening` capture. The step operates only when `SPORTSGAMEODDS_API_KEY` is configured and `SGO_CAPTURE_ENABLED=true`, subject to a daily budget `SGO_DAILY_OBJECT_BUDGET` (default 30 objects) and the monthly floor quota guard `SPORTSGAMEODDS_MIN_REMAINING_OBJECTS` (floor 100 objects).
+  1. **Quota & Budget Math**: 1 object = 1 event regardless of markets or bookmakers. An NBA day typically has 5–15 games in the 36-hour lookahead window (`startsAfter=now`, `startsBefore=now+36h`). Daily consumption is ~12–15 objects/day (~360–450/month), leaving >2,000 objects of the 2,500 monthly Amateur tier quota available for staged historical backfills.
+  2. **Dedicated Sportsbooks (`sgo_<book>`)**: Main game market quotes (h2h, spreads, totals) and player props (`player_points`, `player_rebounds`, `player_assists`, `player_pra`) across the 9 visible US books are stored in `odds_history` under dedicated sportsbook keys prefixed with `sgo_` (display name `<Name> (SportsGameOdds)`), maintaining strict provenance and preventing collision with The Odds API quotes.
+  3. **Player Props Resolution**: SGO player props (`statEntityID = <playerID>`) match the event's `players` map to retrieve player names, resolved via the existing team-scoped, diacritic- and suffix-aware resolver (`resolve_player_id`). Unmatched players are counted, logged, and skipped without data fabrication.
+  4. **Consensus Snapshot Isolation (`market_consensus_snapshot`)**: Full-game consensus quotes (`fairOdds`, `fairSpread`, `fairOverUnder`, `bookOdds`) are written exclusively to the new `market_consensus_snapshot` table (`source='sgo_fair'`). Consensus quotes are **strictly prohibited** from entering `odds_history` so they can never be mistaken for bookable market prices by the paper betting recorder.
+  5. **Betting Policy & Sharp Reference**: SportsGameOdds lacks a sharp reference (no Pinnacle). The betting policy requires Pinnacle fair value and quote freshness within `max_quote_age_minutes` (360 min). `sgo_` quotes act solely as execution liquidity candidates if they offer a better price than primary books when a model edge exists.
+  6. **Idempotency & Migration**: Step logs an `OddsSnapshotCapture` marker of kind `'sgo_daily'` with `credits_spent = objects_used` across matched games. Hand-written Alembic migration `d6f8b0c2e4a7` (down_revision `c5e7a9b1d3f6`) adds `'sgo_daily'` to the capture kind constraint and creates `market_consensus_snapshot`.
+- **Context**: WP-K1; OWNER DECISION (2026-10-31).
+- **Alternatives rejected**:
+  1. Storing consensus quotes in `odds_history` (rejected: creates phantom paper bets on unbookable prices).
+  2. Creating `Game` records from SGO (rejected: primary schedule comes from NBA API / primary capture).
+  3. Merging SGO books with The Odds API book rows (rejected: compromises quote provenance).
+- **Consequences**: Migration `d6f8b0c2e4a7` required in production; probe tool supports `--capture-dry-run`.
+- **Source**: WP-K1; `odd/tasks/betting-improvements.md`; `docs/DECISIONS.md`; `app/services/tick.py`.
 
 ## Next step
 

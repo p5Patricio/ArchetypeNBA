@@ -66,6 +66,8 @@ class PropItemResponse(BaseModel):
 class InjuryReportStatus(BaseModel):
     available: bool = False
     reason: Optional[str] = None
+    entries_count: Optional[int] = None
+    snapshot_timestamp: Optional[str] = None
 
 
 class TodayPropsResponse(BaseModel):
@@ -223,7 +225,8 @@ def _compute_today_props() -> TodayPropsResponse:
         analyzer = GeminiAnalyzerService()
         analysis = analyzer.analyze_injuries_and_news(injury_report.rows)
         modifier_map = {m.player_name.lower(): m for m in analysis.modifiers}
-        model_label = settings.GEMINI_MODEL.replace("models/", "").replace("-", " ").title()
+        active_model = analysis.model_used or settings.GEMINI_MODEL
+        model_label = active_model.replace("models/", "").replace("-", " ").title()
         ai_label = model_label if analysis.engine_source == "GEMINI" else "Modo Heurístico Local"
         slate_summary = analysis.slate_summary
     else:
@@ -322,6 +325,10 @@ def _compute_today_props() -> TodayPropsResponse:
         injury_report=InjuryReportStatus(
             available=injury_report.available,
             reason=injury_report.reason,
+            entries_count=len(injury_report.rows) if injury_report.available else None,
+            snapshot_timestamp=injury_report.snapshot_timestamp.isoformat()
+            if injury_report.snapshot_timestamp
+            else None,
         ),
         baselines_available=baselines_available,
         stale=False,
@@ -361,9 +368,10 @@ def get_today_props(
     if _cached_response is None:
         # Idle state: do not automatically consume quota until the user clicks the action button
         today_str = datetime.now().astimezone().strftime("%Y-%m-%d")
+        idle_model_label = settings.GEMINI_MODEL.replace("models/", "").replace("-", " ").title()
         return TodayPropsResponse(
             date=today_str,
-            ai_engine="Gemini 3.6 Flash (En Pausa)",
+            ai_engine=f"{idle_model_label} (En Pausa)",
             odds_source="The Odds API",
             slate_summary="Análisis en pausa para ahorrar cuota. Hacé clic en 'Ejecutar Análisis IA' para iniciar las simulaciones de hoy.",
             total_props=0,

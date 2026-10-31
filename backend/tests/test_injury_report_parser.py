@@ -30,6 +30,9 @@ def test_normalize_player_name():
     assert normalize_player_name("Doncic, Luka") == "Luka Doncic"
     assert normalize_player_name("Curry, Stephen") == "Stephen Curry"
     assert normalize_player_name("Smith Jr., Nick") == "Nick Smith Jr."
+    assert normalize_player_name("Jackson Jr.,Jaren") == "Jaren Jackson Jr."
+    assert normalize_player_name("Williams III,Robert") == "Robert Williams III"
+    assert normalize_player_name("Brown,  Jaylen") == "Jaylen Brown"
     assert normalize_player_name("Giannis Antetokounmpo") == "Giannis Antetokounmpo"
     assert normalize_player_name("") == ""
 
@@ -147,3 +150,76 @@ def test_empty_text_returns_empty_list():
     assert parse_injury_report_text("") == []
     assert parse_injury_report_text("NBA INJURY REPORT\nPage 1 of 1\n") == []
     assert parse_injury_report_text("NOT YET SUBMITTED\n") == []
+
+
+def test_parse_synthetic_injury_report_layout():
+    """
+    Tests parsing a fixture shaped identically to official NBA injury report layout text.
+    Verifies:
+      1. Inverted order restoration per page.
+      2. Blank carried cells (date, time, matchup, team).
+      3. Suffix name handling ('Baker Jr.,Ethan', 'Smith III,Robert').
+      4. Available status kept.
+      5. Page-break continuation of wrapped reasons across pages.
+      6. NOT YET SUBMITTED rows yielding zero player rows without error.
+    """
+    fixture_path = FIXTURES_DIR / "synthetic_injury_report_layout.txt"
+    with open(fixture_path, "r", encoding="utf-8") as f:
+        text = f.read()
+
+    rows = parse_injury_report_text(text)
+    assert len(rows) == 6
+
+    # Row 0: Jordan Kent
+    r0 = rows[0]
+    assert r0.player_name == "Jordan Kent"
+    assert r0.raw_name == "Kent, Jordan"
+    assert r0.team == "Portland Trail Blazers"
+    assert r0.matchup == "POR@UTA"
+    assert r0.game_date == "10/31/2026"
+    assert "03:00" in r0.game_time
+    assert r0.status == "Out"
+    assert r0.availability_prob == 0.0
+    assert "G League - Two-Way" in r0.reason
+
+    # Row 1: Ethan Baker Jr. (prefix and suffix combined reason, carried Portland)
+    r1 = rows[1]
+    assert r1.player_name == "Ethan Baker Jr."
+    assert r1.raw_name == "Baker Jr.,Ethan"
+    assert r1.team == "Portland Trail Blazers"
+    assert r1.status == "Out"
+    assert "Hamstring Strain" in r1.reason and "Management" in r1.reason
+
+    # Row 2: Robert Smith III (Available status kept, Utah Jazz)
+    r2 = rows[2]
+    assert r2.player_name == "Robert Smith III"
+    assert r2.team == "Utah Jazz"
+    assert r2.status == "Available"
+    assert r2.availability_prob == 1.0
+
+    # Row 3: Jane Doe (Philadelphia 76ers, PHI@CHA, 06:00 ET)
+    r3 = rows[3]
+    assert r3.player_name == "Jane Doe"
+    assert r3.team == "Philadelphia 76ers"
+    assert r3.matchup == "PHI@CHA"
+    assert "06:00" in r3.game_time
+    assert r3.status == "Questionable"
+    assert r3.availability_prob == 0.50
+
+    # Row 4: Alex Taylor (reason spans across page break: 'Reaction' on Page 1, 'Surgery' on Page 2)
+    r4 = rows[4]
+    assert r4.player_name == "Alex Taylor"
+    assert r4.team == "Philadelphia 76ers"
+    assert r4.status == "Out"
+    assert "Knee Injury" in r4.reason
+    assert "Reaction" in r4.reason
+    assert "Surgery" in r4.reason
+
+    # Row 5: David Miller (Philadelphia 76ers carried across page break!)
+    r5 = rows[5]
+    assert r5.player_name == "David Miller"
+    assert r5.team == "Philadelphia 76ers"
+    assert r5.status == "Probable"
+    assert r5.availability_prob == 0.75
+    assert "Illness" in r5.reason
+

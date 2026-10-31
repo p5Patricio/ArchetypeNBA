@@ -771,7 +771,8 @@ class SimulatedBet(SQLModel, table=True):
 CAPTURE_OPENING = "opening"
 CAPTURE_CLOSING = "closing"
 CAPTURE_CLOSING_PROPS = "closing_props"
-CAPTURE_KINDS = (CAPTURE_OPENING, CAPTURE_CLOSING, CAPTURE_CLOSING_PROPS)
+CAPTURE_SGO_DAILY = "sgo_daily"
+CAPTURE_KINDS = (CAPTURE_OPENING, CAPTURE_CLOSING, CAPTURE_CLOSING_PROPS, CAPTURE_SGO_DAILY)
 
 
 class OddsSnapshotCapture(SQLModel, table=True):
@@ -788,7 +789,7 @@ class OddsSnapshotCapture(SQLModel, table=True):
 
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('opening', 'closing', 'closing_props')", name="ck_odds_snapshot_capture_kind"
+            "kind IN ('opening', 'closing', 'closing_props', 'sgo_daily')", name="ck_odds_snapshot_capture_kind"
         ),
         Index("ix_odds_snapshot_capture_game_id", "game_id"),
         Index(
@@ -862,3 +863,143 @@ class OddsCapturePresence(SQLModel, table=True):
     side: BetSide = Field(sa_column=Column(_BET_SIDE, nullable=False))
     line: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
 
+
+class InjuryReportSnapshot(SQLModel, table=True):
+    """Snapshot of an official NBA injury report document."""
+
+    __tablename__ = "injury_report_snapshot"
+
+    __table_args__ = (
+        UniqueConstraint("sha256", name="uq_injury_report_snapshot_sha256"),
+        Index("ix_injury_report_snapshot_report_timestamp", "report_timestamp"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    source: str = Field(
+        default="nba_official_pdf",
+        sa_column=Column(Text, nullable=False, server_default=text("'nba_official_pdf'")),
+    )
+    report_url: str = Field(sa_column=Column(Text, nullable=False))
+    report_timestamp: datetime = Field(sa_column=_timestamptz(nullable=False))
+    fetched_at: datetime = Field(
+        sa_column=_timestamptz(nullable=False, server_default=func.now())
+    )
+    sha256: str = Field(sa_column=Column(Text, nullable=False))
+    entries_count: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+
+    entries: List["InjuryEntry"] = Relationship(
+        back_populates="snapshot",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+
+
+class InjuryEntry(SQLModel, table=True):
+    """Single player entry in an NBA injury report snapshot."""
+
+    __tablename__ = "injury_entry"
+
+    __table_args__ = (
+        Index("ix_injury_entry_snapshot_id", "snapshot_id"),
+        Index("ix_injury_entry_player_id", "player_id"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    snapshot_id: int = Field(
+        sa_column=Column(
+            _BIG_ID,
+            ForeignKey("injury_report_snapshot.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    game_date: str = Field(sa_column=Column(Text, nullable=False))
+    game_time_et: Optional[str] = Field(default=None, sa_column=Column(Text))
+    matchup: Optional[str] = Field(default=None, sa_column=Column(Text))
+    team_name: Optional[str] = Field(default=None, sa_column=Column(Text))
+    player_name_raw: str = Field(sa_column=Column(Text, nullable=False))
+    player_id: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, ForeignKey("player.id"), nullable=True)
+    )
+    status: str = Field(sa_column=Column(Text, nullable=False))
+    reason: Optional[str] = Field(default=None, sa_column=Column(Text))
+    availability_prob: Optional[Decimal] = Field(
+        default=None, sa_column=Column(Numeric(3, 2))
+    )
+
+    snapshot: Optional[InjuryReportSnapshot] = Relationship(back_populates="entries")
+
+
+class LineupSnapshot(SQLModel, table=True):
+    """Pre-game lineup and inactives snapshot captured before tip-off."""
+
+    __tablename__ = "lineup_snapshot"
+
+    __table_args__ = (
+        UniqueConstraint("game_id", "captured_at", "side", name="uq_lineup_snapshot_game_captured_side"),
+        CheckConstraint("side IN ('home', 'away')", name="ck_lineup_snapshot_side"),
+        Index("ix_lineup_snapshot_game_id", "game_id"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    game_id: int = Field(
+        sa_column=Column(_BIG_ID, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    )
+    captured_at: datetime = Field(sa_column=_timestamptz(nullable=False))
+    minutes_to_tipoff: Optional[Decimal] = Field(
+        default=None, sa_column=Column(Numeric(6, 1))
+    )
+    side: str = Field(sa_column=Column(Text, nullable=False))
+    starters_count: int = Field(
+        default=0, sa_column=Column(SmallInteger, nullable=False, server_default=text("0"))
+    )
+    not_playing_count: int = Field(
+        default=0, sa_column=Column(SmallInteger, nullable=False, server_default=text("0"))
+    )
+    payload: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(_JSON, nullable=False))
+
+class MarketConsensusSnapshot(SQLModel, table=True):
+    """
+    Consensus odds (fair and book average) for main game markets from secondary feeds (e.g. SportsGameOdds).
+    Stored separately from odds_history so consensus quotes are never treated as bookable prices or bet upon.
+    """
+
+    __tablename__ = "market_consensus_snapshot"
+
+    __table_args__ = (
+        CheckConstraint(
+            "fair_price_american <= -100 OR fair_price_american >= 100",
+            name="ck_market_consensus_fair_price",
+        ),
+        CheckConstraint(
+            "book_price_american IS NULL OR book_price_american <= -100 OR book_price_american >= 100",
+            name="ck_market_consensus_book_price",
+        ),
+        Index("ix_market_consensus_game_id", "game_id"),
+        Index("ix_market_consensus_lookup", "game_id", "market", "side", "captured_at"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    game_id: int = Field(
+        sa_column=Column(_BIG_ID, ForeignKey("game.id", ondelete="CASCADE"), nullable=False)
+    )
+    captured_at: Optional[datetime] = Field(
+        default=None, sa_column=_timestamptz(nullable=False, server_default=func.now())
+    )
+    source: str = Field(
+        default="sgo_fair",
+        sa_column=Column(Text, nullable=False, server_default=text("'sgo_fair'")),
+    )
+    market: MarketType = Field(sa_column=Column(_MARKET_TYPE, nullable=False))
+    side: BetSide = Field(sa_column=Column(_BET_SIDE, nullable=False))
+    line: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
+    fair_price_american: int = Field(sa_column=Column(Integer, nullable=False))
+    book_price_american: Optional[int] = Field(default=None, sa_column=Column(Integer))

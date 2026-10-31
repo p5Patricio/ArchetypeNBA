@@ -34,7 +34,8 @@ class Settings(BaseSettings):
 
     # AI & Notifications
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.6-flash"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_FALLBACK_MODEL: str = "gemini-3.6-flash"
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
     THE_ODDS_API_KEY: str = ""
@@ -44,9 +45,12 @@ class Settings(BaseSettings):
     SPORTSGAMEODDS_API_KEY: str = ""
     SPORTSGAMEODDS_BASE_URL: str = "https://api.sportsgameodds.com/v2"
     SPORTSGAMEODDS_MIN_REMAINING_OBJECTS: int = 100
+    SGO_DAILY_OBJECT_BUDGET: int = 30
+    SGO_CAPTURE_ENABLED: bool = True
 
     # Official NBA Injury Report PDF automated download (disabled until owner clears NBA terms)
     INJURY_PDF_ENABLED: bool = False
+    INJURY_MAX_DOWNLOADS_PER_DAY: int = 3
 
     # Model learning loop (app.services.model_evaluation / model_promotion). The defaults mirror the module
     # constants in model_evaluation; LEARNING_AUTOPROMOTE is the kill switch (off = evaluate and report only).

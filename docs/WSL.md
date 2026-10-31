@@ -51,6 +51,22 @@ Dry-run test (prints to stdout without file append or network writes):
 cd backend && ../.venv/bin/python scripts/log_lineups.py --dry-run
 ```
 
+### Enabling the injury report fetcher (WP-I)
+
+The injury report fetcher downloads the official NBA injury report PDF up to 3 times on game days:
+
+```bash
+cp scripts/systemd/nba-injuries.* ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now nba-injuries.timer
+systemctl --user list-timers nba-injuries.timer                 # verify next run
+```
+
+Dry-run test (prints decision without network or database writes):
+```bash
+cd backend && ../.venv/bin/python scripts/fetch_injuries.py --dry-run
+```
+
 The "Detener Servicios" buttons call `POST /api/v1/system/shutdown`, which runs `stop_services_wsl.sh` on Linux and `delayed_stop.ps1` on Windows. After a code change restart the backend (stop, then start). The frontend is a production build: after editing `frontend/` run `NEXT_PUBLIC_API_BASE=http://localhost:38921 npm run build` in `frontend/` (the API base is baked in at build time).
 
 ## 4. Gotchas specific to this setup

@@ -12,7 +12,7 @@ What to build next and why, in priority order. Each item states the reason, how 
 
 | # | Item | Size | Why now |
 |---|------|------|---------|
-| 1 | Injuries and lineups as a model signal (partly done: fabrication removed, parser and lineup logger built; downloads disabled until the owner clears the NBA terms) | L | The one thing the baseline cannot see and the market can |
+| 1 | Injuries and lineups as a model signal (done: schema c5e7a9b1d3f6, layout-mode PDF parser, idempotent storage, lineup snapshots, props integration, fetch script and timer) | L | The one thing the baseline cannot see and the market can |
 | 2 | Totals (done: grading, CLV and market-edge paper bets; props models deferred) | L | The data is already captured and paid for |
 | 3 | Frontend model-league page (done) | M | The league is invisible outside a terminal |
 | 4 | Promotion notifications (done) | S | A champion change should not go unnoticed |
@@ -51,9 +51,12 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 **Acceptance criteria.**
 
-- [ ] The user has answered the terms question (below) in writing.
-- [ ] `injury_scraper` never returns invented data; an unavailable report is reported as unavailable, and a test proves no fallback sample exists.
-- [ ] A parser turns a stored real report into structured rows, tested on offline fixtures.
+- [x] The user has answered the terms question in writing (owner authorization 2026-10-31: personal research on game days up to 3 times/day; D-62).
+- [x] `injury_scraper` never returns invented data; an unavailable report is reported as unavailable, and tests prove no fallback sample exists.
+- [x] A parser turns real layout reports into structured rows, tested on offline synthetic layout fixtures reproducing all quirks.
+- [x] Tables `injury_report_snapshot`, `injury_entry`, and `lineup_snapshot` created (migration `c5e7a9b1d3f6`).
+- [x] Automated download scheduler `fetch_injuries.py` and systemd units `nba-injuries.timer` / `.service`.
+- [x] Props pipeline and API `GET /api/v1/injuries/latest` expose real stored injuries.
 - [ ] One feature builder serves training and serving; the leak test (perturbing the future leaves earlier features bit-identical) covers the new features.
 - [ ] The new feature set is a distinct model version that does not break the existing one, passes the historical gate in `model_lab.py`, and runs in shadow. Promotion is left to the learning loop.
 - [ ] [`QUANT_MODULE.md`](QUANT_MODULE.md) lists the new features; a decision entry is added to [`DECISIONS.md`](DECISIONS.md).
@@ -161,7 +164,7 @@ Props quotes and shadow evaluation are completed under WP-S2:
 
 **First step.** Add an attempt counter or an age rule in `results_sync` and test it.
 
-## 8. Second odds feed (built, probed live 2026-10-31, main-market filter fixed; tick ingestion still NOT wired)
+## 8. Second odds feed (built, probed live 2026-10-31, daily tick capture & props wired 2026-10-31 WP-K1)
 
 **Why.** Redundancy if The Odds API fails or the quota runs out, and more props/bookmaker coverage. Integrated SportsGameOdds (free "Amateur" tier, 2,500 objects a month, 10 req/min, 9 US books: FanDuel, DraftKings, BetMGM, Caesars, ESPN BET, Bovada, Unibet, PointsBet, William Hill; **no Pinnacle**).
 
@@ -172,11 +175,15 @@ Props quotes and shadow evaluation are completed under WP-S2:
 - [x] Idempotent ingestion into existing `Game` rows; never creates games; offline tests from documented fixtures (`tests/test_sportsgameodds.py`) and validated against official documentation example responses (`tests/test_sgo_docs_validation.py`).
 - [x] Terms and free-tier limits read and recorded from primary documentation (`docs/DECISIONS.md` D-58, `docs/OPERATIONS.md`).
 - [x] Exercised against live API response on 2026-10-31 via `scripts/sgo_probe.py`: confirmed 9 US books (no Pinnacle) and plan-limited `notice` field (logged at INFO); identified and fixed filter bug where team totals and player props leaked into `totals` (restricted `ou` to `statEntityID == 'all'` and `ml`/`sp` to `home`/`away`).
-- [ ] Ingestion into scheduled tick remains deliberately NOT wired (the feed is probed solely via `scripts/sgo_probe.py`).
+- [x] Ingestion into scheduled tick wired as daily step `sgo` after opening capture, guarded by `SGO_DAILY_OBJECT_BUDGET` (default 30) and `SPORTSGAMEODDS_MIN_REMAINING_OBJECTS` (floor 100) (WP-K1).
+- [x] Stores main market quotes under dedicated `sgo_<book>` sportsbooks in `odds_history`.
+- [x] Stores player props (`player_points`, `player_rebounds`, `player_assists`, `player_pra`) in `odds_history` resolving players via team-scoped suffix-aware resolver; unmatched counted and never invented.
+- [x] Stores main market consensus snapshots in `market_consensus_snapshot` table (`sgo_fair`), completely isolated from `odds_history`.
+- [x] Added `--capture-dry-run` to `scripts/sgo_probe.py`.
 
 **Risks.** Live payload density (846–1056 odds per event); plan-limited book coverage; feed lacks Pinnacle.
 
-**First step.** Keep feed un-wired to tick until owner determines whether secondary cross-feed liquidity justifies monthly object budget.
+**First step.** Done. Feed operates automatically in the daily tick once the owner configures `SPORTSGAMEODDS_API_KEY`.
 
 ## 9. CI that runs the test suite (done)
 

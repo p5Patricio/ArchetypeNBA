@@ -77,7 +77,7 @@ Read next: [methodology](docs/QUANT_MODULE.md) · [architecture](docs/ARCHITECTU
 - **Monte Carlo Quantitative Modeling**: Runs 10,000 simulations per player prop utilizing a tailored **Negative Binomial count distribution** parameterized by season averages, pace, opponent defensive rating, and volatility.
 - **Consensus Line & Odds Integration**: Live lines and odds via **The Odds API** to compute exact implied probabilities and detect mathematical market inefficiencies (**Edge %** and **Expected Value +EV %**).
 - **Quarter-Kelly Bankroll Sizing**: Calculates disciplined stake recommendations based on fractional Kelly Criterion.
-- **Gemini AI Qualitative Layer**: Integrates contextual injury reports and lineup impact reasoning.
+- **Gemini AI Qualitative Layer (Gemini 3.8 Flash)**: Integrates contextual injury reports and lineup impact reasoning with structured output and resilient fallback.
 
 ### 4. ⚔️ 1 vs 1 Colosseum Arena (`/versus`)
 - **Career-Peak Matchups**: Head-to-head simulations of NBA legends and active superstars (e.g. *Michael Jordan '88 vs LeBron James '13*, *Shaquille O'Neal '00 vs Nikola Jokić '24*).

@@ -16,6 +16,7 @@ NOT wired into the tick; NOT scheduled.
 import argparse
 import json
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict
 
@@ -70,6 +71,11 @@ def main() -> int:
         action="store_true",
         help="Print the planned HTTP request without sending network traffic.",
     )
+    parser.add_argument(
+        "--capture-dry-run",
+        action="store_true",
+        help="Print what the daily capture step would request and its object cost estimate.",
+    )
     args = parser.parse_args()
 
     svc = SportsGameOddsService()
@@ -90,6 +96,30 @@ def main() -> int:
         "oddsAvailable": "true",
         "limit": 2,
     }
+
+    if args.capture_dry_run:
+        now_utc = datetime.now(timezone.utc)
+        starts_after = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        starts_before = (now_utc + timedelta(hours=36)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        daily_params = {
+            "leagueID": "NBA",
+            "oddsAvailable": "true",
+            "startsAfter": starts_after,
+            "startsBefore": starts_before,
+            "limit": 50,
+        }
+        budget = getattr(settings, "SGO_DAILY_OBJECT_BUDGET", 30)
+        print("\n[CAPTURE DRY RUN] SportsGameOdds Daily Capture Step:")
+        print(f"Method:        GET")
+        print(f"URL:           {url}")
+        print(f"Params:        {daily_params}")
+        print(f"Pagination:    cursor pagination (param named 'cursor')")
+        print(f"Headers:       {{'x-api-key': '{masked or '<UNSET>'}'}}")
+        print(f"Daily Budget:  {budget} object(s)/day")
+        print(f"Cost Estimate: ~12-15 object(s)/day (1 object per upcoming NBA event within 36h)")
+        print(f"Storage:       Main lines + player props into odds_history (sgo_<book>), consensus into market_consensus_snapshot")
+        print("\nCapture dry run finished successfully (no network calls made).")
+        return 0
 
     if args.dry_run:
         print("\n[DRY RUN] Would execute the following request:")

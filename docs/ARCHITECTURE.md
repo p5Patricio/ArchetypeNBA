@@ -318,7 +318,7 @@ There is no model-league page yet ([`ROADMAP.md`](ROADMAP.md)).
 | `LEARNING_LOOK_INTERVAL_DAYS` | 7 | Days between decision-grade looks per challenger |
 | `LEARNING_MAX_LOOKS` | 12 | Decision-grade looks per challenger-champion pairing |
 | `LEARNING_MAX_AGE_DAYS` | 150 | Age after which a challenger without a pass is retired (needs 300 paired games) |
-| `GEMINI_API_KEY`, `GEMINI_MODEL` | empty, `gemini-3.6-flash` | The props AI layer |
+| `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL` | empty, `gemini-3.8-flash`, `gemini-3.6-flash` | The props AI layer |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | empty | Optional props report to Telegram |
 | `PROPS_SIMULATION_RUNS` | 10000 | Monte Carlo runs per prop |
 | `REDIS_URL` | `redis://localhost:6379/0` | Optional cache; if Redis is absent the cache is silently disabled |

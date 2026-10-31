@@ -339,3 +339,53 @@ def test_cache_freshness_from_yesterday_is_stale_with_age(monkeypatch, tmp_path)
     assert data["age_seconds"] is not None and data["age_seconds"] > 86400
     assert data["age"] is not None
 
+
+def test_today_props_with_real_injury_report(monkeypatch):
+    from datetime import datetime, timezone
+    from app.services.injury_scraper import InjuryItem
+
+    now_utc = datetime(2026, 10, 31, 20, 0, 0, tzinfo=timezone.utc)
+    items = [
+        InjuryItem(
+            game_date="10/31/2026",
+            matchup="POR@UTA",
+            team="Portland Trail Blazers",
+            player_name="Ja Morant",
+            status="Out",
+            reason="Hamstring",
+            availability_prob=0.0,
+        ),
+        InjuryItem(
+            game_date="10/31/2026",
+            matchup="POR@UTA",
+            team="Portland Trail Blazers",
+            player_name="Robert Williams III",
+            status="Available",
+            reason="Management",
+            availability_prob=1.0,
+        ),
+    ]
+
+    monkeypatch.setattr(
+        InjuryScraperService,
+        "fetch_injury_report",
+        lambda self: InjuryReport(
+            available=True,
+            reason=None,
+            fetched_at=now_utc,
+            rows=items,
+            snapshot_id=42,
+            snapshot_timestamp=now_utc,
+        ),
+    )
+    _no_live_lines(monkeypatch)
+
+    response = client.get("/api/v1/props/today?refresh=true")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["injury_report"] is not None
+    assert data["injury_report"]["available"] is True
+    assert data["injury_report"]["entries_count"] == 2
+    assert data["injury_report"]["snapshot_timestamp"] == now_utc.isoformat()
+
+
