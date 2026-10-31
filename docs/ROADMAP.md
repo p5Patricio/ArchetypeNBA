@@ -161,7 +161,7 @@ Props quotes and shadow evaluation are completed under WP-S2:
 
 **First step.** Add an attempt counter or an age rule in `results_sync` and test it.
 
-## 8. Second odds feed (built, probed live 2026-10-31, main-market filter fixed; tick ingestion still NOT wired)
+## 8. Second odds feed (built, probed live 2026-10-31, daily tick capture & props wired 2026-10-31 WP-K1)
 
 **Why.** Redundancy if The Odds API fails or the quota runs out, and more props/bookmaker coverage. Integrated SportsGameOdds (free "Amateur" tier, 2,500 objects a month, 10 req/min, 9 US books: FanDuel, DraftKings, BetMGM, Caesars, ESPN BET, Bovada, Unibet, PointsBet, William Hill; **no Pinnacle**).
 
@@ -172,11 +172,15 @@ Props quotes and shadow evaluation are completed under WP-S2:
 - [x] Idempotent ingestion into existing `Game` rows; never creates games; offline tests from documented fixtures (`tests/test_sportsgameodds.py`) and validated against official documentation example responses (`tests/test_sgo_docs_validation.py`).
 - [x] Terms and free-tier limits read and recorded from primary documentation (`docs/DECISIONS.md` D-58, `docs/OPERATIONS.md`).
 - [x] Exercised against live API response on 2026-10-31 via `scripts/sgo_probe.py`: confirmed 9 US books (no Pinnacle) and plan-limited `notice` field (logged at INFO); identified and fixed filter bug where team totals and player props leaked into `totals` (restricted `ou` to `statEntityID == 'all'` and `ml`/`sp` to `home`/`away`).
-- [ ] Ingestion into scheduled tick remains deliberately NOT wired (the feed is probed solely via `scripts/sgo_probe.py`).
+- [x] Ingestion into scheduled tick wired as daily step `sgo` after opening capture, guarded by `SGO_DAILY_OBJECT_BUDGET` (default 30) and `SPORTSGAMEODDS_MIN_REMAINING_OBJECTS` (floor 100) (WP-K1).
+- [x] Stores main market quotes under dedicated `sgo_<book>` sportsbooks in `odds_history`.
+- [x] Stores player props (`player_points`, `player_rebounds`, `player_assists`, `player_pra`) in `odds_history` resolving players via team-scoped suffix-aware resolver; unmatched counted and never invented.
+- [x] Stores main market consensus snapshots in `market_consensus_snapshot` table (`sgo_fair`), completely isolated from `odds_history`.
+- [x] Added `--capture-dry-run` to `scripts/sgo_probe.py`.
 
 **Risks.** Live payload density (846–1056 odds per event); plan-limited book coverage; feed lacks Pinnacle.
 
-**First step.** Keep feed un-wired to tick until owner determines whether secondary cross-feed liquidity justifies monthly object budget.
+**First step.** Done. Feed operates automatically in the daily tick once the owner configures `SPORTSGAMEODDS_API_KEY`.
 
 ## 9. CI that runs the test suite (done)
 

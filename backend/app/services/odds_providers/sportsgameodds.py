@@ -8,14 +8,16 @@ Disabled by default until SPORTSGAMEODDS_API_KEY is configured with a valid key.
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import httpx
 
 from app.config import settings
-from app.services.odds_api_service import GameQuote
+from app.models import BetSide, MarketType
+from app.services.odds_api_service import GameQuote, OddsQuote
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,42 @@ logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 FREE_TIER_MONTHLY_OBJECT_LIMIT = 2500
+
+# Nine US books visible on the SGO Amateur tier (NO Pinnacle)
+SGO_ALLOWED_BOOKS = {
+    "draftkings",
+    "fanduel",
+    "betmgm",
+    "caesars",
+    "espnbet",
+    "bovada",
+    "pointsbet",
+    "unibet",
+    "williamhill",
+}
+
+# Mapping of SGO prop statID to MarketType key
+SGO_PROP_STAT_MAP = {
+    "points": "player_points",
+    "rebounds": "player_rebounds",
+    "assists": "player_assists",
+    "points_rebounds_assists": "player_pra",
+    "pra": "player_pra",
+}
+
+
+@dataclass(frozen=True)
+class ConsensusQuote:
+    """Consensus quote (fair price and book average price) for a main game market."""
+    event_id: str
+    home_team: str
+    away_team: str
+    commence_time: str
+    market: MarketType
+    side: BetSide
+    line: Optional[float]
+    fair_price_american: int
+    book_price_american: Optional[int]
 
 # Mapping of bookmakerID strings to canonical display titles
 BOOKMAKER_TITLES: Dict[str, str] = {
@@ -94,6 +132,11 @@ def american_to_decimal(american_odds: int) -> float:
     return 1.0
 
 
+def _aware_utc(value: datetime) -> datetime:
+    """Ensures a datetime is timezone-aware and set to UTC."""
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
 def _get_usage_cache_path() -> Path:
     """Locates or creates the persistence path for usage tracking in logs/."""
     app_dir = Path(__file__).resolve().parent.parent.parent
@@ -162,7 +205,7 @@ def parse_float_line(raw: Any) -> Optional[float]:
         return None
 
 
-def parse_sgo_events(payload: Any) -> List[GameQuote]:
+def parse_sgo_events(payload: Any, sgo_book_prefix: bool = False) -> List[GameQuote]:
     """
     Parses a SportsGameOdds /events response payload into GameQuote instances.
     Skips missing, incomplete or malformed odds without raising.
@@ -171,6 +214,7 @@ def parse_sgo_events(payload: Any) -> List[GameQuote]:
       - 'sp' (spreads): statID points, statEntityID in ('home', 'away'), sideID in ('home', 'away')
       - 'ou' (totals): statID points, periodID game/reg, statEntityID 'all', sideID in ('over', 'under')
     Excludes team totals, player props, partial periods (1h, 1q), eo, and ml3way.
+    If sgo_book_prefix is True, filters to SGO_ALLOWED_BOOKS and prefixes bookmaker_key with 'sgo_'.
     """
     quotes: List[GameQuote] = []
     if not isinstance(payload, dict):
@@ -282,6 +326,10 @@ def parse_sgo_events(payload: Any) -> List[GameQuote]:
                 if not (avail is True or str(avail).lower() == "true"):
                     continue
 
+                book_key_clean = str(book_key).lower().strip()
+                if sgo_book_prefix and book_key_clean not in SGO_ALLOWED_BOOKS:
+                    continue
+
                 price_american = parse_american_odds(b_info.get("odds"))
                 if price_american is None:
                     continue
@@ -300,8 +348,14 @@ def parse_sgo_events(payload: Any) -> List[GameQuote]:
                     if line is None:
                         continue
 
-                book_key_clean = str(book_key).lower().strip()
-                book_title = BOOKMAKER_TITLES.get(book_key_clean, book_key_clean.replace("_", " ").title())
+                title = BOOKMAKER_TITLES.get(book_key_clean, book_key_clean.replace("_", " ").title())
+                if sgo_book_prefix:
+                    final_book_key = f"sgo_{book_key_clean}"
+                    final_book_title = f"{title} (SportsGameOdds)"
+                else:
+                    final_book_key = book_key_clean
+                    final_book_title = title
+
                 book_last_update = b_info.get("lastUpdatedAt") or b_info.get("last_updated_at")
 
                 quotes.append(
@@ -310,8 +364,8 @@ def parse_sgo_events(payload: Any) -> List[GameQuote]:
                         commence_time=str(commence),
                         home_team=str(home_team),
                         away_team=str(away_team),
-                        bookmaker_key=book_key_clean,
-                        bookmaker_title=book_title,
+                        bookmaker_key=final_book_key,
+                        bookmaker_title=final_book_title,
                         market_key=market_key,
                         side=side,
                         line=line,
@@ -319,6 +373,245 @@ def parse_sgo_events(payload: Any) -> List[GameQuote]:
                         book_last_update=str(book_last_update) if book_last_update else None,
                     )
                 )
+
+    return quotes
+
+
+def parse_sgo_props(payload: Any, sgo_book_prefix: bool = True) -> List[OddsQuote]:
+    """
+    Parses player prop quotes (points, rebounds, assists, pra) from an SGO payload.
+    Resolves player name from event.players[playerID].name.
+    """
+    quotes: List[OddsQuote] = []
+    if not isinstance(payload, dict):
+        return quotes
+
+    data = payload.get("data")
+    if not isinstance(data, list):
+        return quotes
+
+    for event in data:
+        if not isinstance(event, dict):
+            continue
+
+        event_id = event.get("eventID")
+        if not event_id:
+            continue
+
+        players_map = event.get("players")
+        if not isinstance(players_map, dict):
+            continue
+
+        odds_dict = event.get("odds")
+        if not isinstance(odds_dict, dict):
+            continue
+
+        for odd_id, odd_obj in odds_dict.items():
+            if not isinstance(odd_obj, dict):
+                continue
+
+            period_id = odd_obj.get("periodID")
+            bet_type_id = odd_obj.get("betTypeID")
+            stat_id = odd_obj.get("statID")
+            side_id = odd_obj.get("sideID")
+            stat_entity_id = odd_obj.get("statEntityID")
+
+            if not (period_id and bet_type_id and stat_id and stat_entity_id and side_id):
+                parts = odd_id.split("-")
+                if len(parts) >= 5:
+                    stat_id = stat_id or parts[0]
+                    stat_entity_id = stat_entity_id or parts[1]
+                    period_id = period_id or parts[2]
+                    bet_type_id = bet_type_id or parts[3]
+                    side_id = side_id or parts[4]
+
+            if stat_id not in SGO_PROP_STAT_MAP:
+                continue
+            market_key = SGO_PROP_STAT_MAP[stat_id]
+
+            if period_id not in ("game", "reg"):
+                continue
+
+            if bet_type_id != "ou":
+                continue
+
+            if side_id not in ("over", "under"):
+                continue
+
+            if stat_entity_id in ("home", "away", "all"):
+                continue
+
+            player_entry = players_map.get(stat_entity_id)
+            if not isinstance(player_entry, dict):
+                continue
+            player_name = player_entry.get("name")
+            if not player_name:
+                first = player_entry.get("firstName") or ""
+                last = player_entry.get("lastName") or ""
+                player_name = f"{first} {last}".strip()
+            if not player_name:
+                continue
+
+            by_book = odd_obj.get("byBookmaker")
+            if not isinstance(by_book, dict):
+                continue
+
+            for book_key, b_info in by_book.items():
+                if not isinstance(b_info, dict):
+                    continue
+
+                avail = b_info.get("available")
+                if not (avail is True or str(avail).lower() == "true"):
+                    continue
+
+                book_key_clean = str(book_key).lower().strip()
+                if sgo_book_prefix and book_key_clean not in SGO_ALLOWED_BOOKS:
+                    continue
+
+                price_american = parse_american_odds(b_info.get("odds"))
+                if price_american is None:
+                    continue
+
+                line = parse_float_line(b_info.get("overUnder"))
+                if line is None:
+                    line = parse_float_line(odd_obj.get("bookOverUnder") or odd_obj.get("fairOverUnder"))
+                if line is None:
+                    continue
+
+                book_last_update = b_info.get("lastUpdatedAt") or b_info.get("last_updated_at")
+                final_book_key = f"sgo_{book_key_clean}" if sgo_book_prefix else book_key_clean
+
+                quotes.append(
+                    OddsQuote(
+                        event_id=str(event_id),
+                        bookmaker_key=final_book_key,
+                        market_key=market_key,
+                        stat_type=stat_id,
+                        player_name=player_name,
+                        side=side_id,
+                        line=line,
+                        price_american=price_american,
+                        book_last_update=str(book_last_update) if book_last_update else None,
+                    )
+                )
+
+    return quotes
+
+
+def parse_sgo_consensus(payload: Any) -> List[ConsensusQuote]:
+    """
+    Parses market consensus quotes (fairOdds, bookOdds) for MAIN game markets (h2h, spreads, totals).
+    Consensus rows are stored in market_consensus_snapshot, NEVER in odds_history.
+    """
+    quotes: List[ConsensusQuote] = []
+    if not isinstance(payload, dict):
+        return quotes
+
+    data = payload.get("data")
+    if not isinstance(data, list):
+        return quotes
+
+    for event in data:
+        if not isinstance(event, dict):
+            continue
+
+        event_id = event.get("eventID")
+        status = event.get("status") or {}
+        commence = status.get("startsAt")
+        teams = event.get("teams") or {}
+        home_node = teams.get("home") or {}
+        away_node = teams.get("away") or {}
+        home_names = home_node.get("names") or {}
+        away_names = away_node.get("names") or {}
+        home_team = (
+            home_names.get("long")
+            or home_names.get("medium")
+            or home_names.get("short")
+            or home_node.get("teamID")
+        )
+        away_team = (
+            away_names.get("long")
+            or away_names.get("medium")
+            or away_names.get("short")
+            or away_node.get("teamID")
+        )
+
+        if not (event_id and commence and home_team and away_team):
+            continue
+
+        odds_dict = event.get("odds")
+        if not isinstance(odds_dict, dict):
+            continue
+
+        for odd_id, odd_obj in odds_dict.items():
+            if not isinstance(odd_obj, dict):
+                continue
+
+            stat_id = odd_obj.get("statID")
+            period_id = odd_obj.get("periodID")
+            bet_type_id = odd_obj.get("betTypeID")
+            side_id = odd_obj.get("sideID")
+            stat_entity_id = odd_obj.get("statEntityID")
+
+            if not (period_id and bet_type_id and stat_id and stat_entity_id and side_id):
+                parts = odd_id.split("-")
+                if len(parts) >= 5:
+                    stat_id = stat_id or parts[0]
+                    stat_entity_id = stat_entity_id or parts[1]
+                    period_id = period_id or parts[2]
+                    bet_type_id = bet_type_id or parts[3]
+                    side_id = side_id or parts[4]
+
+            if stat_id != "points" or period_id not in ("game", "reg"):
+                continue
+
+            market: MarketType
+            side: BetSide
+            line: Optional[float] = None
+
+            if bet_type_id == "ml":
+                if stat_entity_id not in ("home", "away") or side_id not in ("home", "away"):
+                    continue
+                market = MarketType.h2h
+                side = BetSide.home if side_id == "home" else BetSide.away
+            elif bet_type_id == "sp":
+                if stat_entity_id not in ("home", "away") or side_id not in ("home", "away"):
+                    continue
+                market = MarketType.spreads
+                side = BetSide.home if side_id == "home" else BetSide.away
+                line = parse_float_line(odd_obj.get("fairSpread") or odd_obj.get("bookSpread"))
+                if line is None:
+                    continue
+            elif bet_type_id == "ou":
+                if stat_entity_id != "all" or side_id not in ("over", "under"):
+                    continue
+                market = MarketType.totals
+                side = BetSide.over if side_id == "over" else BetSide.under
+                line = parse_float_line(odd_obj.get("fairOverUnder") or odd_obj.get("bookOverUnder"))
+                if line is None:
+                    continue
+            else:
+                continue
+
+            fair_price = parse_american_odds(odd_obj.get("fairOdds"))
+            if fair_price is None:
+                continue
+
+            book_price = parse_american_odds(odd_obj.get("bookOdds"))
+
+            quotes.append(
+                ConsensusQuote(
+                    event_id=str(event_id),
+                    home_team=str(home_team),
+                    away_team=str(away_team),
+                    commence_time=str(commence),
+                    market=market,
+                    side=side,
+                    line=line,
+                    fair_price_american=fair_price,
+                    book_price_american=book_price,
+                )
+            )
 
     return quotes
 
@@ -541,3 +834,85 @@ class SportsGameOddsService:
 
         self.last_call_ok = True
         return quotes
+
+    def fetch_daily_events(
+        self,
+        now: Optional[datetime] = None,
+        max_objects: int = 30,
+    ) -> Tuple[List[dict], int]:
+        """
+        Fetches upcoming NBA events for the next 36 hours using cursor pagination.
+        Enforces daily max_objects budget and monthly remaining objects floor.
+        Returns (list_of_event_dicts, objects_consumed).
+        """
+        self.last_call_ok = False
+        if not self.is_configured:
+            logger.debug("SportsGameOddsService: Not configured; skipping daily fetch.")
+            return [], 0
+
+        now_utc = _aware_utc(now) if now is not None else datetime.now(timezone.utc)
+        starts_after = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        starts_before = (now_utc + timedelta(hours=36)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        params: Dict[str, Any] = {
+            "leagueID": "NBA",
+            "oddsAvailable": "true",
+            "startsAfter": starts_after,
+            "startsBefore": starts_before,
+            "limit": 50,
+        }
+
+        all_events: List[dict] = []
+        total_consumed = 0
+        cursor: Optional[str] = None
+
+        while len(all_events) < max_objects:
+            allowed, reason = self.check_quota(expected_objects=1)
+            if not allowed:
+                logger.warning(f"SportsGameOddsService: Quota guard stopped daily fetch: {reason}")
+                break
+
+            page_params = dict(params)
+            if cursor:
+                page_params["cursor"] = cursor
+
+            res = self._execute_with_retry("GET", "/events", params=page_params)
+            if res is None:
+                break
+            if res.status_code != 200:
+                msg = sanitize_message(f"HTTP {res.status_code}: {res.text}", self.api_key)
+                logger.error(f"SportsGameOddsService: Error fetching daily events: {msg}")
+                break
+
+            try:
+                payload = res.json()
+            except Exception as e:
+                logger.error(f"SportsGameOddsService: Failed to parse daily events JSON: {e}")
+                break
+
+            if isinstance(payload, dict):
+                notice = payload.get("notice")
+                if notice:
+                    logger.info(f"SportsGameOddsService notice: {sanitize_message(str(notice), self.api_key)}")
+
+            data = payload.get("data") if isinstance(payload, dict) else None
+            if not isinstance(data, list) or not data:
+                break
+
+            batch_count = len(data)
+            self.record_objects_consumed(batch_count)
+            total_consumed += batch_count
+
+            for event in data:
+                if isinstance(event, dict):
+                    all_events.append(event)
+                    if len(all_events) >= max_objects:
+                        break
+
+            next_cursor = payload.get("nextCursor")
+            if not next_cursor or next_cursor == cursor:
+                break
+            cursor = str(next_cursor)
+
+        self.last_call_ok = True
+        return all_events, total_consumed
