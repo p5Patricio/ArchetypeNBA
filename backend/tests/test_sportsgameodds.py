@@ -678,3 +678,391 @@ def test_record_objects_consumed_resets_on_month_rollover(tmp_path):
     assert data["month"] == current_month
     assert data["objects_used"] == 10
     assert data["objects_remaining"] == FREE_TIER_MONTHLY_OBJECT_LIMIT - 10
+
+
+# -----------------------------------------------------------------------------
+# 7. Regression tests for live observation shape (WP-S4, 2026-10-31)
+# -----------------------------------------------------------------------------
+
+# Note: The following synthetic payload is shaped after a live observation (2026-10-31),
+# but uses entirely synthetic/fake event IDs, fake player IDs, and made-up odds prices.
+# It is NOT captured data and does not contain any real odds.
+SYNTHETIC_LIVE_SHAPED_PAYLOAD = {
+    "success": True,
+    "notice": "Response is missing 12 bookmaker odds. Upgrade your API key to access all data from this query.",
+    "data": [
+        {
+            "eventID": "synth_evt_live_001",
+            "status": {
+                "startsAt": "2026-11-01T01:00:00.000Z",
+                "started": False,
+                "ended": False,
+                "finalized": False,
+            },
+            "teams": {
+                "home": {
+                    "teamID": "synth_okc",
+                    "names": {"long": "Oklahoma City Thunder", "short": "OKC"},
+                },
+                "away": {
+                    "teamID": "synth_den",
+                    "names": {"long": "Denver Nuggets", "short": "DEN"},
+                },
+            },
+            "odds": {
+                # --- MAIN MARKETS (Full-game) ---
+                # 1. Main ML Home (draftkings, fanduel)
+                "points-home-game-ml-home": {
+                    "oddID": "points-home-game-ml-home",
+                    "statID": "points",
+                    "statEntityID": "home",
+                    "periodID": "game",
+                    "betTypeID": "ml",
+                    "sideID": "home",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-140", "available": True, "lastUpdatedAt": "2026-10-31T18:00:00Z"},
+                        "fanduel": {"odds": "-135", "available": True, "lastUpdatedAt": "2026-10-31T18:05:00Z"},
+                    },
+                },
+                # 2. Main ML Away (draftkings, fanduel)
+                "points-away-game-ml-away": {
+                    "oddID": "points-away-game-ml-away",
+                    "statID": "points",
+                    "statEntityID": "away",
+                    "periodID": "game",
+                    "betTypeID": "ml",
+                    "sideID": "away",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "+120", "available": True, "lastUpdatedAt": "2026-10-31T18:00:00Z"},
+                        "fanduel": {"odds": "+115", "available": True, "lastUpdatedAt": "2026-10-31T18:05:00Z"},
+                    },
+                },
+                # 3. Main Spread Home (draftkings, fanduel)
+                "points-home-game-sp-home": {
+                    "oddID": "points-home-game-sp-home",
+                    "statID": "points",
+                    "statEntityID": "home",
+                    "periodID": "game",
+                    "betTypeID": "sp",
+                    "sideID": "home",
+                    "bookSpread": "-3.5",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-110", "spread": "-3.5", "available": True, "lastUpdatedAt": "2026-10-31T18:00:00Z"},
+                        "fanduel": {"odds": "-108", "spread": "-3.5", "available": True, "lastUpdatedAt": "2026-10-31T18:05:00Z"},
+                    },
+                },
+                # 4. Main Spread Away (draftkings, fanduel)
+                "points-away-game-sp-away": {
+                    "oddID": "points-away-game-sp-away",
+                    "statID": "points",
+                    "statEntityID": "away",
+                    "periodID": "game",
+                    "betTypeID": "sp",
+                    "sideID": "away",
+                    "bookSpread": "+3.5",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-110", "spread": "+3.5", "available": True, "lastUpdatedAt": "2026-10-31T18:00:00Z"},
+                        "fanduel": {"odds": "-112", "spread": "+3.5", "available": True, "lastUpdatedAt": "2026-10-31T18:05:00Z"},
+                    },
+                },
+                # 5. Main Game Total Over (draftkings, fanduel)
+                "points-all-game-ou-over": {
+                    "oddID": "points-all-game-ou-over",
+                    "statID": "points",
+                    "statEntityID": "all",
+                    "periodID": "game",
+                    "betTypeID": "ou",
+                    "sideID": "over",
+                    "bookOverUnder": "221.5",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-110", "overUnder": "221.5", "available": True, "lastUpdatedAt": "2026-10-31T18:00:00Z"},
+                        "fanduel": {"odds": "-112", "overUnder": "221.5", "available": True, "lastUpdatedAt": "2026-10-31T18:05:00Z"},
+                    },
+                },
+                # 6. Main Game Total Under (draftkings, fanduel)
+                "points-all-game-ou-under": {
+                    "oddID": "points-all-game-ou-under",
+                    "statID": "points",
+                    "statEntityID": "all",
+                    "periodID": "game",
+                    "betTypeID": "ou",
+                    "sideID": "under",
+                    "bookOverUnder": "221.5",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-110", "overUnder": "221.5", "available": True, "lastUpdatedAt": "2026-10-31T18:00:00Z"},
+                        "fanduel": {"odds": "-108", "overUnder": "221.5", "available": True, "lastUpdatedAt": "2026-10-31T18:05:00Z"},
+                    },
+                },
+
+                # --- NON-MAIN MARKETS (Must be filtered out) ---
+                # A. Team Totals (statEntityID home/away, betTypeID ou, periodID game)
+                "points-home-game-ou-over": {
+                    "oddID": "points-home-game-ou-over",
+                    "statID": "points",
+                    "statEntityID": "home",
+                    "periodID": "game",
+                    "betTypeID": "ou",
+                    "sideID": "over",
+                    "bookOverUnder": "112.5",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-115", "overUnder": "112.5", "available": True},
+                        "fanduel": {"odds": "-110", "overUnder": "112.5", "available": True},
+                    },
+                },
+                "points-home-game-ou-under": {
+                    "oddID": "points-home-game-ou-under",
+                    "statID": "points",
+                    "statEntityID": "home",
+                    "periodID": "game",
+                    "betTypeID": "ou",
+                    "sideID": "under",
+                    "bookOverUnder": "112.5",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-115", "overUnder": "112.5", "available": True},
+                        "fanduel": {"odds": "-110", "overUnder": "112.5", "available": True},
+                    },
+                },
+                "points-away-game-ou-over": {
+                    "oddID": "points-away-game-ou-over",
+                    "statID": "points",
+                    "statEntityID": "away",
+                    "periodID": "game",
+                    "betTypeID": "ou",
+                    "sideID": "over",
+                    "bookOverUnder": "109.5",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-110", "overUnder": "109.5", "available": True},
+                        "fanduel": {"odds": "-115", "overUnder": "109.5", "available": True},
+                    },
+                },
+                "points-away-game-ou-under": {
+                    "oddID": "points-away-game-ou-under",
+                    "statID": "points",
+                    "statEntityID": "away",
+                    "periodID": "game",
+                    "betTypeID": "ou",
+                    "sideID": "under",
+                    "bookOverUnder": "109.5",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-110", "overUnder": "109.5", "available": True},
+                        "fanduel": {"odds": "-115", "overUnder": "109.5", "available": True},
+                    },
+                },
+
+                # B. Player Points Props (statEntityID player id, betTypeID ou, periodID game)
+                "points-FAKE_PLAYER_1_NBA-game-ou-over": {
+                    "oddID": "points-FAKE_PLAYER_1_NBA-game-ou-over",
+                    "statID": "points",
+                    "statEntityID": "FAKE_PLAYER_1_NBA",
+                    "periodID": "game",
+                    "betTypeID": "ou",
+                    "sideID": "over",
+                    "bookOverUnder": "19.5",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-115", "overUnder": "19.5", "available": True},
+                        "fanduel": {"odds": "-120", "overUnder": "19.5", "available": True},
+                    },
+                },
+                "points-FAKE_PLAYER_1_NBA-game-ou-under": {
+                    "oddID": "points-FAKE_PLAYER_1_NBA-game-ou-under",
+                    "statID": "points",
+                    "statEntityID": "FAKE_PLAYER_1_NBA",
+                    "periodID": "game",
+                    "betTypeID": "ou",
+                    "sideID": "under",
+                    "bookOverUnder": "19.5",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-115", "overUnder": "19.5", "available": True},
+                        "fanduel": {"odds": "-110", "overUnder": "19.5", "available": True},
+                    },
+                },
+
+                # C. 1st Half Total (periodID 1h)
+                "points-all-1h-ou-over": {
+                    "oddID": "points-all-1h-ou-over",
+                    "statID": "points",
+                    "statEntityID": "all",
+                    "periodID": "1h",
+                    "betTypeID": "ou",
+                    "sideID": "over",
+                    "bookOverUnder": "110.5",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-110", "overUnder": "110.5", "available": True},
+                        "fanduel": {"odds": "-110", "overUnder": "110.5", "available": True},
+                    },
+                },
+                "points-all-1h-ou-under": {
+                    "oddID": "points-all-1h-ou-under",
+                    "statID": "points",
+                    "statEntityID": "all",
+                    "periodID": "1h",
+                    "betTypeID": "ou",
+                    "sideID": "under",
+                    "bookOverUnder": "110.5",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-110", "overUnder": "110.5", "available": True},
+                        "fanduel": {"odds": "-110", "overUnder": "110.5", "available": True},
+                    },
+                },
+
+                # D. Even / Odd (betTypeID eo)
+                "points-all-game-eo-odd": {
+                    "oddID": "points-all-game-eo-odd",
+                    "statID": "points",
+                    "statEntityID": "all",
+                    "periodID": "game",
+                    "betTypeID": "eo",
+                    "sideID": "odd",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-105", "available": True},
+                        "fanduel": {"odds": "-105", "available": True},
+                    },
+                },
+                "points-all-game-eo-even": {
+                    "oddID": "points-all-game-eo-even",
+                    "statID": "points",
+                    "statEntityID": "all",
+                    "periodID": "game",
+                    "betTypeID": "eo",
+                    "sideID": "even",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-115", "available": True},
+                        "fanduel": {"odds": "-115", "available": True},
+                    },
+                },
+
+                # E. Regulation 3-way Moneyline (periodID reg, betTypeID ml3way)
+                "points-home-reg-ml3way-home": {
+                    "oddID": "points-home-reg-ml3way-home",
+                    "statID": "points",
+                    "statEntityID": "home",
+                    "periodID": "reg",
+                    "betTypeID": "ml3way",
+                    "sideID": "home",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "-125", "available": True},
+                        "fanduel": {"odds": "-120", "available": True},
+                    },
+                },
+                "points-away-reg-ml3way-away": {
+                    "oddID": "points-away-reg-ml3way-away",
+                    "statID": "points",
+                    "statEntityID": "away",
+                    "periodID": "reg",
+                    "betTypeID": "ml3way",
+                    "sideID": "away",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "+135", "available": True},
+                        "fanduel": {"odds": "+130", "available": True},
+                    },
+                },
+                "points-draw-reg-ml3way-draw": {
+                    "oddID": "points-draw-reg-ml3way-draw",
+                    "statID": "points",
+                    "statEntityID": "draw",
+                    "periodID": "reg",
+                    "betTypeID": "ml3way",
+                    "sideID": "draw",
+                    "byBookmaker": {
+                        "draftkings": {"odds": "+950", "available": True},
+                        "fanduel": {"odds": "+900", "available": True},
+                    },
+                },
+            },
+        }
+    ],
+}
+
+
+def test_parse_sgo_events_synthetic_live_shaped_filters_non_main_markets():
+    quotes = parse_sgo_events(SYNTHETIC_LIVE_SHAPED_PAYLOAD)
+
+    # Exactly 12 main market quotes:
+    # 2 books x 2 sides x 3 markets = 12 quotes
+    assert len(quotes) == 12
+
+    # Check breakdown by market
+    market_counts = {}
+    book_counts = {}
+    for q in quotes:
+        market_counts[q.market_key] = market_counts.get(q.market_key, 0) + 1
+        book_counts[q.bookmaker_key] = book_counts.get(q.bookmaker_key, 0) + 1
+
+    assert market_counts == {"h2h": 4, "spreads": 4, "totals": 4}
+    assert book_counts == {"draftkings": 6, "fanduel": 6}
+
+    # Verify totals: only full game total (221.5), absolutely no team totals (112.5, 109.5),
+    # player props (19.5), or 1h totals (110.5)
+    totals = [q for q in quotes if q.market_key == "totals"]
+    assert len(totals) == 4
+    for t in totals:
+        assert t.line == 221.5
+        assert t.side in ("over", "under")
+
+    # Verify spreads: only -3.5 / +3.5
+    spreads = [q for q in quotes if q.market_key == "spreads"]
+    assert len(spreads) == 4
+    for s in spreads:
+        assert abs(s.line) == 3.5
+        assert s.side in ("home", "away")
+
+    # Verify h2h
+    h2hs = [q for q in quotes if q.market_key == "h2h"]
+    assert len(h2hs) == 4
+    for h in h2hs:
+        assert h.line is None
+        assert h.side in ("home", "away")
+
+    # Assert no non-main markets leaked into the parsed quotes
+    for q in quotes:
+        assert "FAKE_PLAYER" not in q.event_id
+        assert "1h" not in q.event_id
+        assert q.line not in (112.5, 109.5, 19.5, 110.5)
+
+
+def test_parse_sgo_events_synthetic_live_shaped_odd_id_fallback():
+    import copy
+    payload_copy = copy.deepcopy(SYNTHETIC_LIVE_SHAPED_PAYLOAD)
+    event_odds = payload_copy["data"][0]["odds"]
+    for odd_obj in event_odds.values():
+        for field in ("statID", "statEntityID", "periodID", "betTypeID", "sideID"):
+            odd_obj.pop(field, None)
+
+    quotes = parse_sgo_events(payload_copy)
+    assert len(quotes) == 12
+    market_counts = {}
+    book_counts = {}
+    for q in quotes:
+        market_counts[q.market_key] = market_counts.get(q.market_key, 0) + 1
+        book_counts[q.bookmaker_key] = book_counts.get(q.bookmaker_key, 0) + 1
+
+    assert market_counts == {"h2h": 4, "spreads": 4, "totals": 4}
+    assert book_counts == {"draftkings": 6, "fanduel": 6}
+
+
+def test_fetch_game_lines_logs_notice_at_info(caplog):
+    import logging
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=SYNTHETIC_LIVE_SHAPED_PAYLOAD)
+
+    svc = SportsGameOddsService(
+        api_key="sgo_notice_test_key_123",
+        transport=httpx.MockTransport(handler),
+    )
+    with caplog.at_level(logging.INFO):
+        quotes = svc.fetch_game_lines()
+
+    assert len(quotes) == 12
+    notice_records = [
+        r for r in caplog.records
+        if "SportsGameOddsService notice:" in r.message
+    ]
+    assert len(notice_records) == 1
+    rec = notice_records[0]
+    assert rec.levelno == logging.INFO
+    assert "Response is missing 12 bookmaker odds" in rec.message
+    # Ensure key is masked if present
+    assert "sgo_notice_test_key_123" not in rec.message
+    # Ensure payload data is not dumped into log
+    assert "synth_evt_live_001" not in rec.message
