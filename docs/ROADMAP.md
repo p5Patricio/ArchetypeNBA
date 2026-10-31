@@ -12,7 +12,7 @@ What to build next and why, in priority order. Each item states the reason, how 
 
 | # | Item | Size | Why now |
 |---|------|------|---------|
-| 1 | Injuries and lineups as a model signal (partly done: fabrication removed, parser and lineup logger built; downloads disabled until the owner clears the NBA terms) | L | The one thing the baseline cannot see and the market can |
+| 1 | Injuries and lineups as a model signal (done: schema c5e7a9b1d3f6, layout-mode PDF parser, idempotent storage, lineup snapshots, props integration, fetch script and timer) | L | The one thing the baseline cannot see and the market can |
 | 2 | Totals (done: grading, CLV and market-edge paper bets; props models deferred) | L | The data is already captured and paid for |
 | 3 | Frontend model-league page (done) | M | The league is invisible outside a terminal |
 | 4 | Promotion notifications (done) | S | A champion change should not go unnoticed |
@@ -51,9 +51,12 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 
 **Acceptance criteria.**
 
-- [ ] The user has answered the terms question (below) in writing.
-- [ ] `injury_scraper` never returns invented data; an unavailable report is reported as unavailable, and a test proves no fallback sample exists.
-- [ ] A parser turns a stored real report into structured rows, tested on offline fixtures.
+- [x] The user has answered the terms question in writing (owner authorization 2026-10-31: personal research on game days up to 3 times/day; D-62).
+- [x] `injury_scraper` never returns invented data; an unavailable report is reported as unavailable, and tests prove no fallback sample exists.
+- [x] A parser turns real layout reports into structured rows, tested on offline synthetic layout fixtures reproducing all quirks.
+- [x] Tables `injury_report_snapshot`, `injury_entry`, and `lineup_snapshot` created (migration `c5e7a9b1d3f6`).
+- [x] Automated download scheduler `fetch_injuries.py` and systemd units `nba-injuries.timer` / `.service`.
+- [x] Props pipeline and API `GET /api/v1/injuries/latest` expose real stored injuries.
 - [ ] One feature builder serves training and serving; the leak test (perturbing the future leaves earlier features bit-identical) covers the new features.
 - [ ] The new feature set is a distinct model version that does not break the existing one, passes the historical gate in `model_lab.py`, and runs in shadow. Promotion is left to the learning loop.
 - [ ] [`QUANT_MODULE.md`](QUANT_MODULE.md) lists the new features; a decision entry is added to [`DECISIONS.md`](DECISIONS.md).

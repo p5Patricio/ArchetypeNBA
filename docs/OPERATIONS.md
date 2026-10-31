@@ -240,6 +240,23 @@ Every manual change writes an audit row whose reason starts with `manual:`. A re
 | Rebuild or update Elo | `python scripts/backfill_elo.py --update` (new games only), `--rebuild` (everything), `--model-id N` (one model), `--dry-run`, `--evaluate`, `--register` |
 | Run the historical lab | `python scripts/model_lab.py [--seed N] [--configs N] [--max-seconds S] [--json file]`; add `--register --confirm-database nba_platform` to insert challengers |
 
+### Official NBA injury reports and lineups
+
+- **How to enable**: Automated PDF download is enabled by setting `INJURY_PDF_ENABLED=true` in `backend/.env` (default is `false`).
+- **Operational limits**:
+  - Game days only (0 downloads on days without games).
+  - Maximum 3 downloads per day (`INJURY_MAX_DOWNLOADS_PER_DAY=3`): slot 1 after 09:00 local, slot 2 after 14:00 local, slot 3 within 60–120 minutes of first tip-off.
+  - Minimum 60-minute cooldown between downloads.
+  - Honest User-Agent: `ArchetypeNBA-research/1.0 (personal, low frequency)`.
+  - Terms note: Owner authorization (2026-10-31, personal research, low frequency, never redistribute PDFs or raw data; see [`DECISIONS.md`](DECISIONS.md) D-62).
+- **Scheduled execution**: In WSL/Linux, `nba-injuries.timer` executes `scripts/fetch_injuries.py` every 30 minutes (the script decides whether a download is due).
+- **Testing**:
+  ```bash
+  python scripts/fetch_injuries.py --dry-run
+  ```
+- **Read API**: `GET /api/v1/injuries/latest` provides the latest snapshot with player entries grouped by team (`?include_available=true` to include Available players).
+- **Props pipeline**: `services/injury_scraper.fetch_injury_report()` automatically uses real database rows if the latest snapshot is less than 36 hours old (otherwise marks `available=False` with reason `'stale'`).
+
 ### League API and promotion notifications
 
 - **Endpoint `GET /api/v1/league`**: A read-only JSON representation of the model league (champion, challengers with live evaluation metrics, paired $n$ vs the 150 target, log-loss gain with CI, margin NLL gain, Brier-vs-market gap, gate status in words, promotion/retirement history, and the last candidate proposal date). Responses are cached in-memory with a 5-minute TTL to avoid repeated bootstrap recomputations. The endpoint never writes to the database. An empty database returns status 200 with a clean empty structure.
