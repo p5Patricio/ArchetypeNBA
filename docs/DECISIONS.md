@@ -582,6 +582,17 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Consequences**: `odds_history` captures high-fidelity closing player props quotes. Truthful quote metrics on capture markers. Clean, settlement-free evaluation of negative-binomial props calibration against bookmakers.
 - **Source**: WP-S2; [`QUANT_MODULE.md`](QUANT_MODULE.md); [`DECISIONS.md`](DECISIONS.md); [`ROADMAP.md`](ROADMAP.md).
 
+### D-61 Qualitative Gemini layer model upgrade to gemini-3.8-flash with gemini-3.6-flash fallback
+- **Date**: 2026-10-31
+- **Decision**: Upgrade default `GEMINI_MODEL` from `gemini-3.6-flash` to `gemini-3.8-flash`. Introduce `GEMINI_FALLBACK_MODEL` defaulting to `gemini-3.6-flash`. When calling the Gemini API, attempt the primary model; on HTTP 404 (model id unknown or retired) or HTTP 429 (quota/rate limit), retry exactly once with `GEMINI_FALLBACK_MODEL`. Never retry more than once. Log the model that answered successfully at INFO level without exposing credentials. Include the resolved model id (`model_used`) in `SlateAnalysisResult` so the props UI and daily runner report reflect actual execution provenance. Preserve the deterministic heuristic fallback when both models fail or credentials are unset. Grounding with Google Search is deliberately not requested (not supported on the free tier API).
+- **Context**: Verified on 2026-10-31: `gemini-3.8-flash` is a GA (stable) model in the Gemini API model list, free of charge on the free tier, offering 1,048,576 input and 65,536 output tokens with structured JSON output. Because the model allocates thinking tokens during reasoning, `maxOutputTokens` is generously allocated (8,192). `gemini-3.6-flash` remains fully functional without a shutdown date and serves as an ideal resilient fallback.
+- **Alternatives rejected**:
+  1. Dynamic aliases like `gemini-flash-latest` (rejected: aliases hot-swap underlying weights without notice, breaking repeatability and auditability).
+  2. Google Search grounding (rejected: unavailable on the free tier API for these models; would trigger API rejection).
+  3. Indefinite model cycling or unbounded retries (rejected: limits latency and preserves quota; strictly at most one fallback retry).
+- **Consequences**: No database schema change. Zero regression in props workflow. Offline tests verify primary success, fallback upon 404/429, heuristic fallback on total exhaustion, and zero key leakage in logging streams.
+- **Source**: WP-G; `backend/app/config.py`; `backend/app/services/gemini_analyzer.py`; `docs/OPERATIONS.md`.
+
 ## Next step
 
 Planned work and the reasons behind it: [`ROADMAP.md`](ROADMAP.md).

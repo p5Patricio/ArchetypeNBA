@@ -24,6 +24,7 @@ class SlateAnalysisResult(BaseModel):
     modifiers: List[PlayerQualitativeModifier] = []
     slate_summary: str = ""
     engine_source: str = "HEURISTIC"  # "GEMINI" or "HEURISTIC"
+    model_used: Optional[str] = None
 
 
 class GeminiAnalyzerService:
@@ -31,9 +32,21 @@ class GeminiAnalyzerService:
 
     GEMINI_API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
 
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        fallback_model: Optional[str] = None,
+        transport: Optional[httpx.BaseTransport] = None,
+    ):
         self.api_key = api_key if api_key is not None else settings.GEMINI_API_KEY
-        self.model = model or settings.GEMINI_MODEL or "gemini-3.6-flash"
+        self.model = model or settings.GEMINI_MODEL or "gemini-3.8-flash"
+        self.fallback_model = (
+            fallback_model
+            if fallback_model is not None
+            else getattr(settings, "GEMINI_FALLBACK_MODEL", "gemini-3.6-flash")
+        )
+        self.transport = transport
 
     @property
     def is_configured(self) -> bool:
@@ -45,7 +58,7 @@ class GeminiAnalyzerService:
         extra_notes: Optional[str] = None,
     ) -> SlateAnalysisResult:
         """
-        Processes injury reports through Gemini 2.5 Flash with structured output.
+        Processes injury reports through Gemini 3.8 Flash with structured output.
         Falls back to rule-based heuristics if no API key is present or on API error.
         """
         if not injury_items:
@@ -53,13 +66,12 @@ class GeminiAnalyzerService:
                 modifiers=[],
                 slate_summary="No injury items to analyze.",
                 engine_source="HEURISTIC",
+                model_used=None,
             )
 
         if not self.is_configured:
             logger.info("GeminiAnalyzer: API Key not set. Using statistical heuristic analysis.")
             return self._heuristic_analysis(injury_items)
-
-        url = f"{self.GEMINI_API_ENDPOINT}/{self.model}:generateContent?key={self.api_key}"
 
         report_text = "\n".join(
             [f"- {i.team} | {i.player_name} | Status: {i.status} | Reason: {i.reason}" for i in injury_items]
@@ -91,23 +103,54 @@ class GeminiAnalyzerService:
             "generationConfig": {
                 "responseMimeType": "application/json",
                 "temperature": 0.2,
+                "maxOutputTokens": 8192,
             },
         }
 
-        candidate_models = list(dict.fromkeys([self.model, "gemini-3.6-flash", "gemini-flash-latest"]))
+        candidate_models = [self.model]
+        if self.fallback_model and self.fallback_model != self.model:
+            candidate_models.append(self.fallback_model)
 
-        for model_name in candidate_models:
-            url = f"{self.GEMINI_API_ENDPOINT}/{model_name}:generateContent?key={self.api_key}"
+        client_kwargs = {"timeout": 35.0}
+        if self.transport is not None:
+            client_kwargs["transport"] = self.transport
+
+        headers = {
+            "x-goog-api-key": self.api_key,
+            "Content-Type": "application/json",
+        }
+
+        for idx, model_name in enumerate(candidate_models):
+            is_primary = (idx == 0)
+            has_fallback = (is_primary and len(candidate_models) > 1)
+            url = f"{self.GEMINI_API_ENDPOINT}/{model_name}:generateContent"
+
             try:
-                with httpx.Client(timeout=35.0) as client:
-                    res = client.post(url, json=payload)
-                    if res.status_code in (503, 429):
-                        logger.warning(f"GeminiAnalyzer: Model {model_name} returned {res.status_code}. Retrying alternate model...")
-                        continue
+                with httpx.Client(**client_kwargs) as client:
+                    res = client.post(url, json=payload, headers=headers)
+                    if res.status_code in (404, 429):
+                        if has_fallback:
+                            logger.warning(
+                                "GeminiAnalyzer: Model %s returned status %d. Retrying once with fallback model %s...",
+                                model_name,
+                                res.status_code,
+                                self.fallback_model,
+                            )
+                            continue
+                        else:
+                            logger.warning(
+                                "GeminiAnalyzer: Model %s returned status %d. No further fallback retries.",
+                                model_name,
+                                res.status_code,
+                            )
+                            break
+
                     res.raise_for_status()
                     data = res.json()
                     text_content = data["candidates"][0]["content"]["parts"][0]["text"]
                     parsed = json.loads(text_content)
+
+                    logger.info("GeminiAnalyzer: Successfully generated analysis using model %s.", model_name)
 
                     # Handle if Gemini returned a list directly or a dict with modifiers
                     if isinstance(parsed, list):
@@ -116,18 +159,29 @@ class GeminiAnalyzerService:
                             modifiers=modifiers,
                             slate_summary=f"Analyzed {len(modifiers)} players via Gemini AI ({model_name}).",
                             engine_source="GEMINI",
+                            model_used=model_name,
                         )
                     elif isinstance(parsed, dict):
                         modifiers_raw = parsed.get("modifiers", parsed.get("players", []))
-                        summary = parsed.get("slate_summary", parsed.get("summary", f"Gemini Slate Analysis Complete ({model_name})."))
+                        summary = parsed.get(
+                            "slate_summary",
+                            parsed.get("summary", f"Gemini Slate Analysis Complete ({model_name})."),
+                        )
                         modifiers = [PlayerQualitativeModifier(**item) for item in modifiers_raw]
                         return SlateAnalysisResult(
                             modifiers=modifiers,
                             slate_summary=summary,
                             engine_source="GEMINI",
+                            model_used=model_name,
                         )
             except Exception as e:
-                logger.warning(f"GeminiAnalyzer: Attempt with {model_name} failed: {e}")
+                err_msg = str(e)
+                if self.api_key and self.api_key in err_msg:
+                    err_msg = err_msg.replace(self.api_key, "[REDACTED]")
+                logger.warning("GeminiAnalyzer: Attempt with %s failed: %s", model_name, err_msg)
+                if has_fallback:
+                    continue
+                break
 
         logger.info("GeminiAnalyzer: All Gemini models busy/unavailable. Falling back to heuristic rules.")
         return self._heuristic_analysis(injury_items)
@@ -203,4 +257,6 @@ class GeminiAnalyzerService:
         return SlateAnalysisResult(
             modifiers=modifiers,
             slate_summary="Heuristic quantitative analysis applied based on official injury classifications.",
+            engine_source="HEURISTIC",
+            model_used=None,
         )

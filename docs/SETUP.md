@@ -71,7 +71,7 @@ Create `backend/.env` (git-ignored; never commit it; never paste it into chat). 
 | `THE_ODDS_API_KEY` | For odds capture | your key; empty means capture is disabled |
 | `LEARNING_AUTOPROMOTE` | No | `true` (kill switch for automatic role changes) |
 | `LEARNING_MIN_GAMES`, `LEARNING_MIN_DAYS_LIVE`, `LEARNING_COOLDOWN_DAYS`, `LEARNING_PROPOSAL_DAYS`, `LEARNING_MAX_CHALLENGERS`, `LEARNING_LOOK_INTERVAL_DAYS`, `LEARNING_MAX_LOOKS`, `LEARNING_MAX_AGE_DAYS` | No | `150`, `14`, `30`, `7`, `3`, `7`, `12`, `150` |
-| `GEMINI_API_KEY`, `GEMINI_MODEL` | No (props AI layer) | empty, `gemini-3.6-flash` |
+| `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL` | No (props AI layer) | empty, `gemini-3.8-flash`, `gemini-3.6-flash` |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | No (props report) | empty |
 | `PROPS_SIMULATION_RUNS` | No | `10000` |
 | `REDIS_URL` | No (cache) | `redis://localhost:6379/0` |
