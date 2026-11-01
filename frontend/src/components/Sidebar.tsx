@@ -10,7 +10,6 @@ import {
   Sparkles,
   Shield,
   Crown,
-  Database,
   Layers,
   X,
   Swords,
@@ -21,6 +20,7 @@ import {
   Target,
   TrendingUp,
   Banknote,
+  Calendar,
   Trophy,
   Power,
 } from "lucide-react";
@@ -91,6 +91,14 @@ export function Sidebar({ isOpen = false, onClose, onOpenShutdown }: SidebarProp
       active: pathname.startsWith("/paper"),
       accent: "text-emerald-600",
       activeBg: "bg-emerald-50 text-emerald-800 border-emerald-200 font-extrabold",
+    },
+    {
+      href: "/week",
+      label: language === "es" ? "Semana" : "Week",
+      icon: Calendar,
+      active: pathname.startsWith("/week"),
+      accent: "text-blue-600",
+      activeBg: "bg-blue-50 text-blue-800 border-blue-200 font-extrabold",
     },
     {
       href: "/league",

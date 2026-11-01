@@ -128,7 +128,7 @@ ArchetypeNBA/
 │
 ├── frontend/                 # Next.js 16 (App Router + Turbopack)
 │   ├── src/
-│   │   ├── app/             # Application routes (shot-zones, props, matchups, versus, lineup, etc.)
+│   │   ├── app/             # Application routes (week, paper, league, props, matchups, shot-zones, etc.)
 │   │   ├── components/      # Modular UI components (ParallelShotZonesChart, HorizontalCourt, Radar, Navbar)
 │   │   ├── context/         # Preferences provider (i18n ES/EN & Metric/Imperial)
 │   │   └── lib/             # Typed API clients & internationalization dictionaries

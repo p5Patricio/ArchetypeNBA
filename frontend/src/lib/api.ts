@@ -1476,5 +1476,90 @@ export async function getPaperBankroll(): Promise<PaperBankrollResponse> {
   return getJson<PaperBankrollResponse>(`${API_BASE}/paper/bankroll`);
 }
 
+// ---------------------------------------------------------------------------
+// Week View (WP-W)
+// ---------------------------------------------------------------------------
+
+export interface TeamInjuryEntry {
+  player_name: string;
+  player_id?: number | null;
+  status: string;
+  reason?: string | null;
+  availability_prob?: number | null;
+  impact?: number | null;
+}
+
+export interface TeamInjuriesBlock {
+  snapshot_timestamp?: string | null;
+  stale: boolean;
+  entries: TeamInjuryEntry[];
+}
+
+export interface TeamWeekView {
+  id: number;
+  name: string;
+  abbreviation: string;
+  city?: string | null;
+  injuries: TeamInjuriesBlock;
+}
+
+export interface SideMarketView {
+  side: "home" | "away";
+  model_prob?: number | null;
+  fair_prob?: number | null;
+  edge?: number | null;
+  best_price?: number | null;
+  best_price_american?: number | null;
+  best_book?: string | null;
+  quote_age_minutes?: number | null;
+  would_qualify: boolean;
+  reason: string;
+  ev?: number | null;
+  p_blend?: number | null;
+}
+
+export interface ChampionPredictionView {
+  model_id: number;
+  model_name: string;
+  model_version: string;
+  p_home: number;
+  p_away: number;
+  projected_margin: number;
+  sigma?: number | null;
+}
+
+export interface ChallengerPredictionView {
+  model_id: number;
+  model_name: string;
+  model_version: string;
+  p_home: number;
+  p_away: number;
+  projected_margin?: number | null;
+}
+
+export interface WeekGameItem {
+  id: number;
+  game_id: number;
+  commence_time: string;
+  commence_time_local: string;
+  local_date: string;
+  local_time: string;
+  day_name: string;
+  day_name_es: string;
+  home_team: TeamWeekView;
+  away_team: TeamWeekView;
+  champion_prediction?: ChampionPredictionView | null;
+  challenger_predictions: ChallengerPredictionView[];
+  home_market: SideMarketView;
+  away_market: SideMarketView;
+  injury_snapshot_timestamp?: string | null;
+  injury_snapshot_stale: boolean;
+}
+
+export async function getWeek(days = 7): Promise<WeekGameItem[]> {
+  return getJson<WeekGameItem[]>(`${API_BASE}/week?days=${days}`);
+}
+
+
 
 
