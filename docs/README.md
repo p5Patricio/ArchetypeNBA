@@ -19,6 +19,7 @@ Everything written about ArchetypeNBA, in one place, with the order to read it i
 | [`QUANT_MODULE.md`](QUANT_MODULE.md) | The methodology: odds maths, Elo, the `margin_features` model, betting policy, CLV and its biases, evaluation and promotion rules, how to read the reports, honest limits |
 | [`OPERATIONS.md`](OPERATIONS.md) | Runbook: the scheduled task, credit budget, daily and weekly checks, schema deploys, manual controls, web services, Linux and macOS schedulers, troubleshooting |
 | [`RESEARCH_BETTING_IMPROVEMENTS.md`](RESEARCH_BETTING_IMPROVEMENTS.md) | Verified research on improving the betting side: what was confirmed, what was rejected, and the recommendations that became the 2026-10 work |
+| [`RESEARCH_LONG_TERM_EDGE.md`](RESEARCH_LONG_TERM_EDGE.md) | Multi-season outlook (2026-11-01): Mexican sportsbooks and their terms on automation, free historical odds and injury archives, NBA market-efficiency literature, ranked plan and continue/stop milestones |
 | [`WSL.md`](WSL.md) | The current production setup in WSL2: layout, boot chain, timers, commands, gotchas, restore |
 | [`SETUP.md`](SETUP.md) | Install and configure from scratch on any OS, fill the database, run the tests, first-day checklist |
 | [`DB_TRANSFER.md`](DB_TRANSFER.md) | Move the database to another PC and take periodic backups: the `db_transfer.py` export, verify and import procedure, cutover order, rollback, troubleshooting |
