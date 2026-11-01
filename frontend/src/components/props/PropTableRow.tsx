@@ -148,11 +148,6 @@ export function PropTableRow({ prop }: PropTableRowProps) {
           </span>
         </td>
 
-        {/* Kelly Stake */}
-        <td className="py-3 px-3 text-center font-mono font-bold text-slate-700 tabular-nums text-xs">
-          {prop.kelly_stake_pct > 0 ? `${prop.kelly_stake_pct.toFixed(1)}%` : "0.0%"}
-        </td>
-
         {/* Recommendation */}
         <td className="py-3 px-3 text-center">
           <div
@@ -180,7 +175,7 @@ export function PropTableRow({ prop }: PropTableRowProps) {
       {/* Expandable row with reasoning and Monte Carlo distribution */}
       {isExpanded && (
         <tr className="bg-slate-50/70 border-b border-slate-200/80">
-          <td colSpan={8} className="py-3 px-6 text-xs">
+          <td colSpan={7} className="py-3 px-6 text-xs">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">

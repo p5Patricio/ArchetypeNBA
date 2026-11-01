@@ -181,8 +181,8 @@ export function PropsEmptyState({
 
         <div className="text-[11px] text-slate-400 font-medium pt-3 border-t border-slate-100">
           {isEs
-            ? "💡 Simulación cuantitativa (paper trading) con 10,000 corridas Binomial Negativa por jugador y gestión Quarter-Kelly."
-            : "💡 Quantitative paper trading simulation using 10,000 Negative Binomial runs per player and Quarter-Kelly sizing."}
+            ? "💡 Simulación cuantitativa (paper trading) con 10,000 corridas Binomial Negativa por jugador. Experimental: el modelo no está validado."
+            : "💡 Quantitative paper trading simulation using 10,000 Negative Binomial runs per player. Experimental: the model is not validated."}
         </div>
       </div>
     );

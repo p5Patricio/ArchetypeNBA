@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { HelpCircle, X } from "lucide-react";
 import { usePreferences } from "@/context/PreferencesContext";
 
-export type HelpTopic = "EV" | "EDGE" | "KELLY" | "MONTE_CARLO" | "DEVIGGED";
+export type HelpTopic = "EV" | "EDGE" | "MONTE_CARLO" | "DEVIGGED";
 
 interface HelpPopoverProps {
   topic: HelpTopic;
@@ -22,22 +22,22 @@ const TOPIC_CONTENT: Record<
 > = {
   EV: {
     title: {
-      es: "Expected Value (+EV / Valor Esperado)",
-      en: "Expected Value (+EV)",
+      es: "EV del modelo (sin validar)",
+      en: "Model EV (unvalidated)",
     },
     short: {
       es: "Rendimiento matemático promedio proyectado a largo plazo por cada unidad apostada.",
       en: "Projected long-term average mathematical return per unit wagered.",
     },
     detail: {
-      es: "Un +EV positivo (+X%) indica que según la probabilidad calculada por el modelo, la cuota ofrecida por la casa de apuestas paga más de lo estadísticamente justo. Simulado para paper trading.",
-      en: "A positive +EV (+X%) indicates the sportsbook's price offers a mathematical premium over the model's true calculated probability. For paper analysis only.",
+      es: "Un EV positivo (+X%) significa que, si la probabilidad del modelo fuera correcta, la cuota pagaría más de lo justo. El modelo de props aún no está validado (es peor que la casa en la evaluación en sombra), así que esta cifra no es una oportunidad real. Solo paper trading.",
+      en: "A positive EV (+X%) means the price would pay more than fair if the model's probability were right. The props model is not validated (it is worse than the bookmaker in the shadow evaluation), so this figure is not a real opportunity. Paper analysis only.",
     },
   },
   EDGE: {
     title: {
-      es: "Ventaja del Modelo (Edge)",
-      en: "Model Edge",
+      es: "Ventaja del modelo (sin validar)",
+      en: "Model edge (unvalidated)",
     },
     short: {
       es: "Diferencia directa entre la probabilidad del modelo y la probabilidad de la casa.",
@@ -46,20 +46,6 @@ const TOPIC_CONTENT: Record<
     detail: {
       es: "Edge = Probabilidad Modelo - Probabilidad Implícita (o justa sin margen de la casa). Si nuestro modelo estima 62% y la casa cotiza 55%, tu ventaja matemática es +7.0%.",
       en: "Edge = Model Probability - Sportsbook Implied (or devigged fair) Probability. If our model projects 62% and the book implies 55%, your mathematical edge is +7.0%.",
-    },
-  },
-  KELLY: {
-    title: {
-      es: "Stake Kelly Sugerido (¼ Kelly)",
-      en: "Kelly Stake (Quarter-Kelly)",
-    },
-    short: {
-      es: "Gestión prudente de banca para optimizar crecimiento y amortiguar rachas negativas.",
-      en: "Prudent bankroll management sizing edge while mitigating drawdown risk.",
-    },
-    detail: {
-      es: "El criterio de Kelly fraccionario (¼ Kelly) asigna un porcentaje conservador de tu banca de simulación según el tamaño del Edge y la cuota. En paper trading previene sobreexposición.",
-      en: "Fractional Kelly (¼ Kelly) determines what percentage of your paper bankroll to stake based on edge size and odds. Restricts maximum risk per simulated wager.",
     },
   },
   MONTE_CARLO: {

@@ -8,7 +8,9 @@ import { usePreferences } from "@/context/PreferencesContext";
 import {
   getTodayProps,
   runPropsAnalysis,
+  getPaperSummary,
   type TodayPropsResponse,
+  type PropsShadowSummaryResponse,
 } from "@/lib/api";
 import {
   RefreshCw,
@@ -34,9 +36,10 @@ import { PropsSkeleton } from "@/components/props/PropsSkeleton";
 import { PropsEmptyState } from "@/components/props/PropsEmptyState";
 import { InjuryNoticeBanner } from "@/components/props/InjuryNoticeBanner";
 import { PropsQuotaAlert } from "@/components/props/PropsQuotaAlert";
+import { ExperimentalBanner } from "@/components/props/ExperimentalBanner";
 
 const VALID_CATEGORIES: StatCategory[] = ["ALL", "POINTS", "REBOUNDS", "ASSISTS", "PRA"];
-const VALID_SORTS: SortOption[] = ["EV_DESC", "EDGE_DESC", "KELLY_DESC", "LINE_DESC"];
+const VALID_SORTS: SortOption[] = ["EV_DESC", "EDGE_DESC", "LINE_DESC"];
 
 function PropsPageContent() {
   const { language } = usePreferences();
@@ -50,6 +53,10 @@ function PropsPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const [isCommandOpen, setIsCommandOpen] = useState<boolean>(false);
+
+  // Live shadow evaluation of the props model vs the bookmaker (drives the experimental banner)
+  const [shadow, setShadow] = useState<PropsShadowSummaryResponse | null>(null);
+  const [shadowLoading, setShadowLoading] = useState<boolean>(true);
 
   // Screen reader aria-live announcements
   const [liveAnnouncement, setLiveAnnouncement] = useState<string>("");
@@ -197,8 +204,8 @@ function PropsPageContent() {
       setData(res);
       setLiveAnnouncement(
         isEs
-          ? `Proyecciones cargadas: ${res.total_props} props disponibles, ${res.value_picks_count} oportunidades con valor.`
-          : `Projections loaded: ${res.total_props} props available, ${res.value_picks_count} value picks.`
+          ? `Proyecciones cargadas: ${res.total_props} props disponibles, ${res.value_picks_count} con EV del modelo positivo (sin validar).`
+          : `Projections loaded: ${res.total_props} props available, ${res.value_picks_count} with positive model EV (unvalidated).`
       );
     } catch (err: unknown) {
       console.error("Error loading NBA props:", err);
@@ -247,8 +254,8 @@ function PropsPageContent() {
             ? "Análisis completado, pero no hay líneas en vivo publicadas: no se generaron props."
             : "Analysis complete, but no live lines are posted: no props were generated."
           : isEs
-          ? `¡Análisis completado! Se generaron ${res.total_props} props (${res.value_picks_count} picks con +EV).${sendTelegram ? " Reporte despachado a Telegram." : ""}`
-          : `Analysis complete! Generated ${res.total_props} props (${res.value_picks_count} value picks).${sendTelegram ? " Dispatched to Telegram." : ""}`;
+          ? `¡Análisis completado! Se generaron ${res.total_props} props (${res.value_picks_count} con EV del modelo > 0, sin validar).${sendTelegram ? " Reporte despachado a Telegram." : ""}`
+          : `Analysis complete! Generated ${res.total_props} props (${res.value_picks_count} with model EV > 0, unvalidated).${sendTelegram ? " Dispatched to Telegram." : ""}`;
 
       setToastMessage(successMsg);
       setLiveAnnouncement(successMsg);
@@ -289,6 +296,24 @@ function PropsPageContent() {
     loadPropsData();
   }, [loadPropsData]);
 
+  useEffect(() => {
+    let cancelled = false;
+    getPaperSummary()
+      .then((res) => {
+        if (!cancelled) setShadow(res.props_shadow ?? null);
+      })
+      .catch((err) => {
+        // The banner falls back to its qualitative wording; never invent figures.
+        console.warn("Props shadow evaluation unavailable:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setShadowLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Filter and sort props items
   const filteredItems = useMemo(() => {
     if (!data || !data.items) return [];
@@ -325,9 +350,6 @@ function PropsPageContent() {
         }
         if (sortBy === "EDGE_DESC") {
           return b.edge_pct - a.edge_pct;
-        }
-        if (sortBy === "KELLY_DESC") {
-          return b.kelly_stake_pct - a.kelly_stake_pct;
         }
         if (sortBy === "LINE_DESC") {
           return b.line - a.line;
@@ -381,6 +403,9 @@ function PropsPageContent() {
         {/* ALERT & NOTIFICATION BANNERS */}
         {/* ========================================================================= */}
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6 space-y-4 w-full">
+          {/* Permanent "experimental, not validated" warning (intentionally not dismissable) */}
+          <ExperimentalBanner shadow={shadow} loading={shadowLoading} />
+
           {/* Toast Message */}
           {toastMessage && (
             <div
@@ -490,12 +515,12 @@ function PropsPageContent() {
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-xs">
                 <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 mb-1">
                   <Flame className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>{isEs ? "Oportunidades +EV" : "+EV Value Picks"}</span>
+                  <span>{isEs ? "EV del modelo > 0 (sin validar)" : "Model EV > 0 (unvalidated)"}</span>
                 </div>
                 <div className="text-base font-black text-emerald-700 flex items-center gap-1.5 tabular-nums">
                   <span>{data.value_picks_count}</span>
                   <span className="text-xs font-medium text-emerald-600">
-                    {isEs ? "picks con valor" : "value picks"}
+                    {isEs ? "props" : "props"}
                   </span>
                 </div>
               </div>
@@ -634,16 +659,13 @@ function PropsPageContent() {
                             {isEs ? "Modelo vs Casa" : "Model vs Book"}
                           </th>
                           <th scope="col" className="py-3 px-3 text-center">
-                            {isEs ? "Ventaja (Edge)" : "Model Edge"}
+                            {isEs ? "Ventaja del modelo (sin validar)" : "Model edge (unvalidated)"}
                           </th>
                           <th scope="col" className="py-3 px-3 text-center">
-                            Expected Value
+                            {isEs ? "EV del modelo (sin validar)" : "Model EV (unvalidated)"}
                           </th>
                           <th scope="col" className="py-3 px-3 text-center">
-                            Kelly %
-                          </th>
-                          <th scope="col" className="py-3 px-3 text-center">
-                            {isEs ? "Dictamen" : "Recommendation"}
+                            {isEs ? "Inclinación del modelo" : "Model lean"}
                           </th>
                           <th scope="col" className="py-3 px-3 text-right">
                             {isEs ? "Detalles" : "Details"}

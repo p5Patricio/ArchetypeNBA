@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 export type StatCategory = "ALL" | "POINTS" | "REBOUNDS" | "ASSISTS" | "PRA";
-export type SortOption = "EV_DESC" | "EDGE_DESC" | "KELLY_DESC" | "LINE_DESC";
+export type SortOption = "EV_DESC" | "EDGE_DESC" | "LINE_DESC";
 export type ViewMode = "cards" | "table";
 
 interface PropsFilterBarProps {
@@ -140,7 +140,7 @@ export function PropsFilterBar({
             <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500"></div>
             <span className="ml-2.5 text-xs font-bold text-slate-800 flex items-center gap-1.5">
               <Flame className="h-3.5 w-3.5 text-emerald-600" />
-              <span>{isEs ? "Solo picks con valor (+EV)" : "Only +EV Picks"}</span>
+              <span>{isEs ? "Solo EV del modelo > 0" : "Only model EV > 0"}</span>
             </span>
           </label>
         </div>
@@ -165,7 +165,7 @@ export function PropsFilterBar({
               <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
               <span className="ml-2 text-xs font-bold text-slate-800 flex items-center gap-1">
                 <Flame className="h-3.5 w-3.5 text-emerald-600" />
-                <span>{isEs ? "Solo picks con +EV" : "Only +EV Picks"}</span>
+                <span>{isEs ? "Solo EV del modelo > 0" : "Only model EV > 0"}</span>
               </span>
             </label>
 
@@ -216,13 +216,10 @@ export function PropsFilterBar({
                 className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-800 outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-orange-500"
               >
                 <option value="EV_DESC">
-                  {isEs ? "Mayor Expected Value (+EV %)" : "Highest +EV %"}
+                  {isEs ? "Mayor EV del modelo (sin validar)" : "Highest model EV (unvalidated)"}
                 </option>
                 <option value="EDGE_DESC">
-                  {isEs ? "Mayor Ventaja Modelo (Edge %)" : "Highest Edge %"}
-                </option>
-                <option value="KELLY_DESC">
-                  {isEs ? "Mayor Stake Kelly %" : "Highest Kelly Stake"}
+                  {isEs ? "Mayor ventaja del modelo (sin validar)" : "Highest model edge (unvalidated)"}
                 </option>
                 <option value="LINE_DESC">
                   {isEs ? "Línea más alta" : "Highest Line"}
