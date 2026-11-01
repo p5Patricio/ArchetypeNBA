@@ -23,6 +23,7 @@ What to build next and why, in priority order. Each item states the reason, how 
 | 9 | CI that runs the test suite (done) | S | No automated check exists |
 | 10 | Legacy cleanup (done) | M | Dead code and confusing duplicates |
 | 11 | Fix `props_engine.load_baselines_from_db` (done) | S | It reads a SQLite file that does not exist |
+| 12 | Weekly view: predictions, injuries and candidate paper bets for next 7-14 days (done) | M | Visibility over upcoming week games, model edges and injury context |
 
 Small fixes found while writing these docs are listed at the end ([hygiene](#hygiene-fixes)).
 
@@ -257,6 +258,7 @@ Small items found while documenting (2026-10-26). Each is a few lines.
 | Fabricated injuries removed (part of item 1) | `fetch_injury_report()` returns `available=false` with a reason; the NBA PDF download is behind `INJURY_PDF_ENABLED` (default off), the parser works on text and is tested offline; `scripts/log_lineups.py` measures how early `nba_api` publishes starters |
 | Multiple-comparison control in the lab (research item 4) | Reality Check, SPA and DM-HLN p-values recorded for every lab run; `LAB_MULTITEST_GATE` (default off) makes SPA p < 0.2 a registration condition |
 | Closing-quote presence record (item 6) | `odds_capture_presence` table (migration `f1a9c3d7e5b2`) records quotes seen in closing capture payloads; `fill_clv` and Pinnacle CLV report require presence when presence rows exist, counting absent quotes as `absent_at_close`; `v_closing_odds` updated |
+| Weekly view (WP-W, item 12) | Pure read-only service `week_view.py` + endpoint `GET /api/v1/week?days=7` and responsive Next.js `/week` page; provides upcoming games, on-demand Elo champion and challenger probabilities, Pinnacle sharp devig, line shopping, candidate paper bet flags, and official injury report entries |
 
 ### Found while doing this work (2026-10-28)
 

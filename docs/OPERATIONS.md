@@ -269,6 +269,15 @@ Every manual change writes an audit row whose reason starts with `manual:`. A re
 - **Promotion notifications (Telegram)**: Whenever a role change commits during the `learn` step (`promote`, `rollback`, `retire`, or a new challenger is registered by the candidate lab), the system dispatches a plain-text Telegram message summarizing what happened, model names, evidence numbers (paired $n$, gain and CI), and the date.
 - **How to enable notifications**: Notifications are opt-in. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `backend/.env` to valid Telegram bot credentials (real values; placeholders containing `your_` are treated as unset). If either is unset, notifications are skipped. A notification failure never causes the tick to fail or roll back: any error is logged as a warning with the token masked, and the tick proceeds normally.
 
+### Weekly View API and Frontend Page
+
+- **Endpoint `GET /api/v1/week?days=7`**: A pure read-only endpoint (no writes to `model_prediction`, `simulated_bet`, or any table) providing scheduled games tipping off within the local day window (`America/Mexico_City`, query param `days` 1 to 14, default 7).
+  - Computes on-demand model predictions for the champion Elo model (win probability, expected margin, sigma) and any active shadow challengers.
+  - Matches stored market quotes: Pinnacle's de-vigged sharp probability (fair reference), best available price per side with bookmaker key and quote age in minutes.
+  - Line-shopping and edge evaluation: computes model edge against Pinnacle fair close, and a read-only "would qualify" candidate flag per side using `analytics.betting_policy.evaluate_candidate` (flat strategy, edge $\ge$ 2 pp, EV $\ge$ 2%) with plain-language skip reasons when not eligible.
+  - Official injury report: attaches non-Available players with status and reasons from the latest `injury_report_snapshot` per team, plus snapshot timestamp and a stale flag (older than 36 h). Empty database returns status 200 with `[]`.
+- **Frontend page `/week`**: Next.js responsive page organized by day sections with game cards, team logos, model vs market win probability comparison bars, best available odds, candidate paper bet badges, team injury drawers, quote age warnings, day/team filters, and candidate-only toggle. Never gives betting advice (paper trading only). Accessible down to 360 px width.
+
 ### Qualitative Gemini AI Layer
 
 - **Configuration location**: Configured in `backend/.env` via `GEMINI_MODEL` (default: `gemini-3.8-flash`) and `GEMINI_FALLBACK_MODEL` (default: `gemini-3.6-flash`).
