@@ -657,7 +657,8 @@ def record_step(ctx: TickContext) -> StepResult:
     skipped = ", ".join(f"{reason}={count}" for reason, count in sorted(summary.skipped.items())) or "none"
     message = (
         f"{summary.games_considered} game(s) in horizon, {summary.games_processed} processed; "
-        f"{verb} {summary.predictions_written} prediction(s) ({summary.predictions_existing} existing); bets: {bets}"
+        f"{verb} {summary.predictions_written} prediction(s) ({summary.predictions_existing} existing); bets: {bets}; "
+        f"blend {summary.blend.summary()}"
     )
     shadows = [m for m in summary.models.values() if m.role != "champion"]
     if shadows:

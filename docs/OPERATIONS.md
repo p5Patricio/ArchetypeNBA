@@ -182,7 +182,7 @@ The daily capture is wired as step `sgo` in the scheduled tick (`app/services/ti
 | Check | Command | What good looks like |
 |-------|---------|----------------------|
 | League | `cd backend; python scripts/model_league.py status` | A "last candidate proposal" within the last 7 days; challenger `paired n` growing; no promotion or retirement you did not expect |
-| Schema | `cd backend; python -m alembic current` | Equals the head (`e3f8b1a4c9d2` as of 2026-10-28) |
+| Schema | `cd backend; python -m alembic current` | Equals the head (`a8c2e4f6b0d1` as of 2026-11-01) |
 | Backup | `cd backend; python scripts/db_transfer.py export` ([section 9](#9-backups)) | A new `.dump` and `.manifest.json` pair that `verify` accepts, copied off the machine |
 | Code | `git status` and `git log -1` in the production checkout | Clean tree, on `main`, no unmerged work |
 | Disk | Size of `logs\` | A few MB (rotation caps `tick.log`; `backend.log` and `frontend.log` grow without rotation) |
@@ -212,6 +212,8 @@ Deploy a change that includes a migration:
 | 5 | Dry runs | `python scripts/run_tick.py --dry-run` and `python scripts/paper_report.py` |
 | 6 | Resume | `Enable-ScheduledTask -TaskName NBA-Odds-Tick` |
 | 7 | Verify one real tick | `Start-ScheduledTask -TaskName NBA-Odds-Tick`, then read `logs\tick.log`: `exit code: 0` |
+
+Migration `a8c2e4f6b0d1` (the `calibrated` strategy: enum value plus `simulated_bet.blend_weight`) needs exactly this order: the new recorder writes the column and the enum value, so un-migrated schemas make the `record` step fail. After step 4, `python scripts/blend_weight.py` should print `w_used=0.000` or the fitted weight without error.
 
 A change without a migration still follows steps 2, 3, 6 and 7. Downgrades exist for every migration (`alembic downgrade -1`), but `d7a2f5b81c39` deletes the rating rows of every model except the legacy one when it is downgraded.
 

@@ -654,6 +654,15 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Consequences**: No new `model_version`; totals bets stay disabled until a model beats the market on at least 200 live games.
 - **Source**: branch `feat/totals-pace-v2`; `odd/tasks/betting-improvements.md`.
 
+### D-67 `calibrated` strategy: a fitted logit-blend weight and a 6 pp disagreement band (v1 stays as control)
+- **Date**: 2026-11-01
+- **Decision**: Add a fifth staking strategy, `calibrated` (flat 1 unit, same caps), next to the four existing ones, which are unchanged. It bets only when `|p_model - p_fair| <= 6 pp` and the EV with $p_{blend} = \sigma(w\,\text{logit}(p_{model}) + (1-w)\,\text{logit}(p_{fair})) \ge 2\%$, where `w` is fitted by maximum likelihood (grid 0..0.5) on the champion's own record against Pinnacle's de-vigged h2h probability at prediction time and shrunk as `w_hat * n / (n + 200)`; `w = 0` (no bets) below 100 calibration games. New nullable `simulated_bet.blend_weight` and enum value `calibrated` (migration `a8c2e4f6b0d1`).
+- **Evidence**: on 93 settled flat bets (real DB, 2026-11-01) the mean model probability was 0.593, Pinnacle's fair probability at the bet 0.480 and the realized win rate 0.419 (ROI -17.6%). The champion's Brier is 0.242 against 0.202 for Pinnacle's de-vigged close. A filter "model above the market by 2 pp" over a model this much worse selects the model's biggest errors (missing injury and roster information): adverse selection, and a fixed 50/50 linear blend keeps half of that error.
+- **Why `w` is fitted**: the right trust in a model is an empirical quantity (how much the model adds to the market out of sample), not a constant. Fitting it on the model's own record makes the strategy stop betting by itself when the model has no incremental information and start when it does, e.g. for an injury-aware champion; the `n / (n + 200)` shrinkage and the 100-game minimum keep it from trusting early noise. The 6 pp band excludes both the no-edge zone (the model repeats the market) and the large-disagreement zone where the model is more likely wrong than right.
+- **Alternatives rejected**: changing the v1 thresholds (a silent policy change, rule 8, and it would destroy the control); a fixed lower `ALPHA` (still an unmeasured constant); using `model_prediction.fair_decimal` as the market price (it is `1 / model_prob`, the model's own fair price, not Pinnacle's).
+- **Consequences**: until the champion adds information beyond Pinnacle, `w_hat` will be about 0 and `calibrated` places few or no bets; that is the intended answer, not a bug. Judge it by CLV and by `blend_weight`-segmented results, not raw ROI. Lockstep schema deploy needed (see [`OPERATIONS.md`](OPERATIONS.md) section 4).
+- **Source**: [`QUANT_MODULE.md`](QUANT_MODULE.md) section 6; `odd/tasks/calibrated-policy.md`; `backend/app/analytics/betting_policy.py`, `backend/app/services/blend_calibration.py`.
+
 ## Next step
 
 Planned work and the reasons behind it: [`ROADMAP.md`](ROADMAP.md).

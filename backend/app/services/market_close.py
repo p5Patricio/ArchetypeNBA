@@ -47,6 +47,20 @@ def sharp_closing_home_probs(
     game id -> de-vigged sharp closing probability of the home side, for the ``game_ids`` that have a two-sided
     quote captured at or before their tip-off (``commence_by_game``). Games without one are left out.
     """
+    return sharp_home_probs_as_of(session, commence_by_game, game_ids, books)
+
+
+def sharp_home_probs_as_of(
+    session: Session,
+    cutoff_by_game: Mapping[int, datetime],
+    game_ids: Iterable[int],
+    books: Optional[Mapping[int, str]] = None,
+) -> Dict[int, float]:
+    """
+    game id -> de-vigged sharp probability of the home side using, per book and side, the newest h2h quote captured
+    at or before the game's cutoff (``cutoff_by_game``: tip-off for the close, the prediction time for "what the
+    market said when the model spoke"). Games without a two-sided quote at that moment are left out.
+    """
     book_keys = dict(sharp_books(session) if books is None else books)
     game_ids = list(game_ids)
     if not game_ids or not book_keys:
@@ -61,7 +75,7 @@ def sharp_closing_home_probs(
             OddsHistory.player_id.is_(None),
         )
     ).scalars():
-        if row.captured_at is None or _aware_utc(row.captured_at) > _aware_utc(commence_by_game[row.game_id]):
+        if row.captured_at is None or _aware_utc(row.captured_at) > _aware_utc(cutoff_by_game[row.game_id]):
             continue
         recency = (_aware_utc(row.captured_at), _aware_utc(row.book_last_update), row.id)
         key = (row.game_id, row.sportsbook_id, _enum_value(row.side))

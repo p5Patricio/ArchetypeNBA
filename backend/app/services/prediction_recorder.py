@@ -29,6 +29,11 @@ Design notes
   unchanged price inserts no new odds row) is at most ``max_quote_age_minutes`` old.
 - Fair probability: the sharp book's de-vigged two-sided pair at one line. Without a pair the predictions are
   still recorded and no bet is placed. Candidates are priced at the best quote of the same line.
+- ``calibrated`` strategy: flat 1 unit on h2h and spreads when the model's win probability is within
+  ``MAX_DISAGREEMENT`` of Pinnacle's and the EV with the logit blend (model weight ``w`` fitted once per run by
+  ``app.services.blend_calibration`` on the champion's own record) clears ``MIN_EV``. ``w == 0`` (fewer than 100
+  calibration games, or no evidence of skill) places nothing. The weight is stored on the bet (``blend_weight``).
+  The other strategies keep the v1 policy unchanged.
 - A bet is placed at most once per (strategy, game, market, side) across all runs, never at or after tip-off.
   ``placed_at`` is the injected ``now``.
 - ``dry_run`` computes everything and issues no INSERT at all.
@@ -61,6 +66,7 @@ from app.models import (
     StakingStrategy,
 )
 from app.services import model_registry
+from app.services.blend_calibration import BlendWeight, compute_blend_weight
 from app.services.elo_service import MODEL_NAME, MODEL_VERSION
 from app.services.model_registry import ModelFamily, ModelRegistryError, Prediction
 from app.services.odds_ingestion import OddsIngestionService
@@ -78,6 +84,7 @@ _STRATEGIES = (
     StakingStrategy.kelly_fractional,
     StakingStrategy.kelly_shrunk,
     StakingStrategy.market_edge,
+    StakingStrategy.calibrated,
 )
 _SETTLED = (BetStatus.won, BetStatus.lost, BetStatus.push)
 
@@ -137,6 +144,7 @@ class RecorderSummary:
     skipped: Counter = field(default_factory=Counter)  # reason -> count
     candidates: List[CandidateRecord] = field(default_factory=list)
     models: Dict[int, ModelRecorderStats] = field(default_factory=dict)  # champion first, then challengers
+    blend: BlendWeight = field(default_factory=BlendWeight)  # weight of the model for the `calibrated` strategy
 
 
 @dataclass(frozen=True)
@@ -182,6 +190,7 @@ class PredictionRecorder:
         self.now = _aware_utc(now) if now is not None else datetime.now(timezone.utc)
         self.horizon = timedelta(hours=horizon_hours)
         self.max_quote_age = timedelta(minutes=max_quote_age_minutes)
+        self._blend = BlendWeight()
         self._benchmark: Optional[ModelVersion] = None
         self._totals_shadow: Optional[ModelVersion] = None
         self._totals_state: Optional[Any] = None
@@ -195,6 +204,8 @@ class PredictionRecorder:
         summary = RecorderSummary(now=self.now, dry_run=dry_run)
         models = self._load_models(summary)
         champion, challengers = models[0], models[1:]
+        self._blend = self._champion_blend(champion)
+        summary.blend = self._blend
         self._benchmark = model_registry.ensure_market_benchmark(self.session)
         self._totals_shadow = model_registry.ensure_totals_shadow_model(self.session)
         self._props_shadow = model_registry.ensure_props_shadow_model(self.session)
@@ -239,6 +250,16 @@ class PredictionRecorder:
         for challenger in challengers:
             self._run_challenger(challenger, games, blocked, quotes, season_ids, summary)
         return summary
+
+    def _champion_blend(self, champion: _ActiveModel) -> BlendWeight:
+        """The champion's fitted blend weight, computed once per run; any failure fails closed (weight 0)."""
+        champion_id = champion.stats.model_version_id
+        try:
+            return compute_blend_weight(self.session, champion_id)
+        except Exception as exc:
+            self.session.rollback()
+            logger.warning(f"recorder: blend weight could not be computed, `calibrated` will not bet: {exc!r}")
+            return BlendWeight()
 
     def _run_challenger(
         self,
@@ -708,11 +729,14 @@ class PredictionRecorder:
             )
         )
         market_decision = policy.evaluate_market_edge(p_fair, quote.price)
+        calibrated_decision = policy.evaluate_calibrated(p_win, p_push, p_loss, p_fair, quote.price, self._blend.w_used)
 
         if not decision.eligible:
             summary.skipped[decision.reason] += 1
-            if not market_decision.eligible:
-                return
+        if not calibrated_decision.eligible:
+            summary.skipped[f"calibrated_{calibrated_decision.reason}"] += 1
+        if not (decision.eligible or market_decision.eligible or calibrated_decision.eligible):
+            return
 
         if _aware_utc(game.commence_time) <= self.now:  # hard guard: nothing at or after tip-off
             summary.skipped["game_started"] += 1
@@ -721,10 +745,16 @@ class PredictionRecorder:
         today = _local_day(self.now)
         for strategy in _STRATEGIES:
             name = strategy.value
+            blend_weight = None
             if strategy == StakingStrategy.market_edge:
                 if not market_decision.eligible:
                     continue
                 strat_ev = market_decision.ev
+            elif strategy == StakingStrategy.calibrated:
+                if not calibrated_decision.eligible:
+                    continue
+                strat_ev = calibrated_decision.ev
+                blend_weight = Decimal(f"{self._blend.w_used:.3f}")
             else:
                 if not decision.eligible:
                     continue
@@ -751,7 +781,7 @@ class PredictionRecorder:
                     bankroll, decision.f_star, edge=edge, daily_room=day_room, game_room=game_room
                 )
                 multiplier = Decimal(f"{eff_mult:.3f}")
-            elif strategy == StakingStrategy.market_edge:
+            elif strategy in (StakingStrategy.market_edge, StakingStrategy.calibrated):
                 stake = policy.cap_stake(policy.flat_stake(), bankroll, daily_room=day_room, game_room=game_room)
                 multiplier = None
             else:
@@ -777,6 +807,7 @@ class PredictionRecorder:
                     ev_per_unit=Decimal(f"{strat_ev:.5f}"),
                     strategy=strategy,
                     kelly_multiplier=multiplier,
+                    blend_weight=blend_weight,
                     stake_units=Decimal(f"{stake:.3f}"),
                     bankroll_before=Decimal(f"{bankroll:.3f}"),
                     status=BetStatus.pending,
