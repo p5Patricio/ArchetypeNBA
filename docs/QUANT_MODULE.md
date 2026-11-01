@@ -183,6 +183,7 @@ One `FeatureState` class serves training and serving. A single chronological pas
 | `kelly_fractional` | `bankroll * f* * 0.25` (quarter Kelly), with `f*` computed from `p'` | Same caps |
 | `kelly_shrunk` | `bankroll * f* * multiplier`, where `multiplier = 0.5 * shrink_factor(edge, noise_sd)` | Same caps |
 | `market_edge` | 1 unit (flat) when `EV(p_fair, price) >= 0.02`, ignoring model edge | Same caps |
+| `calibrated` | 1 unit (flat) on h2h and spreads when the model is within 6 pp of Pinnacle and the EV with the **logit blend** at the fitted weight `w` is at least 0.02; never while `w = 0` | Same caps |
 
 #### Kelly shrinkage (Baker & McHale 2013)
 Fixed quarter-Kelly assumes parameter certainty, but in sports betting model estimation error dominates the uncertainty. The `kelly_shrunk` strategy applies the shrinkage factor:
@@ -199,6 +200,25 @@ where:
 * Staking: flat 1 unit, subject to the same bankroll, per-bet (2%), daily (10%), and per-game (4%) exposure caps.
 
 Both `kelly_shrunk` and `market_edge` are research hypotheses to be judged by **CLV against Pinnacle's closing line**, not by raw paper ROI (which requires tens of thousands of bets to separate signal from luck).
+
+#### `calibrated`: a fitted weight and a disagreement band (added 2026-11-01, D-67)
+The v1 strategies (`flat`, `kelly_fractional`, `kelly_shrunk`) are left untouched as the control (rule 8). Measured on 93 settled flat bets: mean model probability 0.593, Pinnacle's fair probability at the bet 0.480, realized win rate 0.419, ROI -17.6%. The champion's Brier (0.242) is far worse than Pinnacle's de-vigged close (0.202), so "model above market by 2 pp" selects the model's largest errors (missing injury and roster information): adverse selection. `calibrated` answers it with three rules:
+
+1. **Logit blend with a fitted weight.** $p_{\text{blend}} = \sigma\big(w\,\operatorname{logit}(p_{\text{model}}) + (1-w)\,\operatorname{logit}(p_{\text{fair}})\big)$, probabilities clipped to $[10^{-6}, 1-10^{-6}]$. $w=0$ is the market, $w=1$ the raw model.
+2. **The weight comes from evidence.** $\hat w$ is the maximum-likelihood $w$ on the grid $0.00 \ldots 0.50$ (step $0.01$) of the log loss of the home outcome under the blend, over the **calibration games**: final games where the current champion recorded an h2h home prediction strictly before tip-off and Pinnacle had a two-sided h2h quote at or before that moment. The market side is Pinnacle's de-vigged home probability **at the prediction time** (`odds_history`, `captured_at <= predicted_at`), not the close. `model_prediction.fair_decimal` cannot be used: it is the generated column `1 / model_prob`, the model's own fair price. The weight used is $w = 0$ when $n < 100$, otherwise $w = \hat w \cdot n/(n+200)$: trust in the model grows only with evidence, and a model that adds nothing to the market gets $\hat w \approx 0$ and never bets. It is computed once per recorder run for the champion and applied to h2h and spreads; a challenger promoted to champion starts again from its own record.
+3. **A disagreement band.** With $p_{\text{cond}} = p_{\text{win}}/(p_{\text{win}}+p_{\text{loss}})$, a side is a candidate only if $|p_{\text{cond}} - p_{\text{fair}}| \le 0.06$: when the model agrees with the market there is no edge, when it disagrees a lot it is probably wrong, so bets live in the band in between. Then $\text{EV} = (1-p_{\text{push}})(p_{\text{blend}}\cdot\text{price} - 1) \ge 0.02$ at the best price quoted at Pinnacle's line.
+
+Decision reasons (`evaluate_calibrated`): `invalid_input`, `no_model_weight` ($w \le 0$), `disagreement_too_large`, `ev_below_min`, `ok`; in the recorder's skip counters they appear as `calibrated_<reason>`. Every `calibrated` bet stores the weight in `simulated_bet.blend_weight` (NULL for the other strategies). `python scripts/blend_weight.py` and the `paper_report.py` line print `w_used`, `w_hat` and `n` (the tick log line `record` and `record_predictions.py` print them too); the script also prints the distribution of $|p_{\text{model}} - p_{\text{fair}}|$ over the calibration games.
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `W_MAX`, `W_STEP` | 0.5, 0.01 | Grid of the weight of the model |
+| `MIN_CALIBRATION_GAMES` | 100 | Below it `w = 0` |
+| `CALIBRATION_PRIOR_GAMES` | 200 | Shrinkage $n/(n+200)$ |
+| `MAX_DISAGREEMENT` | 0.06 | Largest absolute gap between the model and Pinnacle that can be bet |
+| `MIN_EV` | 0.02 | Shared with the other strategies |
+
+Honest expectation: with the champion this far behind the market, $\hat w$ will probably be near 0 and `calibrated` will place few or no bets until a better model (injury-aware) or more data says otherwise. That is the intended behaviour.
 
 Other constants: starting bankroll 100 units per strategy; a stake under 0.05 units is not placed; the bankroll is **100 plus settled P/L** (pending stakes are not subtracted); "daily" means the machine-local calendar day.
 
@@ -349,6 +369,7 @@ Read-only; takes no flags. Sections in order:
 | Strategy performance | One line per strategy. `win rate` = won / (won + lost). `P/L` in units. `ROI` = P/L over the stake of settled bets (pushes included). `avg CLV` and `beat close` are computed only over bets that have a CLV. With fewer than a few hundred bets, treat all of it as noise |
 | CLV coverage | "X of Y bets on tipped-off games have a CLV": the share of bets with a comparable close. "closed at another line": bets dropped by the line-move rule. "Closing captures missed": tipped-off games with no `closing` marker, lost for good. A high missed count means the PC was off |
 | Model skill of the champion | Brier of the champion against Brier of Pinnacle's de-vigged close on the **same** games. Lower is better. `difference` negative means the model beat the market. Needs a closing marker, a prediction and a two-sided Pinnacle close on a final game |
+| Calibrated blend weight | One line: `w_used`, `w_hat`, n of the `calibrated` strategy. `calibrated` bets require `w_used > 0` and a model within 6 pp of Pinnacle; `w_used = 0` below 100 calibration games or when the model adds nothing to Pinnacle |
 | Active models | The champion and each challenger with the number of predictions recorded and the final games they cover. Only the champion bets |
 | Model league | See below |
 | Bankroll | 100 units plus settled P/L per strategy |
@@ -406,7 +427,8 @@ Other limits to keep in mind:
 | Constants | File |
 |-----------|------|
 | Elo (`K`, home advantage, carryover, margin exponent, Elo per point) | `backend/app/analytics/elo.py` |
-| Betting thresholds, stake caps, bankroll | `backend/app/analytics/betting_policy.py` |
+| Betting thresholds, stake caps, bankroll, `calibrated` constants and blend fit | `backend/app/analytics/betting_policy.py` |
+| Calibration games and `w_used` / `w_hat` / n | `backend/app/services/blend_calibration.py` |
 | Horizon 20 h, quote age 6 h, stale-game window | `backend/app/services/prediction_recorder.py` |
 | Promotion, retirement, look budget, market guard | `backend/app/services/model_evaluation.py` (overridable via `LEARNING_*` in `backend/app/config.py`) |
 | Lab split, search ranges, historical gate, material differences | `backend/app/services/model_lab.py` |
