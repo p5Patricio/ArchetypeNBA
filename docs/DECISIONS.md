@@ -639,6 +639,21 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Consequences**: No database schema change required (`model_version` and `injury_entry` tables already exist). `elo_injury` competes in shadow against the champion in the model league.
 - **Source**: WP-M; [`QUANT_MODULE.md`](QUANT_MODULE.md); `app/services/elo_injury_model.py`; `scripts/register_injury_challenger.py`.
 
+### D-65 SportsGameOdds historical backfill rejected: finalized-event quotes leak the result
+- **Date**: 2026-10-31
+- **Decision**: Do not store SGO history for model evaluation. A real backfill of 120 finalized 2024-25 events (staging copy, 120 of the 600-object monthly cap) showed that the odds attached to finalized events are late in-play quotes: fair total RMSE vs the actual total is 5.98 points (book average 5.18) and the spread RMSE vs the actual margin is 3.46, while pre-game NBA lines miss by about 18 and 12-13 points. `open`/`close` fields are empty, so no pre-game price exists. The same 120 games gave `totals_pace` an RMSE of 18.44, in line with a pre-game market, which confirms the contrast.
+- **Context**: Owner chose "daily capture + staged history" on 2026-10-31 expecting ~1,230 market-referenced games. The branch `feat/sgo-historical-backfill` (migration `e7a9c1d3f5b8`, service, CLI, contamination audit) works and is kept unmerged for reference; its audit is what exposed the problem.
+- **Alternatives rejected**: using the quotes anyway (they would make any model look broken or any leak look like skill); spending the rest of the monthly budget on more history.
+- **Consequences**: Totals and props models still need live captures (about 28 totals games so far) before the n >= 200 gate can open. Stop spending SGO objects on history. Verified order of the API: ascending by start time with cursor pagination.
+- **Source**: `odd/tasks/betting-improvements.md`; branch `feat/sgo-historical-backfill`.
+
+### D-66 totals_pace v2 (shrunk league baseline) gives no gain over v1 and is not registered
+- **Date**: 2026-10-31
+- **Decision**: Keep `totals_pace` v1. Walk-forward on 4,992 real games (last five seasons, staging copy of production): pooled RMSE v1 18.97 vs v2 18.97, difference -0.001 [-0.010, +0.008]; per season the differences are all inside their intervals. The hypothesis that a stale league baseline explained the early-season bias was false: both versions are unbiased pooled (-0.0 / -0.2), and the +5 points gap of closing totals over actual totals in the first 28 live games is a small-sample feature of the market numbers, not of the model.
+- **Context**: Branch `feat/totals-pace-v2` (leak-free shrunk baseline, `scripts/totals_eval.py`, registration script, recorder support for a second totals shadow) is kept unmerged. `totals_eval.py` remains the tool to test any future totals idea against the same five seasons.
+- **Consequences**: No new `model_version`; totals bets stay disabled until a model beats the market on at least 200 live games.
+- **Source**: branch `feat/totals-pace-v2`; `odd/tasks/betting-improvements.md`.
+
 ## Next step
 
 Planned work and the reasons behind it: [`ROADMAP.md`](ROADMAP.md).
