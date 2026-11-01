@@ -623,6 +623,22 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Consequences**: Migration `d6f8b0c2e4a7` required in production; probe tool supports `--capture-dry-run`.
 - **Source**: WP-K1; `odd/tasks/betting-improvements.md`; `docs/DECISIONS.md`; `app/services/tick.py`.
 
+### D-64 Injury-aware challenger model (elo_injury) with availability adjustment
+- **Date**: 2026-10-31
+- **Decision**: Introduce a new model family `elo_injury` (registered in `app/services/elo_injury_model.py` and `app/analytics/availability.py`, with role `'challenger'`) that adjusts FiveThirtyEight-style Elo margin expectations by the expected player impact missing from pre-game official NBA injury reports:
+  1. **Player Impact Proxy**: Defined as $\text{impact} = \text{mpg} \times \max(0.0, r - r_{\text{rep}})$, where $r = \text{GameScore} / \text{minutes}$ and replacement level $r_{\text{rep}} = 0.20$ points/minute (~7.2 GmSc per 36 min), expressing player value in expected team margin points per game relative to replacement level.
+  2. **Serving**: Expected missing impact is $\sum \text{impact}_i \times (1.0 - p_{\text{avail}, i})$ from the newest official `injury_report_snapshot` within 36 hours. When no snapshot exists or the snapshot is stale, no adjustment is applied and the model equals Elo exactly (noted in predictions). Unmatched player names (`player_id is None`) are ignored and counted, never invented (Rule 3). Adjusted margin is $\mu_{\text{adj}} = \mu_{\text{elo}} + \beta \times (\text{expected\_missing\_away} - \text{expected\_missing\_home})$. Win probability follows the continuous normal margin model $p_{\text{home}} = \Phi(\mu_{\text{adj}} / \sigma)$.
+  3. **Historical Calibration & Upper-Bound Caveat**: Historical walk-forward calibration fits $\beta$ by OLS through origin using actual rotation player absences from `player_game_log` across completed seasons. Historical walk-forward metrics represent an **upper bound** of what live serving can achieve due to train/serve skew (binary historical appearances vs noisy live status probabilities).
+  4. **Registration Gate (Rule 8)**: Registered strictly via auditable CLI `scripts/register_injury_challenger.py`. The script is idempotent, supports `--dry-run`, refuses when `LEARNING_MAX_CHALLENGERS` is reached, and refuses when walk-forward log loss gain is not positive with the 95% bootstrap CI lower bound above -0.0005. The champion is never touched; registration creates a new `model_version` row with role `'challenger'`.
+  5. **Historical Evaluation CLI**: Read-only evaluation tool `scripts/injury_model_eval.py` prints walk-forward metrics by season and pooled with bootstrap confidence intervals and the upper-bound caveat.
+- **Context**: WP-M; ROADMAP item 1; `odd/tasks/betting-improvements.md`.
+- **Alternatives rejected**:
+  1. Fabricating historical injury reports (rejected: Rule 3).
+  2. Modifying champion Elo parameters or predictions in place (rejected: Rule 8).
+  3. Manual promotion without league evaluation (rejected: promotion is strictly decided by the scheduled `learn` step).
+- **Consequences**: No database schema change required (`model_version` and `injury_entry` tables already exist). `elo_injury` competes in shadow against the champion in the model league.
+- **Source**: WP-M; [`QUANT_MODULE.md`](QUANT_MODULE.md); `app/services/elo_injury_model.py`; `scripts/register_injury_challenger.py`.
+
 ## Next step
 
 Planned work and the reasons behind it: [`ROADMAP.md`](ROADMAP.md).

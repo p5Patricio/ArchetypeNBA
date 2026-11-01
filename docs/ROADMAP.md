@@ -12,7 +12,7 @@ What to build next and why, in priority order. Each item states the reason, how 
 
 | # | Item | Size | Why now |
 |---|------|------|---------|
-| 1 | Injuries and lineups as a model signal (done: schema c5e7a9b1d3f6, layout-mode PDF parser, idempotent storage, lineup snapshots, props integration, fetch script and timer) | L | The one thing the baseline cannot see and the market can |
+| 1 | Injuries and lineups as a model signal (done: schema c5e7a9b1d3f6, layout-mode PDF parser, idempotent storage, lineup snapshots, props integration, fetch script and timer; WP-M: elo_injury challenger model with availability adjustment, walk-forward evaluation, and auditable registration) | L | The one thing the baseline cannot see and the market can |
 | 2 | Totals (done: grading, CLV and market-edge paper bets; props models deferred) | L | The data is already captured and paid for |
 | 3 | Frontend model-league page (done) | M | The league is invisible outside a terminal |
 | 4 | Promotion notifications (done) | S | A champion change should not go unnoticed |
@@ -57,9 +57,9 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 - [x] Tables `injury_report_snapshot`, `injury_entry`, and `lineup_snapshot` created (migration `c5e7a9b1d3f6`).
 - [x] Automated download scheduler `fetch_injuries.py` and systemd units `nba-injuries.timer` / `.service`.
 - [x] Props pipeline and API `GET /api/v1/injuries/latest` expose real stored injuries.
-- [ ] One feature builder serves training and serving; the leak test (perturbing the future leaves earlier features bit-identical) covers the new features.
-- [ ] The new feature set is a distinct model version that does not break the existing one, passes the historical gate in `model_lab.py`, and runs in shadow. Promotion is left to the learning loop.
-- [ ] [`QUANT_MODULE.md`](QUANT_MODULE.md) lists the new features; a decision entry is added to [`DECISIONS.md`](DECISIONS.md).
+- [x] One feature builder serves training and serving; the leak test (perturbing the future leaves earlier features bit-identical) covers the new features (WP-M: `analytics/availability.py`, `services/elo_injury_model.py`).
+- [x] The new model family `elo_injury` is registered as a challenger without breaking existing models, evaluated walk-forward via `scripts/injury_model_eval.py`, registered strictly through `scripts/register_injury_challenger.py`, and runs in shadow. Promotion is left to the learning loop (WP-M).
+- [x] [`QUANT_MODULE.md`](QUANT_MODULE.md) lists the formula and upper-bound caveat; decision entry D-64 is added to [`DECISIONS.md`](DECISIONS.md).
 
 **Risks.** Terms of use; the PDF layout may change; historical PDFs may not exist far back; the mapping from status to availability has to be estimated, not assumed; timing against the 30-minute closing window; added requests must stay rare.
 

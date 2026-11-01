@@ -141,6 +141,21 @@ One `FeatureState` class serves training and serving. A single chronological pas
 | Market benchmark | Compares model probability against the **same book's** de-vigged closing over/under quote (`devig_two_way`) at or before tip-off. Reports $n$, Brier score, log loss, paired differences with bootstrap 95% intervals, void count, and unmatched name count; displays "insufficient data" when $n < 30$ |
 | Betting status | Zero bets. Props paper bets are deliberately not built: there is no universal sharp reference for player props and the sample is tiny. Revisit when shadow evaluation reaches $n \ge 200$ |
 
+### `elo_injury`: the injury-aware challenger family
+
+`services/elo_injury_model.py` with mathematics in `analytics/availability.py`, registered in `model_version` with family name `elo_injury` and role `'challenger'`.
+
+| Item | Value |
+|------|-------|
+| Purpose | Challenger model competing directly in the model league, incorporating player availability from official NBA injury reports on top of 538-style Elo ratings |
+| Player impact proxy | Measures a player's margin contribution in points per game relative to replacement level: $\text{impact} = \text{mpg} \times \max(0.0, r - r_{\text{rep}})$, where $r = \text{GameScore} / \text{minutes}$ and $r_{\text{rep}} = 0.20$ points/minute (~7.2 GmSc per 36 min) |
+| Expected missing impact | Sum over team players of expected absence: $\text{missing} = \sum_i \text{impact}_i \times (1.0 - p_{\text{avail}, i})$ from the newest official snapshot |
+| Margin adjustment | $\mu_{\text{adj}} = \mu_{\text{elo}} + \beta \times (\text{expected\_missing\_away} - \text{expected\_missing\_home})$. Sign convention: away missing impact increases expected home margin (+); home missing impact decreases expected home margin (-). Parameter $\beta$ is fit via historical OLS through origin |
+| Win probability | $p_{\text{home}} = \Phi(\mu_{\text{adj}} / \sigma)$ from the normal margin model $M \sim \mathcal{N}(\mu_{\text{adj}}, \sigma)$ |
+| Serving & fallback | Reads the latest `injury_report_snapshot` strictly before tip-off ($\le \text{game\_time}$) not older than 36 hours. If no snapshot exists or if stale, no adjustment is applied and the model equals Elo exactly (noted in predictions). Unmatched player names (`player_id is None`) are ignored and counted, never invented (Rule 3) |
+| Upper bound caveat | **Train/serve skew**: Historical calibration fits $\beta$ on actual historical absences from `player_game_log` (binary: played vs did not play). At serving time, only noisy pre-game status probabilities from injury reports are available. Historical walk-forward metrics are strictly an **upper bound** of what live serving can achieve |
+| League & promotion | Evaluated in shadow against the champion on paired games using proper scoring rules (paired log loss and Brier). Promotion is decided strictly by the scheduled `learn` step |
+
 ## 6. Betting policy
 
 `analytics/betting_policy.py`, applied by `prediction_recorder.py`. Changing any value is a **new `model_version`** so every bet stays attributable (rule 8).
