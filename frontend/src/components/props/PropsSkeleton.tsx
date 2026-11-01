@@ -94,9 +94,6 @@ export function PropsSkeleton() {
                 <div className="h-14 rounded-xl bg-slate-100 p-2.5" />
               </div>
 
-              {/* Kelly Stake */}
-              <div className="h-8 rounded-xl bg-slate-100" />
-
               {/* Monte Carlo Range */}
               <div className="h-4 w-full bg-slate-100 rounded" />
 

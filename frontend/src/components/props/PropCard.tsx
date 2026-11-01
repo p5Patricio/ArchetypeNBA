@@ -9,7 +9,6 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ShieldCheck,
-  Percent,
   Sparkles,
 } from "lucide-react";
 import { HelpPopover } from "./HelpPopover";
@@ -295,7 +294,7 @@ export function PropCard({ prop, className = "" }: PropCardProps) {
           >
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-                {isEs ? "Ventaja (Edge)" : "Model Edge"}
+                {isEs ? "Ventaja modelo (sin validar)" : "Model edge (unvalidated)"}
               </span>
               <HelpPopover topic="EDGE" />
             </div>
@@ -315,7 +314,7 @@ export function PropCard({ prop, className = "" }: PropCardProps) {
           >
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-                Expected Value
+                {isEs ? "EV del modelo (sin validar)" : "Model EV (unvalidated)"}
               </span>
               <HelpPopover topic="EV" />
             </div>
@@ -325,20 +324,6 @@ export function PropCard({ prop, className = "" }: PropCardProps) {
                 : `${prop.expected_value_pct.toFixed(1)}% EV`}
             </span>
           </div>
-        </div>
-
-        {/* Quarter-Kelly Stake Row */}
-        <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-slate-50 border border-slate-100 text-xs">
-          <span className="font-semibold text-slate-600 flex items-center gap-1.5">
-            <Percent className="h-3.5 w-3.5 text-orange-500" />
-            <span>{isEs ? "Stake Kelly Sugerido:" : "Kelly Stake:"}</span>
-            <HelpPopover topic="KELLY" />
-          </span>
-          <span className="font-mono font-black text-slate-900 tabular-nums">
-            {prop.kelly_stake_pct > 0
-              ? `${prop.kelly_stake_pct.toFixed(1)}% bankroll`
-              : "0.0% (No bet)"}
-          </span>
         </div>
 
         {/* Monte Carlo Range P10-P90 */}
