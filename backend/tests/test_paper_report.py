@@ -36,13 +36,15 @@ def test_the_report_runs_on_empty_tables_and_says_so(world):
     report = build_report(world, NOW)
     text = format_report(report)
 
-    assert [s.strategy for s in report.strategies] == ["flat", "kelly_fractional", "kelly_shrunk", "market_edge"]
+    assert [s.strategy for s in report.strategies] == ["calibrated", "flat", "kelly_fractional", "kelly_shrunk", "market_edge"]
     assert all(s.bets == 0 and s.win_rate is None and s.roi is None and s.avg_clv is None for s in report.strategies)
     assert report.clv.coverage is None and report.skill.brier_model is None
     assert "No paper bets recorded yet." in text
     assert "No bets on tipped-off games yet." in text
     assert "Cannot be computed yet" in text
     assert "flat" in text and "100.00u" in text
+    assert "calibrated blend weight: w_used=0.000, w_hat=0.00, n=0 games" in text
+    assert "bets require w_used > 0 and |model - Pinnacle| <= 6pp" in text
 
 
 def test_performance_per_strategy_matches_the_paper_performance_view(world):

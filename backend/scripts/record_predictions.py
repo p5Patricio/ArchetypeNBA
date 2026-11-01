@@ -63,6 +63,7 @@ def format_summary(summary: RecorderSummary) -> str:
         f"games in window: {summary.games_considered}; passed the rating guards: {summary.games_processed}",
         f"predictions {verb}: {summary.predictions_written} (already recorded: {summary.predictions_existing})",
         f"bets {'that would be placed' if summary.dry_run else 'placed'}: {placed}",
+        f"calibrated blend weight: {summary.blend.summary()} (bets need w_used > 0)",
         f"candidate sides priced against the sharp line: {len(summary.candidates)}",
     ]
     eligible = [c for c in summary.candidates if c.eligible]
