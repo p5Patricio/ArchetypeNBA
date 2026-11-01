@@ -297,7 +297,10 @@ FamilyFactory = Callable[[Session, ModelVersion], ModelFamily]
 
 _FAMILIES: Dict[str, FamilyFactory] = {ELO_FAMILY_NAME: EloFamily}
 # Families defined in their own module register themselves on import; load_model imports them on first use.
-_FAMILY_MODULES: Dict[str, str] = {"margin_features": "app.services.margin_features_model"}
+_FAMILY_MODULES: Dict[str, str] = {
+    "margin_features": "app.services.margin_features_model",
+    "elo_injury": "app.services.elo_injury_model",
+}
 
 
 def register_family(name: str, factory: FamilyFactory) -> None:
