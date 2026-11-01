@@ -1043,6 +1043,18 @@ function InjuryEntriesList({
               >
                 {ent.status}
               </span>
+              {ent.impact != null && ent.impact >= 0.5 && (
+                <p
+                  className="text-[10px] font-mono font-bold text-rose-700 mt-0.5"
+                  title={
+                    isEs
+                      ? "Puntos de margen estimados que pierde el equipo sin este jugador (modelo de lesiones)"
+                      : "Estimated margin points the team loses without this player (injury model)"
+                  }
+                >
+                  ≈ −{ent.impact.toFixed(1)} pts
+                </p>
+              )}
               {ent.availability_prob != null && (
                 <p className="text-[10px] font-mono text-slate-400 mt-0.5">
                   {Math.round(ent.availability_prob * 100)}% prob

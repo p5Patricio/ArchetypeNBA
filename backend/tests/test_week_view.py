@@ -471,3 +471,53 @@ def test_week_api_endpoint_populated(client: TestClient, db_session: Session):
     assert data[0]["away_team"]["abbreviation"] == "BBB"
     assert data[0]["champion_prediction"]["p_home"] > 0.5
 
+
+
+def test_week_view_uses_latest_snapshot_when_several_exist(db_session: Session):
+    """Several stored snapshots must not break the view: only the newest one is shown."""
+    world = SyntheticWorld(db_session)
+    world.make_game(home="AAA", away="BBB", days_ahead=1.0)
+    world.add_snapshot(
+        hours_old=10.0,
+        entries=[{"team_name": "AAA Basketball Team", "player_name_raw": "Old Entry", "status": "Out"}],
+    )
+    world.add_snapshot(
+        hours_old=2.0,
+        entries=[{"team_name": "AAA Basketball Team", "player_name_raw": "New Entry", "status": "Out"}],
+    )
+
+    items = build_week_view(db_session, days=7, now=NOW)
+    names = [e.player_name for e in items[0].home_team.injuries.entries]
+    assert names == ["New Entry"]
+    assert items[0].injury_snapshot_stale is False
+
+
+def test_injury_entries_carry_impact_when_a_lookup_is_available(db_session: Session):
+    from app.services.week_view import _match_team_injuries
+
+    world = SyntheticWorld(db_session)
+    world.add_snapshot(
+        hours_old=1.0,
+        entries=[
+            {"team_name": "AAA Basketball Team", "player_name_raw": "Star", "status": "Out"},
+            {"team_name": "AAA Basketball Team", "player_name_raw": "Unknown Id", "status": "Out"},
+        ],
+    )
+    from app.services.week_view import _load_injuries_by_team
+
+    _, by_team = _load_injuries_by_team(db_session)
+    for entry_list in by_team.values():
+        for e in entry_list:
+            e.player_id = 7 if e.player_name_raw == "Star" else None
+
+    def lookup(player_id: int) -> float:
+        return 4.2567
+
+    out = _match_team_injuries(world.teams["AAA"], by_team, lookup)
+    impacts = {e.player_name: e.impact for e in out}
+    assert impacts == {"Star": 4.26, "Unknown Id": None}
+
+    def broken(player_id: int) -> float:
+        raise RuntimeError("boom")
+
+    assert all(e.impact is None for e in _match_team_injuries(world.teams["AAA"], by_team, broken))

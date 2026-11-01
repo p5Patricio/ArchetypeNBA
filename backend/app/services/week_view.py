@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import logging
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field
@@ -67,6 +67,7 @@ class TeamInjuryEntry(BaseModel):
     status: str
     reason: Optional[str] = None
     availability_prob: Optional[float] = None
+    # Estimated margin points the team loses without the player (injury model beta x availability proxy).
     impact: Optional[float] = None
 
 
@@ -228,6 +229,12 @@ def build_week_view(
         except Exception as exc:
             logger.warning("Could not load challenger model id=%s: %s", crow.id, exc)
 
+    # Player impact comes from the injury-aware family when one is registered (shadow challenger);
+    # without it the entries simply carry no impact figure.
+    impact_family = next(
+        (fam for _, fam in challengers if callable(getattr(fam, "get_player_impact", None))), None
+    )
+
     # 5. Quotes & Pinnacle reference
     quotes_by_game = _load_quotes_for_games(session, game_ids, now)
 
@@ -337,8 +344,11 @@ def build_week_view(
         )
 
         # Team injuries
-        home_injuries = _match_team_injuries(home_team, entries_by_team)
-        away_injuries = _match_team_injuries(away_team, entries_by_team)
+        impact_fn = None
+        if impact_family is not None:
+            impact_fn = lambda pid, _sid=season_id, _d=commence_local.date(): impact_family.beta * impact_family.get_player_impact(pid, _sid, _d)  # noqa: E731
+        home_injuries = _match_team_injuries(home_team, entries_by_team, impact_fn)
+        away_injuries = _match_team_injuries(away_team, entries_by_team, impact_fn)
 
         home_team_view = TeamWeekView(
             id=game.home_team_id,
@@ -598,7 +608,7 @@ def _load_injuries_by_team(
             InjuryReportSnapshot.report_timestamp.desc(),
             InjuryReportSnapshot.id.desc(),
         )
-    ).scalar_one_or_none()
+    ).scalars().first()
 
     if snapshot is None:
         return None, {}
@@ -623,7 +633,9 @@ def _load_injuries_by_team(
 
 
 def _match_team_injuries(
-    team: Optional[Team], entries_by_team: Dict[str, List[InjuryEntry]]
+    team: Optional[Team],
+    entries_by_team: Dict[str, List[InjuryEntry]],
+    impact_fn: Optional[Callable[[int], float]] = None,
 ) -> List[TeamInjuryEntry]:
     """Matches injury entries to a team by full name, abbreviation, or city."""
     if team is None or not entries_by_team:
@@ -651,8 +663,19 @@ def _match_team_injuries(
                 status=c.status,
                 reason=c.reason,
                 availability_prob=prob,
-                impact=None,  # No impact helper is registered in main
+                impact=_safe_impact(impact_fn, c.player_id),
             )
         )
-    result.sort(key=lambda item: (item.status, item.player_name))
+    result.sort(key=lambda item: (-(item.impact or 0.0), item.status, item.player_name))
     return result
+
+
+def _safe_impact(impact_fn: Optional[Callable[[int], float]], player_id: Optional[int]) -> Optional[float]:
+    """Estimated margin points lost without the player; ``None`` when it cannot be computed."""
+    if impact_fn is None or player_id is None:
+        return None
+    try:
+        return round(float(impact_fn(player_id)), 2)
+    except Exception as exc:  # a lookup failure must never break the view
+        logger.warning("Could not compute injury impact for player %s: %s", player_id, exc)
+        return None
