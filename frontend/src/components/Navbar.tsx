@@ -7,6 +7,8 @@ import { SeasonSelect } from "./SeasonSelect";
 import { Sidebar } from "./Sidebar";
 import { ShutdownModal } from "./ShutdownModal";
 import { usePreferences } from "@/context/PreferencesContext";
+import { ModeToggle } from "./ModeToggle";
+import { MODE_THEME } from "@/lib/modes";
 
 interface NavbarProps {
   currentSeasonId?: number | null;
@@ -18,8 +20,9 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isShutdownOpen, setIsShutdownOpen] = useState(false);
-  const { language, setLanguage, unitSystem, setUnitSystem, t, seasonId: globalSeasonId, setSeason: setGlobalSeason } = usePreferences();
+  const { language, setLanguage, unitSystem, setUnitSystem, t, mode, seasonId: globalSeasonId, setSeason: setGlobalSeason } = usePreferences();
 
+  const modeTheme = MODE_THEME[mode];
   const effectiveSeasonId = currentSeasonId !== undefined ? currentSeasonId : globalSeasonId;
   const handleSeasonChange = (sId: number, sLabel?: string) => {
     setGlobalSeason(sId, sLabel);
@@ -28,6 +31,7 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
 
   // Page title resolution for top header
   const getPageTitle = () => {
+    if (pathname.startsWith("/betting")) return language === "es" ? "Hub de Apuestas" : "Betting Hub";
     if (pathname === "/") return language === "es" ? "Scouting Hub" : "Scouting Hub";
     if (pathname.startsWith("/versus")) return language === "es" ? "Coliseo 1 vs 1" : "1 vs 1 Colosseum";
     if (pathname.startsWith("/shot-zones")) return language === "es" ? "Zonas de Tiro (Coordenadas Paralelas)" : "Shot Zones Parallel Coordinates";
@@ -38,7 +42,7 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
     if (pathname.startsWith("/hall-of-fame")) return language === "es" ? "Salón de la Fama" : "Hall of Fame";
     if (pathname.startsWith("/timeline")) return language === "es" ? "Línea del Tiempo NBA" : "NBA Historical Timeline";
     if (pathname.startsWith("/teams")) return language === "es" ? "Franquicias NBA" : "NBA Franchises";
-    if (pathname.startsWith("/props")) return language === "es" ? "Player Props & +EV" : "Player Props & +EV";
+    if (pathname.startsWith("/props")) return language === "es" ? "Player Props (experimental)" : "Player Props (experimental)";
     if (pathname.startsWith("/paper")) return language === "es" ? "Paper Trading Dashboard" : "Paper Trading Dashboard";
     if (pathname.startsWith("/league")) return language === "es" ? "Model League" : "Model League";
     if (pathname.startsWith("/player")) return language === "es" ? "Scouting Lab de Jugador" : "Player Scouting Lab";
@@ -62,7 +66,9 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
 
       {/* Top Header Navigation (Offset on desktop for sidebar) */}
       <header className="sticky top-0 z-30 w-full border-b border-slate-200 bg-white/90 backdrop-blur-md transition-all shadow-2xs md:pl-64">
-        <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+        {/* Mode colour bar: orange = analytics, emerald = betting */}
+        <div className={`h-1 w-full ${modeTheme.topBar}`} aria-hidden="true" />
+        <div className="flex h-[60px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">
           
           {/* Left: Mobile Toggle & Page Breadcrumb Title */}
           <div className="flex min-w-0 items-center gap-3">
@@ -74,11 +80,26 @@ export function Navbar({ currentSeasonId, onSeasonChange, onOpenSearch }: Navbar
               <Menu className="h-5 w-5" />
             </button>
 
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400 hidden sm:inline">
-                PANEL /
+            {/* Product mode switch (desktop/tablet; mobile drawer has its own) */}
+            <ModeToggle className="hidden md:inline-flex" />
+
+            <div className="hidden min-w-0 items-center gap-2 xl:flex">
+              <span
+                className={`rounded-md border px-1.5 py-0.5 text-[10px] font-black tracking-wide ${modeTheme.badgeClass}`}
+              >
+                {modeTheme.badge[language]}
               </span>
               <h1 className="text-sm sm:text-base font-black tracking-tight text-slate-900 truncate">
+                {getPageTitle()}
+              </h1>
+            </div>
+
+            {/* Compact title for phones (mode badge + page title) */}
+            <div className="flex min-w-0 items-center gap-2 md:hidden">
+              <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-black ${modeTheme.badgeClass}`}>
+                {modeTheme.badge[language]}
+              </span>
+              <h1 className="text-sm font-black tracking-tight text-slate-900 truncate">
                 {getPageTitle()}
               </h1>
             </div>

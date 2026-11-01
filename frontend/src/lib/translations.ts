@@ -141,11 +141,14 @@ export const translations = {
     select_team_prompt: "Seleccioná una franquicia para ver su plantilla.",
 
     // Command Palette
-    cmd_placeholder: "Buscar jugador por nombre, equipo o arquetipo...",
+    cmd_placeholder: "Buscar jugador o ir a una página...",
     cmd_loading: "Cargando catálogo de jugadores de la base de datos...",
     cmd_no_results: "No se encontraron jugadores para \"{query}\"",
     cmd_hint: "Seleccioná con click para ingresar al Scouting Lab",
     cmd_close: "ESC para cerrar",
+    cmd_group_pages: "Páginas",
+    cmd_group_players: "Jugadores",
+    mode_switch_label: "Cambiar de modo",
 
     // Training Camp & Positional Analysis
     nav_training_camp: "Campo de Entrenamiento",
@@ -351,11 +354,14 @@ export const translations = {
     select_team_prompt: "Select a franchise to inspect its roster.",
 
     // Command Palette
-    cmd_placeholder: "Search player by name, team, or archetype...",
+    cmd_placeholder: "Search a player or jump to a page...",
     cmd_loading: "Loading player database catalog...",
     cmd_no_results: "No players found for \"{query}\"",
     cmd_hint: "Click or press Enter to open Scouting Lab",
     cmd_close: "ESC to close",
+    cmd_group_pages: "Pages",
+    cmd_group_players: "Players",
+    mode_switch_label: "Switch mode",
 
     // Training Camp & Positional Analysis
     training_page_title: "Positional Analysis & Training Camp",

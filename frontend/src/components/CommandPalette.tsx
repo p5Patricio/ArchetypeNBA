@@ -6,6 +6,7 @@ import { Search, ArrowRight, X } from "lucide-react";
 import { getPlayers, type PlayerListItem } from "@/lib/api";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { usePreferences } from "@/context/PreferencesContext";
+import { MODE_HOME, MODE_ROUTES, MODE_THEME, type AppMode, type ModeRoute } from "@/lib/modes";
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -15,7 +16,7 @@ interface CommandPaletteProps {
 
 export function CommandPalette({ isOpen, onClose, seasonId }: CommandPaletteProps) {
   const router = useRouter();
-  const { t } = usePreferences();
+  const { t, language, mode } = usePreferences();
   const [query, setQuery] = useState("");
   const [players, setPlayers] = useState<PlayerListItem[]>([]);
   const [filtered, setFiltered] = useState<PlayerListItem[]>([]);
@@ -71,7 +72,34 @@ export function CommandPalette({ isOpen, onClose, seasonId }: CommandPaletteProp
     }
   }, [query, players]);
 
+  // Page entries: the two mode homes when idle, every navigable page when searching.
+  // The current mode's pages are listed first; each row carries its mode badge.
+  const pageGroups: { mode: AppMode; routes: ModeRoute[] }[] = (["analysis", "betting"] as AppMode[])
+    .sort((a, b) => (a === mode ? -1 : b === mode ? 1 : 0))
+    .map((m) => {
+      const q = query.trim().toLowerCase();
+      const routes = MODE_ROUTES.filter((r) => {
+        if (r.mode !== m || !r.nav) return false;
+        if (!q) return r.href === MODE_HOME[m];
+        return (
+          r.label.es.toLowerCase().includes(q) ||
+          r.label.en.toLowerCase().includes(q) ||
+          MODE_THEME[m].label.es.toLowerCase().includes(q) ||
+          MODE_THEME[m].label.en.toLowerCase().includes(q)
+        );
+      });
+      return { mode: m, routes };
+    })
+    .filter((g) => g.routes.length > 0);
+
+  const hasResults = pageGroups.length > 0 || filtered.length > 0;
+
   if (!isOpen) return null;
+
+  const handleSelectPage = (href: string) => {
+    onClose();
+    router.push(href);
+  };
 
   const handleSelect = (playerName: string) => {
     onClose();
@@ -110,53 +138,99 @@ export function CommandPalette({ isOpen, onClose, seasonId }: CommandPaletteProp
 
         {/* Results List */}
         <div className="max-h-96 overflow-y-auto p-2 space-y-1">
+          {/* Pages, grouped by mode */}
+          {pageGroups.map((group) => {
+            const theme = MODE_THEME[group.mode];
+            return (
+              <div key={group.mode} role="group" aria-label={theme.label[language]}>
+                <div className="flex items-center gap-2 px-3 pb-1 pt-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {t("cmd_group_pages")}
+                  </span>
+                  <span className={`rounded-md border px-1.5 py-0.5 text-[9px] font-black ${theme.badgeClass}`}>
+                    {theme.badge[language]}
+                  </span>
+                </div>
+                {group.routes.map((route) => {
+                  const Icon = route.icon;
+                  return (
+                    <button
+                      key={route.href}
+                      onClick={() => handleSelectPage(route.href)}
+                      className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition ${theme.hoverRow}`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <Icon className={`h-4 w-4 ${theme.accentText}`} />
+                        <span className="text-sm font-bold text-slate-900">{route.label[language]}</span>
+                      </span>
+                      <ArrowRight className="h-4 w-4 text-slate-300 transition group-hover:text-slate-500" />
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+
+          {/* Players (NBA Analytics) */}
           {loading ? (
             <div className="py-8 text-center text-xs text-slate-500">
               {t("cmd_loading")}
             </div>
-          ) : filtered.length === 0 ? (
+          ) : !hasResults ? (
             <div className="py-8 text-center text-xs text-slate-500">
               {t("cmd_no_results", { query })}
             </div>
           ) : (
-            filtered.map((player) => (
-              <button
-                key={player.player_id}
-                onClick={() => handleSelect(player.player_name)}
-                className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition hover:bg-orange-50/70"
-              >
-                <div className="flex items-center gap-3">
-                  <PlayerAvatar
-                    playerId={player.player_id}
-                    playerName={player.player_name}
-                    headshotUrl={player.headshot_url}
-                    size={36}
-                  />
-                  <div>
-                    <div className="text-sm font-bold text-slate-900 group-hover:text-orange-600 transition">
-                      {player.player_name}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <span>{player.team_name || player.team_abbreviation || "NBA"}</span>
-                      {player.role_name && (
-                        <>
-                          <span>•</span>
-                          <span className="text-sky-600 font-semibold">{player.role_name}</span>
-                        </>
-                      )}
+            filtered.length > 0 && (
+              <div role="group" aria-label={t("cmd_group_players")}>
+                <div className="flex items-center gap-2 px-3 pb-1 pt-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {t("cmd_group_players")}
+                  </span>
+                  <span className={`rounded-md border px-1.5 py-0.5 text-[9px] font-black ${MODE_THEME.analysis.badgeClass}`}>
+                    {MODE_THEME.analysis.badge[language]}
+                  </span>
+                </div>
+                {filtered.map((player) => (
+                <button
+                  key={player.player_id}
+                  onClick={() => handleSelect(player.player_name)}
+                  className="group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition hover:bg-orange-50/70"
+                >
+                  <div className="flex items-center gap-3">
+                    <PlayerAvatar
+                      playerId={player.player_id}
+                      playerName={player.player_name}
+                      headshotUrl={player.headshot_url}
+                      size={36}
+                    />
+                    <div>
+                      <div className="text-sm font-bold text-slate-900 group-hover:text-orange-600 transition">
+                        {player.player_name}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <span>{player.team_name || player.team_abbreviation || "NBA"}</span>
+                        {player.role_name && (
+                          <>
+                            <span>•</span>
+                            <span className="text-sky-600 font-semibold">{player.role_name}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="text-right font-mono text-xs">
-                    <span className="text-slate-900 font-bold">{player.pts ? player.pts.toFixed(1) : 0}</span>{" "}
-                    <span className="text-slate-400 font-semibold">PPG</span>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right font-mono text-xs">
+                      <span className="text-slate-900 font-bold">{player.pts ? player.pts.toFixed(1) : 0}</span>{" "}
+                      <span className="text-slate-400 font-semibold">PPG</span>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-orange-500 transition" />
                   </div>
-                  <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-orange-500 transition" />
-                </div>
-              </button>
-            ))
+                </button>
+                ))}
+              </div>
+            )
           )}
         </div>
 
