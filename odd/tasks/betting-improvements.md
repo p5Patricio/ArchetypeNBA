@@ -98,4 +98,4 @@ Owner decisions: automated NBA injury report downloads allowed (game days only, 
 - Verified live on a staging copy of production: the `sgo` tick step captured 8 events for 8 objects and stored 1,724 quotes (main markets and props for about 55 players per market, nine books) plus 24 consensus rows kept outside `odds_history`.
 - Tests: 970 passed, 4 skipped on the integrated branch; migrations `c5e7a9b1d3f6` and `d6f8b0c2e4a7` applied to a fresh copy of production.
 - Still to do: the injury-aware shadow model and the weekly view (need a few days of stored injury reports), the SportsGameOdds historical backfill and its evaluation against the consensus.
-
+- Update (2026-10-31, later): the SportsGameOdds historical backfill was built and run for 120 events on a staging copy; its quotes leak the final result (D-65), so it is rejected and no more objects are spent on history. `totals_pace` v2 was built and evaluated on 4,992 real games: no gain over v1 (D-66), not registered. Both branches stay unmerged for reference.

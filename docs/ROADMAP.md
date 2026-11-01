@@ -12,7 +12,7 @@ What to build next and why, in priority order. Each item states the reason, how 
 
 | # | Item | Size | Why now |
 |---|------|------|---------|
-| 1 | Injuries and lineups as a model signal (done: schema c5e7a9b1d3f6, layout-mode PDF parser, idempotent storage, lineup snapshots, props integration, fetch script and timer) | L | The one thing the baseline cannot see and the market can |
+| 1 | Injuries and lineups as a model signal (done: schema c5e7a9b1d3f6, layout-mode PDF parser, idempotent storage, lineup snapshots, props integration, fetch script and timer; WP-M: elo_injury challenger model with availability adjustment, walk-forward evaluation, and auditable registration) | L | The one thing the baseline cannot see and the market can |
 | 2 | Totals (done: grading, CLV and market-edge paper bets; props models deferred) | L | The data is already captured and paid for |
 | 3 | Frontend model-league page (done) | M | The league is invisible outside a terminal |
 | 4 | Promotion notifications (done) | S | A champion change should not go unnoticed |
@@ -23,6 +23,7 @@ What to build next and why, in priority order. Each item states the reason, how 
 | 9 | CI that runs the test suite (done) | S | No automated check exists |
 | 10 | Legacy cleanup (done) | M | Dead code and confusing duplicates |
 | 11 | Fix `props_engine.load_baselines_from_db` (done) | S | It reads a SQLite file that does not exist |
+| 12 | Weekly view: predictions, injuries and candidate paper bets for next 7-14 days (done) | M | Visibility over upcoming week games, model edges and injury context |
 
 Small fixes found while writing these docs are listed at the end ([hygiene](#hygiene-fixes)).
 
@@ -57,9 +58,9 @@ Small fixes found while writing these docs are listed at the end ([hygiene](#hyg
 - [x] Tables `injury_report_snapshot`, `injury_entry`, and `lineup_snapshot` created (migration `c5e7a9b1d3f6`).
 - [x] Automated download scheduler `fetch_injuries.py` and systemd units `nba-injuries.timer` / `.service`.
 - [x] Props pipeline and API `GET /api/v1/injuries/latest` expose real stored injuries.
-- [ ] One feature builder serves training and serving; the leak test (perturbing the future leaves earlier features bit-identical) covers the new features.
-- [ ] The new feature set is a distinct model version that does not break the existing one, passes the historical gate in `model_lab.py`, and runs in shadow. Promotion is left to the learning loop.
-- [ ] [`QUANT_MODULE.md`](QUANT_MODULE.md) lists the new features; a decision entry is added to [`DECISIONS.md`](DECISIONS.md).
+- [x] One feature builder serves training and serving; the leak test (perturbing the future leaves earlier features bit-identical) covers the new features (WP-M: `analytics/availability.py`, `services/elo_injury_model.py`).
+- [x] The new model family `elo_injury` is registered as a challenger without breaking existing models, evaluated walk-forward via `scripts/injury_model_eval.py`, registered strictly through `scripts/register_injury_challenger.py`, and runs in shadow. Promotion is left to the learning loop (WP-M).
+- [x] [`QUANT_MODULE.md`](QUANT_MODULE.md) lists the formula and upper-bound caveat; decision entry D-64 is added to [`DECISIONS.md`](DECISIONS.md).
 
 **Risks.** Terms of use; the PDF layout may change; historical PDFs may not exist far back; the mapping from status to availability has to be estimated, not assumed; timing against the 30-minute closing window; added requests must stay rare.
 
@@ -257,6 +258,7 @@ Small items found while documenting (2026-10-26). Each is a few lines.
 | Fabricated injuries removed (part of item 1) | `fetch_injury_report()` returns `available=false` with a reason; the NBA PDF download is behind `INJURY_PDF_ENABLED` (default off), the parser works on text and is tested offline; `scripts/log_lineups.py` measures how early `nba_api` publishes starters |
 | Multiple-comparison control in the lab (research item 4) | Reality Check, SPA and DM-HLN p-values recorded for every lab run; `LAB_MULTITEST_GATE` (default off) makes SPA p < 0.2 a registration condition |
 | Closing-quote presence record (item 6) | `odds_capture_presence` table (migration `f1a9c3d7e5b2`) records quotes seen in closing capture payloads; `fill_clv` and Pinnacle CLV report require presence when presence rows exist, counting absent quotes as `absent_at_close`; `v_closing_odds` updated |
+| Weekly view (WP-W, item 12) | Pure read-only service `week_view.py` + endpoint `GET /api/v1/week?days=7` and responsive Next.js `/week` page; provides upcoming games, on-demand Elo champion and challenger probabilities, Pinnacle sharp devig, line shopping, candidate paper bet flags, and official injury report entries |
 
 ### Found while doing this work (2026-10-28)
 

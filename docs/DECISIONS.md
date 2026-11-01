@@ -623,6 +623,37 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Consequences**: Migration `d6f8b0c2e4a7` required in production; probe tool supports `--capture-dry-run`.
 - **Source**: WP-K1; `odd/tasks/betting-improvements.md`; `docs/DECISIONS.md`; `app/services/tick.py`.
 
+### D-64 Injury-aware challenger model (elo_injury) with availability adjustment
+- **Date**: 2026-10-31
+- **Decision**: Introduce a new model family `elo_injury` (registered in `app/services/elo_injury_model.py` and `app/analytics/availability.py`, with role `'challenger'`) that adjusts FiveThirtyEight-style Elo margin expectations by the expected player impact missing from pre-game official NBA injury reports:
+  1. **Player Impact Proxy**: Defined as $\text{impact} = \text{mpg} \times \max(0.0, r - r_{\text{rep}})$, where $r = \text{GameScore} / \text{minutes}$ and replacement level $r_{\text{rep}} = 0.20$ points/minute (~7.2 GmSc per 36 min), expressing player value in expected team margin points per game relative to replacement level.
+  2. **Serving**: Expected missing impact is $\sum \text{impact}_i \times (1.0 - p_{\text{avail}, i})$ from the newest official `injury_report_snapshot` within 36 hours. When no snapshot exists or the snapshot is stale, no adjustment is applied and the model equals Elo exactly (noted in predictions). Unmatched player names (`player_id is None`) are ignored and counted, never invented (Rule 3). Adjusted margin is $\mu_{\text{adj}} = \mu_{\text{elo}} + \beta \times (\text{expected\_missing\_away} - \text{expected\_missing\_home})$. Win probability follows the continuous normal margin model $p_{\text{home}} = \Phi(\mu_{\text{adj}} / \sigma)$.
+  3. **Historical Calibration & Upper-Bound Caveat**: Historical walk-forward calibration fits $\beta$ by OLS through origin using actual rotation player absences from `player_game_log` across completed seasons. Historical walk-forward metrics represent an **upper bound** of what live serving can achieve due to train/serve skew (binary historical appearances vs noisy live status probabilities).
+  4. **Registration Gate (Rule 8)**: Registered strictly via auditable CLI `scripts/register_injury_challenger.py`. The script is idempotent, supports `--dry-run`, refuses when `LEARNING_MAX_CHALLENGERS` is reached, and refuses when walk-forward log loss gain is not positive with the 95% bootstrap CI lower bound above -0.0005. The champion is never touched; registration creates a new `model_version` row with role `'challenger'`.
+  5. **Historical Evaluation CLI**: Read-only evaluation tool `scripts/injury_model_eval.py` prints walk-forward metrics by season and pooled with bootstrap confidence intervals and the upper-bound caveat.
+- **Context**: WP-M; ROADMAP item 1; `odd/tasks/betting-improvements.md`.
+- **Alternatives rejected**:
+  1. Fabricating historical injury reports (rejected: Rule 3).
+  2. Modifying champion Elo parameters or predictions in place (rejected: Rule 8).
+  3. Manual promotion without league evaluation (rejected: promotion is strictly decided by the scheduled `learn` step).
+- **Consequences**: No database schema change required (`model_version` and `injury_entry` tables already exist). `elo_injury` competes in shadow against the champion in the model league.
+- **Source**: WP-M; [`QUANT_MODULE.md`](QUANT_MODULE.md); `app/services/elo_injury_model.py`; `scripts/register_injury_challenger.py`.
+
+### D-65 SportsGameOdds historical backfill rejected: finalized-event quotes leak the result
+- **Date**: 2026-10-31
+- **Decision**: Do not store SGO history for model evaluation. A real backfill of 120 finalized 2024-25 events (staging copy, 120 of the 600-object monthly cap) showed that the odds attached to finalized events are late in-play quotes: fair total RMSE vs the actual total is 5.98 points (book average 5.18) and the spread RMSE vs the actual margin is 3.46, while pre-game NBA lines miss by about 18 and 12-13 points. `open`/`close` fields are empty, so no pre-game price exists. The same 120 games gave `totals_pace` an RMSE of 18.44, in line with a pre-game market, which confirms the contrast.
+- **Context**: Owner chose "daily capture + staged history" on 2026-10-31 expecting ~1,230 market-referenced games. The branch `feat/sgo-historical-backfill` (migration `e7a9c1d3f5b8`, service, CLI, contamination audit) works and is kept unmerged for reference; its audit is what exposed the problem.
+- **Alternatives rejected**: using the quotes anyway (they would make any model look broken or any leak look like skill); spending the rest of the monthly budget on more history.
+- **Consequences**: Totals and props models still need live captures (about 28 totals games so far) before the n >= 200 gate can open. Stop spending SGO objects on history. Verified order of the API: ascending by start time with cursor pagination.
+- **Source**: `odd/tasks/betting-improvements.md`; branch `feat/sgo-historical-backfill`.
+
+### D-66 totals_pace v2 (shrunk league baseline) gives no gain over v1 and is not registered
+- **Date**: 2026-10-31
+- **Decision**: Keep `totals_pace` v1. Walk-forward on 4,992 real games (last five seasons, staging copy of production): pooled RMSE v1 18.97 vs v2 18.97, difference -0.001 [-0.010, +0.008]; per season the differences are all inside their intervals. The hypothesis that a stale league baseline explained the early-season bias was false: both versions are unbiased pooled (-0.0 / -0.2), and the +5 points gap of closing totals over actual totals in the first 28 live games is a small-sample feature of the market numbers, not of the model.
+- **Context**: Branch `feat/totals-pace-v2` (leak-free shrunk baseline, `scripts/totals_eval.py`, registration script, recorder support for a second totals shadow) is kept unmerged. `totals_eval.py` remains the tool to test any future totals idea against the same five seasons.
+- **Consequences**: No new `model_version`; totals bets stay disabled until a model beats the market on at least 200 live games.
+- **Source**: branch `feat/totals-pace-v2`; `odd/tasks/betting-improvements.md`.
+
 ## Next step
 
 Planned work and the reasons behind it: [`ROADMAP.md`](ROADMAP.md).

@@ -263,11 +263,45 @@ Every manual change writes an audit row whose reason starts with `manual:`. A re
 - **Read API**: `GET /api/v1/injuries/latest` provides the latest snapshot with player entries grouped by team (`?include_available=true` to include Available players).
 - **Props pipeline**: `services/injury_scraper.fetch_injury_report()` automatically uses real database rows if the latest snapshot is less than 36 hours old (otherwise marks `available=False` with reason `'stale'`).
 
+### Injury-aware challenger model (`elo_injury`)
+
+- **Historical walk-forward evaluation (read-only)**:
+  Runs the walk-forward evaluation on completed seasons from `player_game_log` without modifying the database:
+  ```bash
+  python scripts/injury_model_eval.py [--seasons 5] [--min-mpg 15.0] [--bootstrap 2000]
+  ```
+  Prints a per-season and pooled summary table of fitted $\beta$, Elo vs Elo+injury log loss and Brier scores, gains with 95% bootstrap confidence intervals, and the upper-bound caveat.
+
+- **Auditable challenger registration (`scripts/register_injury_challenger.py`)**:
+  Registers an `elo_injury` challenger model under Rule 8 (creates a new `model_version` row; champion is untouched):
+  ```bash
+  # Step 1: dry run (evaluates walk-forward stats and displays proposed parameters without writes)
+  python scripts/register_injury_challenger.py --dry-run
+
+  # Step 2: live registration
+  python scripts/register_injury_challenger.py
+  ```
+  - **Guards and Invariants**:
+    1. **Idempotency**: If an active `elo_injury` challenger already exists, it reports the existing model and exits 0 without inserting duplicates.
+    2. **Challenger limit**: Refuses with exit code 1 if `LEARNING_MAX_CHALLENGERS` (default 3) is already reached.
+    3. **Statistical gate**: Refuses with exit code 1 if walk-forward log loss gain $\le 0.0$ or the 95% bootstrap CI lower bound is $\le -0.0005$.
+  - **Train/Serve Skew Upper-Bound Caveat**: Historical walk-forward calibration evaluates actual binary absences from `player_game_log` (played vs did not play). Live serving uses expected absences from pre-game injury status probabilities ($\text{impact} \times (1 - p_{\text{avail}})$), which are noisier. The historical evaluation represents an upper bound on what live serving can achieve.
+  - **Serving & Fallback**: Reads the latest `injury_report_snapshot` within 36 hours. If missing or stale (> 36 hours), no adjustment is applied and the model equals Elo exactly (noted in prediction logs). Unmatched player names are ignored and counted, never invented (Rule 3).
+
 ### League API and promotion notifications
 
 - **Endpoint `GET /api/v1/league`**: A read-only JSON representation of the model league (champion, challengers with live evaluation metrics, paired $n$ vs the 150 target, log-loss gain with CI, margin NLL gain, Brier-vs-market gap, gate status in words, promotion/retirement history, and the last candidate proposal date). Responses are cached in-memory with a 5-minute TTL to avoid repeated bootstrap recomputations. The endpoint never writes to the database. An empty database returns status 200 with a clean empty structure.
 - **Promotion notifications (Telegram)**: Whenever a role change commits during the `learn` step (`promote`, `rollback`, `retire`, or a new challenger is registered by the candidate lab), the system dispatches a plain-text Telegram message summarizing what happened, model names, evidence numbers (paired $n$, gain and CI), and the date.
 - **How to enable notifications**: Notifications are opt-in. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `backend/.env` to valid Telegram bot credentials (real values; placeholders containing `your_` are treated as unset). If either is unset, notifications are skipped. A notification failure never causes the tick to fail or roll back: any error is logged as a warning with the token masked, and the tick proceeds normally.
+
+### Weekly View API and Frontend Page
+
+- **Endpoint `GET /api/v1/week?days=7`**: A pure read-only endpoint (no writes to `model_prediction`, `simulated_bet`, or any table) providing scheduled games tipping off within the local day window (`America/Mexico_City`, query param `days` 1 to 14, default 7).
+  - Computes on-demand model predictions for the champion Elo model (win probability, expected margin, sigma) and any active shadow challengers.
+  - Matches stored market quotes: Pinnacle's de-vigged sharp probability (fair reference), best available price per side with bookmaker key and quote age in minutes.
+  - Line-shopping and edge evaluation: computes model edge against Pinnacle fair close, and a read-only "would qualify" candidate flag per side using `analytics.betting_policy.evaluate_candidate` (flat strategy, edge $\ge$ 2 pp, EV $\ge$ 2%) with plain-language skip reasons when not eligible.
+  - Official injury report: attaches non-Available players with status and reasons from the latest `injury_report_snapshot` per team, plus snapshot timestamp and a stale flag (older than 36 h). Empty database returns status 200 with `[]`.
+- **Frontend page `/week`**: Next.js responsive page organized by day sections with game cards, team logos, model vs market win probability comparison bars, best available odds, candidate paper bet badges, team injury drawers, quote age warnings, day/team filters, and candidate-only toggle. Never gives betting advice (paper trading only). Accessible down to 360 px width.
 
 ### Qualitative Gemini AI Layer
 
