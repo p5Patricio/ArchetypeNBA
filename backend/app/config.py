@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     # Official NBA Injury Report PDF automated download (disabled until owner clears NBA terms)
     INJURY_PDF_ENABLED: bool = False
     INJURY_MAX_DOWNLOADS_PER_DAY: int = 3
+    INJURY_USER_AGENT: str = "ArchetypeNBA-research/1.0 (personal, low frequency)"
 
     # Model learning loop (app.services.model_evaluation / model_promotion). The defaults mirror the module
     # constants in model_evaluation; LEARNING_AUTOPROMOTE is the kill switch (off = evaluate and report only).
