@@ -397,7 +397,7 @@ Audit `decision` values: `insufficient_data`, `keep`, `promote`, `retire`, `roll
 
 | Fact (date) | What it means |
 |-------------|---------------|
-| Brier 0.2495 for the model against 0.2013 for Pinnacle's close on 30 games (2026-10-26) | The market is better than the baseline, as expected for an Elo with no injury or roster information. Walk-forward history gives Elo a Brier of 0.2167 against a coin flip at 0.25, but that history has no market to compare with (no free historical odds) |
+| Brier 0.2495 for the model against 0.2013 for Pinnacle's close on 30 games (2026-10-26) | The market is better than the baseline, as expected for an Elo with no injury or roster information. Walk-forward history gives Elo a Brier of 0.2167 against a coin flip at 0.25. Against 17 seasons of free historical closing lines Elo is 0.009 Brier worse than the close (section 14) |
 | 56 flat bets, P/L -5.28 u, ROI -11.4% (2026-10-26) | A tiny sample. A unit bet at even odds has a standard deviation near 1 unit, so the standard error of ROI after `N` bets is about `1/sqrt(N)`: resolving a 2% edge at two standard errors takes on the order of 10,000 bets (derived estimate) |
 | Average CLV +3.5% flat and +4.8% Kelly over 18 and 12 bets with a comparable close | Noise: tiny sample, 35% coverage, survivorship toward lines that did not move |
 | `margin_features` at 41 of 150 paired games, log-loss gain +0.005, interval -0.017 to +0.030 | The interval spans zero by a wide margin |
@@ -422,6 +422,59 @@ Other limits to keep in mind:
 | In-sample parameter | The home advantage of 60 was tuned on the same seasons used to report its Brier |
 | Time zone | "Today" for the opening capture and the daily stake cap is the machine's local day |
 
+## 14. Historical lines and the backtest
+
+Added 2026-11-06 (D-68). Live data needs years to resolve a small edge (section 13); free archives turn that into a one-off backtest on ~22,000 games.
+
+| Item | Detail |
+|------|--------|
+| Sources | SBRO archive pages 2007-08 .. 2023-01-16 (open and close spread and total, close moneyline; book not documented) and the Kaggle CC0 compilation `cviaxmiwnptr` 2007-08 .. 2025-26 (one line per game, identical to SBRO's close on 19,805 of 19,810 shared games; no moneyline after January 2023, no opening line). Raw files in `~/ArchetypeNBA-data/raw/`, outside git |
+| Parsing | `analytics/historical_lines.py`: SBRO rows come in V/H pairs (N/N on neutral sites); in Open/Close the favourite's row holds the spread and the other row the total, told apart by magnitude (>= 60 is a total); `pk` = 0, `NL`/empty/unparseable = missing; a column with two spreads or two totals is ambiguous and missing. Lines are stored from the home side (negative = home favoured) |
+| Storage | `historical_game_line` (migration `e9b1d3f5a7c2`), one row per source and game, teams as current franchises; `scripts/import_historical_lines.py [--dry-run]` reconciles against `player_game_log` |
+| Backtest | `services/historical_backtest.py`, `scripts/historical_backtest.py`: read-only, walk-forward by season (season T uses only seasons before T), evaluated from the third season with lines (2009-10). Seeded iid bootstrap over games |
+| Market probability | Proportional de-vig of the close moneyline; without a moneyline, `Phi(-close_spread / sigma)` with sigma = std of (margin + close spread) over past seasons (about 11.8 points) |
+| Models | `elo` (champion parameters), `margin_features` (refit per season), `elo_blend` (`logit_blend` with `w` from `fit_blend_weight` on past seasons), `mkt_offset` (L2 logistic on logit(p_market) plus the 12 features; `_fixed` keeps the market as an offset), `_avail_ub` (plus missing-rotation impact from who actually played: post-game knowledge, an UPPER BOUND) |
+| Opening-line value | A strategy picks a side from information known at the open. CLV points = `side * (open - close)` (spreads, home = +1) or `side * (close - open)` (totals, over = +1); CLV probability = `Phi(CLV / sigma) - 0.5`. Realized results at the opening number use an ASSUMED -110 price (the archives carry no spread or total prices). Strategies: model line vs open (`elo`, `margin_features`, `totals_pace`), a ridge regression of `close - open` on model-vs-open gaps, the open line and schedule/form features (`line_move_model`), its ablation without the model gaps, and naive baselines (always home, open favourite, open underdog, seeded coin, always over/under) |
+
+### First run (2026-11-06, seed 42, 1,000 bootstrap resamples)
+
+Skill against the close (21,797 games, 2009-10 .. 2025-26; Brier gap = model minus market, negative would beat the close):
+
+| Model | Brier | Gap to close (95% CI) | Calibration slope |
+|-------|-------|-----------------------|-------------------|
+| market close | 0.2032 | 0 | 0.994 |
+| market open (spread-implied, 17,173 games) | 0.2062 | +0.0025 (+0.0018 .. +0.0032) | 1.038 |
+| elo | 0.2123 | +0.0091 (+0.0079 .. +0.0104) | 0.972 |
+| margin_features | 0.2115 | +0.0083 (+0.0071 .. +0.0093) | 0.973 |
+| elo_blend (w 0.03 .. 0.11) | 0.2032 | +0.0000 (-0.0001 .. +0.0001) | 1.008 |
+| mkt_offset | 0.2037 | +0.0005 (+0.0002 .. +0.0008) | 0.957 |
+| mkt_offset_fixed | 0.2034 | +0.0001 (-0.0000 .. +0.0003) | 0.965 |
+| mkt_offset_avail_ub | 0.2038 | +0.0005 (+0.0002 .. +0.0009) | 0.957 |
+
+No model beats the close, not even with post-game availability; the best a model does is tie it inside a blend. The open is worse than the close, as Gandar et al. (1998) found.
+
+Opening-line value, spreads (17,168 games with open and close; mean move +0.02 points, sd 1.72, 16.8% unchanged):
+
+| Strategy (bets when) | n | CLV points (95% CI) | Close moved toward | ATS win at open | ROI at ASSUMED -110 (95% CI) |
+|----------------------|---|---------------------|--------------------|-----------------|------------------------------|
+| elo, gap >= 3 | 4,420 | +0.12 (+0.07 .. +0.18) | 41.3% (against 41.6%) | 50.7% | -0.031 (-0.058 .. -0.004) |
+| margin_features, gap >= 2 | 6,897 | +0.24 (+0.20 .. +0.29) | 45.4% (against 38.4%) | 50.2% | -0.040 (-0.062 .. -0.017) |
+| line_move_model, predicted move >= 0.5 | 2,204 | +0.91 (+0.83 .. +0.99) | 65.0% (against 22.5%) | 52.7% | +0.005 (-0.035 .. +0.043) |
+| ablation without model gaps, >= 0.5 | 1,946 | +0.90 (+0.82 .. +0.99) | 65.0% | 52.1% | -0.005 (-0.050 .. +0.036) |
+| line_move_model + availability UPPER BOUND, >= 1 | 2,418 | +1.90 (+1.81 .. +1.99) | 79.8% | 57.0% | +0.087 (+0.049 .. +0.124) |
+| naive open favourite | 16,747 | +0.03 (+0.01 .. +0.06) | 46.1% | 50.5% | -0.035 |
+| naive coin flip | 17,168 | +0.01 (-0.02 .. +0.03) | 41.3% | 49.3% | -0.058 |
+
+Reading:
+
+- **Line movement is predictable from public pre-open information**: the move regression earns about 0.9 points of CLV, positive in each of the 14 seasons with opening lines. But the ablation without the model gaps does as well, so the information is in the opening line itself and schedule/form features, not in Elo or `margin_features` ratings. About half of it sits in back-to-back games (without them: +0.38 points at >= 0.25, n 3,465), where the open may be posted before the previous night's game ends; the archives have no timestamps to rule that out.
+- **CLV did not become profit at an assumed -110**: 52.7% ATS against 52.4% break-even; the ROI interval spans zero. At reduced juice the same hit rate would be profitable, but no price exists in the data, opening limits are small and the book behind SBRO's open is unknown.
+- **Totals**: `totals_pace` vs the open earns +0.23 .. +0.68 points of CLV (gap >= 2 .. >= 10) and the totals move regression +0.56 at >= 0.5; realized ROI at -110 is negative or spans zero.
+- The availability upper bound is the positive control: knowing who plays moves the needle (+1.9 points, 57% ATS), which shows the test can detect real information, and that the market prices it by the close (its h2h gap to the close is not negative).
+- Robustness: excluding games whose spread moved more than 4 points (news and archive errors cannot be told apart) leaves `line_move_model` at +0.70 (n 2,093) and `elo` at about 0.
+
+Full report: `~/ArchetypeNBA-data/reports/historical_backtest_<timestamp>.md`; how to run it: [`OPERATIONS.md`](OPERATIONS.md) section 5.
+
 ## Where each constant lives
 
 | Constants | File |
@@ -433,6 +486,7 @@ Other limits to keep in mind:
 | Promotion, retirement, look budget, market guard | `backend/app/services/model_evaluation.py` (overridable via `LEARNING_*` in `backend/app/config.py`) |
 | Lab split, search ranges, historical gate, material differences | `backend/app/services/model_lab.py` |
 | Features and their shrinkage constants | `backend/app/analytics/features.py` |
+| Historical line parsing (total threshold 60, team maps), backtest grids and plausibility bounds | `backend/app/analytics/historical_lines.py`, `backend/app/services/historical_backtest.py` |
 | Ridge and logistic grids | `backend/app/services/margin_features_model.py` |
 | Credit floor 25, props markets, window 45 min (manual CLI) | `backend/app/services/odds_snapshot.py` |
 | Tick window 30 min, props events 1, lock age 20 min, learn budget 240 s | `backend/app/services/tick.py` |
