@@ -87,6 +87,10 @@ spends no money.
 - T2-T8 done (commits on `feat/oddspapi`). T9: `tests/test_oddspapi.py` (23 tests; generated through the
   Antigravity delegation, audited; it found that `run_oddspapi` dropped the plan's budget notes, fixed).
 - T10 done: D-70, QUANT_MODULE section 15, OPERATIONS 2.2, AGENTS.md.
+- Read-only checks against production (2026-11-07, no writes): the mapper maps all 132 finished 2026-27 fixtures to
+  the 132 final `game` rows, and 828 of 830 finished Jan-Jun 2026 fixtures to `player_game_log` games (2
+  `home_away_mismatch`, likely neutral-site games; cancelled fixtures stay unmatched). The walk-forward line-move model
+  produced a prediction for a 2026-27 game in 49 s on a read-only session.
 
 ## Follow-ups
 
