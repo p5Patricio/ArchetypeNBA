@@ -776,7 +776,10 @@ CAPTURE_OPENING = "opening"
 CAPTURE_CLOSING = "closing"
 CAPTURE_CLOSING_PROPS = "closing_props"
 CAPTURE_SGO_DAILY = "sgo_daily"
-CAPTURE_KINDS = (CAPTURE_OPENING, CAPTURE_CLOSING, CAPTURE_CLOSING_PROPS, CAPTURE_SGO_DAILY)
+# The tick missed the game's close (no `closing` marker) and OddsPapi's Pinnacle path supplied it (D-70):
+# quotes live in odds_history under `op_pinnacle`; unique per game like `closing`.
+CAPTURE_CLOSING_ODDSPAPI = "closing_oddspapi"
+CAPTURE_KINDS = (CAPTURE_OPENING, CAPTURE_CLOSING, CAPTURE_CLOSING_PROPS, CAPTURE_SGO_DAILY, CAPTURE_CLOSING_ODDSPAPI)
 
 
 class OddsSnapshotCapture(SQLModel, table=True):
@@ -793,7 +796,8 @@ class OddsSnapshotCapture(SQLModel, table=True):
 
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('opening', 'closing', 'closing_props', 'sgo_daily')", name="ck_odds_snapshot_capture_kind"
+            "kind IN ('opening', 'closing', 'closing_props', 'sgo_daily', 'closing_oddspapi')",
+            name="ck_odds_snapshot_capture_kind",
         ),
         Index("ix_odds_snapshot_capture_game_id", "game_id"),
         Index(
@@ -801,8 +805,8 @@ class OddsSnapshotCapture(SQLModel, table=True):
             "game_id",
             "kind",
             unique=True,
-            postgresql_where=text("kind IN ('closing', 'closing_props')"),
-            sqlite_where=text("kind IN ('closing', 'closing_props')"),
+            postgresql_where=text("kind IN ('closing', 'closing_props', 'closing_oddspapi')"),
+            sqlite_where=text("kind IN ('closing', 'closing_props', 'closing_oddspapi')"),
         ),
     )
 
@@ -1074,3 +1078,119 @@ class HistoricalGameLine(SQLModel, table=True):
     imported_at: Optional[datetime] = Field(
         default=None, sa_column=_timestamptz(nullable=False, server_default=func.now())
     )
+
+
+# ------------------------------------------------------------------------------------------------ OddsPapi (D-70)
+
+ODDSPAPI_PATH_STATUSES = ("stored", "no_prematch", "not_found", "error")
+
+
+class OddsPapiRequest(SQLModel, table=True):
+    """
+    Ledger of every OddsPapi HTTP request (the key is never stored). ``billable`` rows of the current UTC month are
+    what ``ODDSPAPI_MONTHLY_BUDGET`` limits, across runs and machines sharing the database.
+    """
+
+    __tablename__ = "oddspapi_request"
+
+    __table_args__ = (Index("ix_oddspapi_request_requested_at", "requested_at"),)
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    requested_at: datetime = Field(sa_column=_timestamptz(nullable=False))
+    endpoint: str = Field(sa_column=Column(Text, nullable=False))  # e.g. /v4/fixtures
+    billable: bool = Field(sa_column=Column(Boolean, nullable=False))
+    status_code: Optional[int] = Field(default=None, sa_column=Column(SmallInteger))  # NULL: no HTTP response
+    fixture_id: Optional[str] = Field(default=None, sa_column=Column(Text))
+    label: Optional[str] = Field(default=None, sa_column=Column(Text))  # listings: 'season' | 'backfill-2026'
+    response_bytes: Optional[int] = Field(default=None, sa_column=Column(Integer))
+    vendor_request_count: Optional[int] = Field(default=None, sa_column=Column(Integer))  # from /v4/account
+    vendor_request_limit: Optional[int] = Field(default=None, sa_column=Column(Integer))
+    source: str = Field(default="", sa_column=Column(Text, nullable=False, server_default=text("''")))  # tick | cli
+
+
+class OddsPapiFixture(SQLModel, table=True):
+    """
+    OddsPapi NBA fixtures seen in a listing and their mapping: ``game_id`` (a ``game`` row: paths go to
+    ``odds_history`` under ``op_<book>``) or, for seasons without ``game`` rows, ``nba_game_id`` (paths go to
+    ``oddspapi_quote``). Unmatched fixtures keep both NULL and are never fetched (rule 3: never guessed).
+    """
+
+    __tablename__ = "oddspapi_fixture"
+
+    __table_args__ = (
+        UniqueConstraint("fixture_id", name="uq_oddspapi_fixture_fixture_id"),
+        CheckConstraint(
+            _in_list("path_status", ODDSPAPI_PATH_STATUSES) + " OR path_status IS NULL",
+            name="ck_oddspapi_fixture_path_status",
+        ),
+        Index("ix_oddspapi_fixture_start_time", "start_time"),
+        Index("ix_oddspapi_fixture_game_id", "game_id"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    fixture_id: str = Field(sa_column=Column(Text, nullable=False))
+    tournament_id: int = Field(sa_column=Column(Integer, nullable=False))
+    status_id: int = Field(sa_column=Column(SmallInteger, nullable=False))  # 0 pre, 1 live, 2 finished, 3 cancelled
+    start_time: datetime = Field(sa_column=_timestamptz(nullable=False))
+    true_start_time: Optional[datetime] = Field(default=None, sa_column=_timestamptz())
+    home_name: str = Field(sa_column=Column(Text, nullable=False))  # participant1 (home, verified 2026-11-07)
+    away_name: str = Field(sa_column=Column(Text, nullable=False))
+    home_team_id: Optional[int] = Field(default=None, sa_column=Column(Integer, ForeignKey("team.id")))
+    away_team_id: Optional[int] = Field(default=None, sa_column=Column(Integer, ForeignKey("team.id")))
+    game_id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, ForeignKey("game.id", ondelete="SET NULL"))
+    )
+    nba_game_id: Optional[str] = Field(default=None, sa_column=Column(Text))
+    unmatched_reason: Optional[str] = Field(default=None, sa_column=Column(Text))
+    listed_at: datetime = Field(sa_column=_timestamptz(nullable=False))
+    path_status: Optional[str] = Field(default=None, sa_column=Column(Text))
+    path_fetched_at: Optional[datetime] = Field(default=None, sa_column=_timestamptz())
+    path_etag: Optional[str] = Field(default=None, sa_column=Column(Text))
+    path_bookmakers: Optional[str] = Field(default=None, sa_column=Column(Text))
+    prematch_entries: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+    quotes_stored: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+
+
+class OddsPapiQuote(SQLModel, table=True):
+    """
+    Main-line pre-match quotes of fixtures WITHOUT a ``game`` row (seasons before the live pipeline), keyed by the
+    fixture. Same meaning as an ``odds_history`` row of an ``op_<book>``: ``created_at`` is OddsPapi's ``createdAt``.
+    """
+
+    __tablename__ = "oddspapi_quote"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "fixture_row_id",
+            "bookmaker",
+            "market",
+            "side",
+            "line",
+            "created_at",
+            name="uq_oddspapi_quote",
+            postgresql_nulls_not_distinct=True,
+        ),
+        CheckConstraint("price_decimal > 1", name="ck_oddspapi_quote_price"),
+        Index("ix_oddspapi_quote_fixture", "fixture_row_id", "bookmaker", "market", "created_at"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    fixture_row_id: int = Field(
+        sa_column=Column(_BIG_ID, ForeignKey("oddspapi_fixture.id", ondelete="CASCADE"), nullable=False)
+    )
+    bookmaker: str = Field(sa_column=Column(Text, nullable=False))  # vendor slug, e.g. pinnacle
+    market: MarketType = Field(sa_column=Column(_MARKET_TYPE, nullable=False))
+    side: BetSide = Field(sa_column=Column(_BET_SIDE, nullable=False))
+    line: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
+    price_decimal: Decimal = Field(sa_column=Column(Numeric(8, 4), nullable=False))
+    created_at: datetime = Field(sa_column=_timestamptz(nullable=False))

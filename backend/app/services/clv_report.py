@@ -11,6 +11,12 @@ Pinnacle's two-way de-vigged closing price:
 
 Games are the independent sampling unit: multiple bets on the same game (e.g. flat and Kelly)
 are averaged first.
+
+``include_recovered`` (D-70, opt-in): bets on games whose close the tick missed but OddsPapi's Pinnacle path
+supplied (``closing_oddspapi`` marker, ``op_pinnacle`` quotes) are evaluated too, but ONLY into
+``stats_with_recovered``; ``stats`` and the exclusions keep their captured-close meaning (those bets still count as
+``no_closing_marker`` there). A recovered close is Pinnacle's last pre-tip main-line quote, so the placed-before-close
+check does not apply (bets are never placed at or after tip-off).
 """
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -104,10 +110,12 @@ class PinnacleClvReport:
     same_book_avg_clv: Optional[float] = None
     same_book_clv_bets: int = 0
     game_rows: List[GamePinnacleClvRow] = field(default_factory=list)
+    recovered_games: int = 0  # games evaluated against an OddsPapi-recovered close (include_recovered only)
+    stats_with_recovered: Optional[ClvStats] = None  # captured + recovered closes (include_recovered only)
 
 
 def build_pinnacle_clv_report(
-    session: Session, now: Optional[datetime] = None
+    session: Session, now: Optional[datetime] = None, include_recovered: bool = False
 ) -> PinnacleClvReport:
     """
     Builds the Pinnacle-referenced CLV report for all paper bets.
@@ -179,6 +187,15 @@ def build_pinnacle_clv_report(
     # Load sharp quotes for relevant games
     game_ids = list({row[1] for row in rows})
     quotes_by_game = _load_pinnacle_quotes(session, game_ids, list(book_keys.keys()))
+    recovered_ids: Set[int] = set()
+    recovered_quotes: Dict[int, List[OddsHistory]] = {}
+    if include_recovered:
+        op_book = market_close.oddspapi_pinnacle_book(session)
+        recovered_ids = market_close.recovered_close_game_ids(session) & set(game_ids)
+        if op_book and recovered_ids:
+            recovered_quotes = _load_pinnacle_quotes(session, sorted(recovered_ids), list(op_book))
+    recovered_records: List[BetClvRecord] = []
+    recovered_games: Set[int] = set()
 
     valid_records: List[BetClvRecord] = []
     # For per-game rows tracking: game_id -> list of (price_taken, fair_price, fair_prob, log_clv, commence)
@@ -189,6 +206,11 @@ def build_pinnacle_clv_report(
         marker_info = markers.get(game_id)
         if marker_info is None:
             report.exclusions.no_closing_marker += 1
+            if game_id in recovered_ids:
+                record = _recovered_record(bet, game_id, market, side, recovered_quotes.get(game_id, []))
+                if record is not None:
+                    recovered_records.append(record)
+                    recovered_games.add(game_id)
             continue
         capture_id, closed_at = marker_info
 
@@ -270,6 +292,9 @@ def build_pinnacle_clv_report(
 
     report.stats = compute_clv_stats(valid_records)
     report.games_count = report.stats.n_games
+    if include_recovered:
+        report.recovered_games = len(recovered_games)
+        report.stats_with_recovered = compute_clv_stats(valid_records + recovered_records)
 
     # Per-game rows
     for g_id, details in sorted(game_bet_details.items(), key=lambda item: item[1][0][4]):
@@ -291,6 +316,22 @@ def build_pinnacle_clv_report(
         )
 
     return report
+
+
+def _recovered_record(bet: SimulatedBet, game_id: int, market, side, quotes: List[OddsHistory]) -> Optional[BetClvRecord]:
+    """CLV of a bet against the OddsPapi-recovered Pinnacle close (stored rows are pre-tip by construction)."""
+    m_str = _enum_value(market)
+    if m_str == MarketType.h2h.value:
+        fair, _ = _devig_h2h(quotes, side)
+    elif m_str == MarketType.spreads.value:
+        fair, _ = _devig_spread(quotes, side, _line(bet.line_taken))
+    elif m_str == MarketType.totals.value:
+        fair, _ = _devig_totals(quotes, side, _line(bet.line_taken))
+    else:
+        return None
+    if fair is None:
+        return None
+    return BetClvRecord(game_id=game_id, price_taken=float(bet.price_taken), fair_closing_price=fair[1])
 
 
 def _load_pinnacle_quotes(

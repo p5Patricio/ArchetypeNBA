@@ -9,7 +9,8 @@ Paper-trading report: how the strategies are doing and whether the model has any
 * Model skill: Brier score of the champion's h2h home probability against the Brier score of the sharp book's
   de-vigged closing home probability, on the SAME final games. Only games with a ``closing`` marker, a recorded
   h2h home prediction and a two-sided closing quote from the sharp book take part. Lower is better; a model that
-  does not beat the close has no edge to bet.
+  does not beat the close has no edge to bet. Games whose close the tick missed but OddsPapi supplied
+  (``closing_oddspapi``, D-70) are reported on a separate, labelled line and never mixed into the captured numbers.
 * Active models: the champion and every challenger with the predictions each has recorded (challengers only
   predict, they never bet) and how many final games those predictions cover.
 * Model league: each challenger's live paired evaluation against the champion, its promotion gate in words and the
@@ -95,6 +96,7 @@ class ClvCoverage:
     bets_absent_at_close: int = 0  # quote absent from closing capture payload (market dropped)
     games_tipped_off: int = 0
     closings_missed: int = 0  # tipped-off games (not postponed) without a closing marker
+    closings_recovered: int = 0  # of those, games whose close was recovered from OddsPapi (closing_oddspapi)
 
     @property
     def coverage(self) -> Optional[float]:
@@ -110,6 +112,11 @@ class ModelSkill:
     games_compared: int = 0  # final + closing marker + h2h prediction + two-sided sharp close
     brier_model: Optional[float] = None
     brier_market: Optional[float] = None
+    # Captured + OddsPapi-recovered closes (D-70); the fields above stay captured-only.
+    recovered_games: int = 0
+    games_compared_with_recovered: int = 0
+    brier_model_with_recovered: Optional[float] = None
+    brier_market_with_recovered: Optional[float] = None
 
     @property
     def difference(self) -> Optional[float]:
@@ -152,7 +159,7 @@ def build_report(session: Session, now: Optional[datetime] = None) -> PaperRepor
         strategies=_performance(session),
         markets=_market_breakdown(session),
         clv=_clv_coverage(session, now),
-        pinnacle_clv=build_pinnacle_clv_report(session, now),
+        pinnacle_clv=build_pinnacle_clv_report(session, now, include_recovered=True),
         skill=_model_skill(session),
         blend=compute_blend_weight(session),
         models=_active_models(session),
@@ -310,12 +317,15 @@ def _clv_coverage(session: Session, now: datetime) -> ClvCoverage:
                             coverage.bets_absent_at_close += 1
 
     with_closing = set(markers.keys())
+    recovered = market_close.recovered_close_game_ids(session)
     for game_id, commence, status in session.execute(select(Game.id, Game.commence_time, Game.status)).all():
         if status == "postponed" or _aware_utc(commence) > now:
             continue
         coverage.games_tipped_off += 1
         if game_id not in with_closing:
             coverage.closings_missed += 1
+            if game_id in recovered:
+                coverage.closings_recovered += 1
     return coverage
 
 
@@ -400,6 +410,27 @@ def _model_skill(session: Session) -> ModelSkill:
     if skill.games_compared:
         skill.brier_model = squared_model / skill.games_compared
         skill.brier_market = squared_market / skill.games_compared
+
+    recovered_set = market_close.recovered_close_game_ids(session)
+    recovered_games = [g for g in finals if g in recovered_set]
+    if recovered_games:
+        fair_all, recovered_ids = market_close.closing_home_probs_with_recovery(
+            session, {g: finals[g][0] for g in closing_games + recovered_games}, closing_games + recovered_games
+        )
+        sq_model = sq_market = 0.0
+        for game_id in closing_games + recovered_games:
+            fair_home = fair_all.get(game_id)
+            if game_id not in model_probs or fair_home is None:
+                continue
+            outcome = 1.0 if finals[game_id][1] else 0.0
+            sq_model += (model_probs[game_id] - outcome) ** 2
+            sq_market += (fair_home - outcome) ** 2
+            skill.games_compared_with_recovered += 1
+            if game_id in recovered_ids:
+                skill.recovered_games += 1
+        if skill.recovered_games:
+            skill.brier_model_with_recovered = sq_model / skill.games_compared_with_recovered
+            skill.brier_market_with_recovered = sq_market / skill.games_compared_with_recovered
     return skill
 
 
@@ -445,7 +476,7 @@ def format_report(report: PaperReport) -> str:
     )
     lines.append(
         f"  Closing captures missed: {clv.closings_missed} of {clv.games_tipped_off} tipped-off games "
-        "(those closing lines cannot be recovered)."
+        f"({clv.closings_recovered} recovered from OddsPapi's Pinnacle path, D-70)."
     )
     lines.append("")
 
@@ -472,6 +503,12 @@ def format_report(report: PaperReport) -> str:
             f"one-sided {exc.one_sided_quote}, closing before bet {exc.closing_before_bet}, "
             f"absent at close {exc.absent_at_close})"
         )
+        if pclv.recovered_games and pclv.stats_with_recovered is not None:
+            rs = pclv.stats_with_recovered
+            lines.append(
+                f"  incl. {pclv.recovered_games} game(s) with an OddsPapi-recovered close (last pre-tip Pinnacle "
+                f"quote): games {rs.n_games} | mean CLV {_pct(rs.mean_clv, 2)} | SE {_pct(rs.std_err, 2)}"
+            )
         lines.append("")
 
     skill = report.skill
@@ -489,6 +526,12 @@ def format_report(report: PaperReport) -> str:
         )
     else:
         lines.append("  Cannot be computed yet: no final game has a closing capture, a model prediction and a sharp close.")
+    if skill.recovered_games and skill.brier_model_with_recovered is not None:
+        lines.append(
+            f"  incl. {skill.recovered_games} game(s) with an OddsPapi-recovered close: compared "
+            f"{skill.games_compared_with_recovered} | Brier model {skill.brier_model_with_recovered:.4f} | "
+            f"Brier market {skill.brier_market_with_recovered:.4f}"
+        )
     lines.append("")
 
     lines.append(report.blend.report_line())

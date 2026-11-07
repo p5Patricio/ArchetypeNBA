@@ -48,6 +48,18 @@ class Settings(BaseSettings):
     SGO_DAILY_OBJECT_BUDGET: int = 30
     SGO_CAPTURE_ENABLED: bool = True
 
+    # OddsPapi free tier (timestamped Pinnacle price paths of finished games; D-70). Disabled unless enabled in .env.
+    # Only listing endpoints are billed (historical odds and /v4/account are free, verified 2026-11-07); the budget
+    # counts billed requests per UTC month in `oddspapi_request` and stays below the vendor's 250.
+    ODDSPAPI_API_KEY: str = ""
+    ODDSPAPI_BASE_URL: str = "https://api.oddspapi.io"
+    ODDSPAPI_ENABLED: bool = False
+    ODDSPAPI_MONTHLY_BUDGET: int = 200
+    ODDSPAPI_MIN_REMAINING: int = 25  # vendor quota floor read from /v4/account; below it no billed call is made
+    ODDSPAPI_BOOKMAKERS: str = "pinnacle"  # max 3; draftkings,fanduel multiply the payload ~10x (164 MB per game)
+    ODDSPAPI_MAX_PATHS_PER_RUN: int = 20  # historical-odds calls per tick run (5 s cooldown each)
+    ODDSPAPI_HISTORICAL_BILLABLE: bool = False  # set true if the vendor starts billing /v4/historical-odds
+
     # Official NBA Injury Report PDF automated download (disabled until owner clears NBA terms)
     INJURY_PDF_ENABLED: bool = False
     INJURY_MAX_DOWNLOADS_PER_DAY: int = 3

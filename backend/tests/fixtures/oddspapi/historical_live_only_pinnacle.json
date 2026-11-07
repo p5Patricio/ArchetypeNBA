@@ -1,0 +1,53 @@
+{
+ "fixtureId": "id1100013262925721",
+ "bookmakers": {
+  "pinnacle": {
+   "markets": {
+    "111": {
+     "outcomes": {
+      "111": {
+       "players": {
+        "0": [
+         {
+          "createdAt": "2026-01-25T00:11:40.127Z",
+          "price": 1.8,
+          "limit": 5000.0,
+          "active": true,
+          "exchangeMeta": null
+         },
+         {
+          "createdAt": "2026-01-25T00:11:56.540Z",
+          "price": 1.787,
+          "limit": 5082.0,
+          "active": true,
+          "exchangeMeta": null
+         }
+        ]
+       }
+      },
+      "112": {
+       "players": {
+        "0": [
+         {
+          "createdAt": "2026-01-25T00:11:40.127Z",
+          "price": 1.99,
+          "limit": 4040.0,
+          "active": true,
+          "exchangeMeta": null
+         },
+         {
+          "createdAt": "2026-01-25T00:11:56.540Z",
+          "price": 2.009,
+          "limit": 4000.0,
+          "active": true,
+          "exchangeMeta": null
+         }
+        ]
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}
