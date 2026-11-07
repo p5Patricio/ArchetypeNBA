@@ -57,3 +57,8 @@ Implement a polite, resumable, idempotent historical backfill tool (`backend/scr
 - 2026-11-06 B1–B3 Implemented dual-era URL builder, timestamp parser, game-date planner, resumable backfill service, `backend/scripts/backfill_injuries.py`, and offline test suite `backend/tests/test_injury_backfill.py`.
 - 2026-11-06 B4–B5 Documented chunked execution in `docs/OPERATIONS.md`, decision D-68 in `docs/DECISIONS.md`, and `AGENTS.md`; verified full backend test suite.
 
+- 2026-11-06 Orchestrator review: offline suite re-run independently; dry run against the production database plans 2 slots per game date (5:00 PM ET and a 7:30 PM ET default, because historical tip times are not in `player_game_log`).
+
+## Follow-ups
+- **Leakage guard for historical features.** Without tip times the 7:30 PM ET slot can postdate early tip-offs, and weekend or holiday matinees can tip before 5:00 PM ET. Any model or backtest that reads backfilled snapshots must join real tip times (for example the `nba_api` schedule endpoint) and use only reports with `report_timestamp` strictly before the game's tip; without a tip time, drop the game rather than guess.
+- Run a small pilot (a few dates from each naming era) before the full chunked backfill, and check parse rates per era.
