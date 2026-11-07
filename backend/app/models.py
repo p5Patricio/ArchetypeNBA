@@ -9,6 +9,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     Computed,
+    Date,
     DateTime,
     Enum as SAEnum,
     ForeignKey,
@@ -1006,3 +1007,70 @@ class MarketConsensusSnapshot(SQLModel, table=True):
     line: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
     fair_price_american: int = Field(sa_column=Column(Integer, nullable=False))
     book_price_american: Optional[int] = Field(default=None, sa_column=Column(Integer))
+
+
+class HistoricalGameLine(SQLModel, table=True):
+    """
+    Pre-game lines from free historical archives (SBRO, Kaggle CC0 compilation), one row per source and game.
+    Lines are from the home side: a negative spread means the home team is favoured. A missing value stays NULL (rule 3).
+    """
+
+    __tablename__ = "historical_game_line"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source",
+            "game_date",
+            "home_team_id",
+            "away_team_id",
+            name="uq_historical_game_line_source_date_teams",
+        ),
+        CheckConstraint(
+            "home_team_id <> away_team_id",
+            name="ck_historical_game_line_distinct_teams",
+        ),
+        CheckConstraint(
+            "close_moneyline_home IS NULL OR close_moneyline_home <= -100 OR close_moneyline_home >= 100",
+            name="ck_historical_game_line_close_ml_home",
+        ),
+        CheckConstraint(
+            "close_moneyline_away IS NULL OR close_moneyline_away <= -100 OR close_moneyline_away >= 100",
+            name="ck_historical_game_line_close_ml_away",
+        ),
+        Index("ix_historical_game_line_game_date", "game_date"),
+        Index("ix_historical_game_line_season_label", "season_label"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    source: str = Field(sa_column=Column(Text, nullable=False))
+    source_row_key: str = Field(sa_column=Column(Text, nullable=False))
+    season_label: str = Field(sa_column=Column(Text, nullable=False))
+    game_date: date = Field(sa_column=Column(Date, nullable=False))
+    home_team_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("team.id"), nullable=False)
+    )
+    away_team_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("team.id"), nullable=False)
+    )
+    neutral_site: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=sa_false())
+    )
+    game_id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, ForeignKey("game.id", ondelete="SET NULL"))
+    )
+    nba_game_id: Optional[str] = Field(default=None, sa_column=Column(Text))
+    open_spread_home: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
+    close_spread_home: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
+    open_total: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
+    close_total: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 1)))
+    open_moneyline_home: Optional[int] = Field(default=None, sa_column=Column(Integer))
+    open_moneyline_away: Optional[int] = Field(default=None, sa_column=Column(Integer))
+    close_moneyline_home: Optional[int] = Field(default=None, sa_column=Column(Integer))
+    close_moneyline_away: Optional[int] = Field(default=None, sa_column=Column(Integer))
+    home_score: Optional[int] = Field(default=None, sa_column=Column(SmallInteger))
+    away_score: Optional[int] = Field(default=None, sa_column=Column(SmallInteger))
+    imported_at: Optional[datetime] = Field(
+        default=None, sa_column=_timestamptz(nullable=False, server_default=func.now())
+    )
