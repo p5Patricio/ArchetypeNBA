@@ -22,6 +22,11 @@ Steps run in order, each isolated (one failing step never prevents the others):
                 returns a partial result) and isolated like every other step. It sits before ``record`` so a
                 promotion takes effect for that tick's predictions. ``LEARNING_AUTOPROMOTE`` off = it only
                 records what it would do.
+3b. ``oddspapi`` (only with ``ODDSPAPI_ENABLED=true`` and a key; D-70) once per machine-local day: lists new
+                OddsPapi fixtures (billed, budgeted by ``ODDSPAPI_MONTHLY_BUDGET``), fetches the free Pinnacle price
+                paths of finished games (missed closes first, then the current season newest first, then the
+                Jan-Jun 2026 backfill) and writes ``closing_oddspapi`` markers for games whose close the tick missed.
+                At most ``ODDSPAPI_MAX_PATHS_PER_RUN`` paths and ``ODDSPAPI_STEP_BUDGET_SECONDS`` per run.
 5. ``record``   ``PredictionRecorder``: DB only, so it also runs when the capture or results steps failed or were
                 skipped. It comes after ``learn`` so predictions use the current champion and ratings that include
                 the latest games.
@@ -34,7 +39,8 @@ Safety
 - The Odds API credit guard (``min_remaining``) applies to both capture steps.
 - ``missed_closing`` counts games that tipped off in the last 12 hours without a ``closing`` marker, i.e. the
   closing lines lost while the PC was off (final games included: a game that already finished still lost its
-  line). Those lines cannot be backfilled on a free plan.
+  line). With the ``oddspapi`` step enabled, Pinnacle's close of those games is recovered the next day from
+  OddsPapi's price path (``closing_oddspapi``; the other books' closes stay lost).
 
 Exit code: 0 when no step failed, 1 otherwise. A step that is deliberately held back (credit guard, nothing to
 do, already captured today) is ``skipped``, not an error; a raised exception or a failed paid API call is an error.
@@ -56,6 +62,8 @@ from app.services import model_evaluation, model_promotion
 from app.services.model_lab import LabError
 from app.services.odds_ingestion import OddsIngestionService
 from app.services.odds_providers.sportsgameodds import SportsGameOddsService
+from app.services import oddspapi as oddspapi_service
+from app.services.oddspapi_client import DbRequestLedger, OddsPapiClient
 from app.services.odds_snapshot import (
     DEFAULT_MIN_REMAINING,
     DEFAULT_PROPS_MARKETS,
@@ -83,6 +91,7 @@ DEFAULT_LOCK_PATH = Path(__file__).resolve().parents[3] / "logs" / "tick.lock"  
 LEARN_BUDGET_SECONDS = 240.0  # the learn step never holds the tick (and its lock) longer than this
 LEARN_PROPOSAL_RESERVE_SECONDS = 45.0  # kept out of the lab deadline for registering (and backfilling) a challenger
 LEARN_MIN_PROPOSAL_SECONDS = 60.0  # a proposal is postponed to the next tick when less than this is left
+ODDSPAPI_STEP_BUDGET_SECONDS = 150.0  # ~20 historical calls at the 5 s vendor cooldown, plus parsing
 
 STEP_OK = "ok"
 STEP_SKIPPED = "skipped"
@@ -277,6 +286,7 @@ class TickContext:
     learn_budget_seconds: float = LEARN_BUDGET_SECONDS
     notifier: Optional[object] = None  # PromotionNotifier or fake sender; None uses default PromotionNotifier
     sgo_service: Optional[object] = None  # SportsGameOddsService (or fake); None creates default
+    oddspapi_client: Optional[object] = None  # OddsPapiClient (or fake); None builds one on the DB ledger
 
 
 Step = Callable[[TickContext], StepResult]
@@ -397,6 +407,54 @@ def sgo_step(ctx: TickContext) -> StepResult:
         f"inserted {ingest_res.inserted} quote(s), {consensus_count} consensus row(s)"
     )
     return StepResult("", STEP_OK, message, detail)
+
+
+def is_oddspapi_configured() -> bool:
+    key = getattr(settings, "ODDSPAPI_API_KEY", "") or ""
+    return bool(getattr(settings, "ODDSPAPI_ENABLED", False) and key and "your_" not in key)
+
+
+def oddspapi_step(ctx: TickContext) -> StepResult:
+    """
+    Daily OddsPapi run (D-70): missed Pinnacle closes and open-to-close price paths of finished games. Runs at most
+    once per machine-local day (any OddsPapi request logged today closes the gate), within a time budget.
+    """
+    if not getattr(settings, "ODDSPAPI_ENABLED", False):
+        return StepResult("", STEP_SKIPPED, "OddsPapi disabled (ODDSPAPI_ENABLED=false)")
+    day, start, end = local_day_bounds_utc(ctx.now, ctx.local_tz)
+    if oddspapi_service.used_today(ctx.session, start, end):
+        return StepResult("", STEP_SKIPPED, f"OddsPapi already ran on {day.isoformat()}")
+    if ctx.dry_run:
+        plan = oddspapi_service.plan_run(
+            ctx.session, ctx.now, max_paths=settings.ODDSPAPI_MAX_PATHS_PER_RUN,
+            monthly_budget=settings.ODDSPAPI_MONTHLY_BUDGET,
+        )
+        return StepResult(
+            "", STEP_OK,
+            f"would make {plan.billable_planned} billable listing(s) and fetch {len(plan.paths)} free path(s)",
+            oddspapi_service.format_plan(plan),
+        )
+    client = ctx.oddspapi_client if ctx.oddspapi_client is not None else OddsPapiClient(
+        DbRequestLedger(ctx.session), source="tick"
+    )
+    if not client.is_configured:
+        return StepResult("", STEP_SKIPPED, "ODDSPAPI_API_KEY is not configured; OddsPapi step skipped")
+    summary = oddspapi_service.run_oddspapi(
+        ctx.session, client, ctx.now,
+        max_paths=settings.ODDSPAPI_MAX_PATHS_PER_RUN,
+        bookmakers=oddspapi_service.bookmakers_from_settings(),
+        min_remaining=settings.ODDSPAPI_MIN_REMAINING,
+        deadline=ctx.clock() + ODDSPAPI_STEP_BUDGET_SECONDS,
+        clock=ctx.clock,
+        raw_dir=oddspapi_service.default_raw_dir(),
+    )
+    detail = oddspapi_service.format_run(summary)
+    if summary.status == "error":
+        return StepResult("", STEP_ERROR, summary.message, detail)
+    if summary.status in ("budget", "quota"):
+        return StepResult("", STEP_SKIPPED, f"{summary.status} guard: {summary.message}", detail)
+    did_work = summary.listings or summary.paths_fetched or summary.closes_recovered
+    return StepResult("", STEP_OK if did_work else STEP_SKIPPED, summary.message, detail)
 
 
 def closing_step(ctx: TickContext) -> StepResult:
@@ -681,12 +739,15 @@ def is_sgo_configured() -> bool:
     return bool(key and "your_" not in key and getattr(settings, "SGO_CAPTURE_ENABLED", True))
 
 
-def default_steps(skip: Sequence[str] = (), include_sgo: Optional[bool] = None) -> List[Tuple[str, Step]]:
+def default_steps(
+    skip: Sequence[str] = (), include_sgo: Optional[bool] = None, include_oddspapi: Optional[bool] = None
+) -> List[Tuple[str, Step]]:
     skip_set = set(skip)
     should_include_sgo = is_sgo_configured() if include_sgo is None else include_sgo
     if not should_include_sgo:
         skip_set.add("sgo")
-    valid_names = {name for name, _ in DEFAULT_STEPS} | {"sgo"}
+    should_include_oddspapi = is_oddspapi_configured() if include_oddspapi is None else include_oddspapi
+    valid_names = {name for name, _ in DEFAULT_STEPS} | {"sgo", "oddspapi"}
     unknown = set(skip) - valid_names
     if unknown:
         raise ValueError(f"unknown step(s) to skip: {', '.join(sorted(unknown))}")
@@ -697,6 +758,8 @@ def default_steps(skip: Sequence[str] = (), include_sgo: Optional[bool] = None) 
             steps.append(("sgo", sgo_step))
         if name not in skip_set:
             steps.append((name, fn))
+        if name == "results" and should_include_oddspapi and "oddspapi" not in skip_set:
+            steps.append(("oddspapi", oddspapi_step))  # after results: games are final before their paths are fetched
     return steps
 
 
@@ -729,6 +792,7 @@ def run_tick(
     results_provider: Optional[object] = None,
     notifier: Optional[object] = None,
     sgo_service: Optional[object] = None,
+    oddspapi_client: Optional[object] = None,
 ) -> TickSummary:
     """
     Runs every step once and returns the summary. A dry run takes no lock, never touches ``odds_service`` or the
@@ -756,12 +820,13 @@ def run_tick(
         if summary.missed_closing:
             logger.warning(
                 f"tick: {summary.missed_closing} game(s) tipped off in the last {MISSED_CLOSING_LOOKBACK_HOURS} h "
-                "without a closing capture (PC off or tick missed); those lines cannot be backfilled."
+                "without a closing capture (PC off or tick missed); only Pinnacle's close can be recovered "
+                "(OddsPapi step, D-70)."
             )
 
         ctx = TickContext(
             session, odds_service, now, dry_run, window_minutes, props_events, min_remaining, local_tz, results_provider,
-            notifier=notifier, sgo_service=sgo_service,
+            notifier=notifier, sgo_service=sgo_service, oddspapi_client=oddspapi_client,
         )
         sgo_active = getattr(sgo_service, "is_configured", False) if sgo_service is not None else is_sgo_configured()
         resolved_steps = default_steps(include_sgo=sgo_active) if steps is None else steps

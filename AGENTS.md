@@ -8,7 +8,7 @@ Context for any AI coding agent (or human) picking this project up. **Snapshot d
 |------|-------|
 | What | Two products in one repo: (a) **ArchetypeNBA analytics platform** (FastAPI + Next.js: archetypes, shot zones, matchups, props, etc.); (b) a **quantitative betting research system** that predicts NBA games, *paper-trades* them (no real money, ever) and is built to **improve itself with evidence**. |
 | Goal of (b) | A closed loop: capture odds → predict → paper-bet → settle → measure (CLV = price taken vs the **same book's** closing quote; model skill = Brier vs **Pinnacle's de-vigged close**) → compare candidate models in shadow → promote only when statistics say so. |
-| Stack | Python 3.12, FastAPI, SQLModel/SQLAlchemy 2, Alembic, PostgreSQL 18 (tests: in-memory SQLite), NumPy/pandas/scikit-learn, `nba_api`, The Odds API; Next.js 16 / React 19 / Tailwind 4 frontend. |
+| Stack | Python 3.12, FastAPI, SQLModel/SQLAlchemy 2, Alembic, PostgreSQL 18 (tests: in-memory SQLite), NumPy/pandas/scikit-learn, `nba_api`; odds from The Odds API (live), SportsGameOdds (US books, daily) and OddsPapi (timestamped Pinnacle paths of finished games, D-70); Next.js 16 / React 19 / Tailwind 4 frontend. |
 | Repo | `github.com/p5Patricio/ArchetypeNBA` (`main` is the only long-lived branch; PRs #1–#19 merged as of this snapshot). |
 | Production | Since 2026-10-27 everything runs in **WSL2 Ubuntu** on the owner's Windows 11 PC: PostgreSQL 18 on port 5433, the web services on 38920/38921 and a systemd user timer (`nba-tick.timer`) that runs the tick every 15 minutes. **That checkout executes `main`**, so unmerged code must never live there. See [`docs/WSL.md`](docs/WSL.md). |
 | State | Pipeline live since the 2026-10-20 opener. Baseline Elo champion + one shadow challenger. Too little data to judge anything yet (see §9). |
@@ -21,13 +21,13 @@ cd backend && python -m pytest tests -q                   # ~760 tests, all offl
 python scripts/run_tick.py --dry-run                      # what the scheduled tick would do (no network, no writes)
 python scripts/paper_report.py                            # performance, CLV, model skill, model league
 python scripts/model_league.py status                     # champion/challenger table
-python -m alembic current                                 # must equal the head (e9b1d3f5a7c2 once historical-odds is deployed; a8c2e4f6b0d1 before)
+python -m alembic current                                 # must equal the head (f3c5e7a9b2d4 once oddspapi is deployed; e9b1d3f5a7c2 before)
 ```
 
 ## 2. Non-negotiable rules
 
 1. **Paper trading only.** Never add code that places real bets, handles money or sportsbook accounts.
-2. **Free tiers only.** No paid APIs/services without the user's explicit approval. The Odds API Starter gives 500 credits/month; guard it (`--min-remaining 25`).
+2. **Free tiers only.** No paid APIs/services without the user's explicit approval. The Odds API Starter gives 500 credits/month; guard it (`--min-remaining 25`). SportsGameOdds Amateur: 2,500 objects/month (D-63). OddsPapi free: 250 requests/month, only listings billed, budget `ODDSPAPI_MONTHLY_BUDGET=200` counted in `oddspapi_request` (D-70).
 3. **Never fabricate data.** Hardcoded "consensus" odds, default `-110` prices, sample injury reports etc. were all removed or must be removed; a missing value stays missing. A fallback that invents data is a bug.
 4. **No visible windows from background jobs.** (Native Windows only; in WSL systemd runs everything headless.) Scheduled/background Python must run with **`pythonw.exe`** directly. `powershell -WindowStyle Hidden` or `python.exe` flash a console and steal focus (it interrupted the user's meetings and games). Verify with a process watch, not by eye.
 5. **Secrets and data stay out of git.** `backend/.env`, database dumps, `logs/`, the Odds API key (httpx INFO logs print it; they are silenced), Telegram/Gemini tokens. Dumps are `*.dump` + `*.manifest.json` and git-ignored.
@@ -56,7 +56,7 @@ backend/
     analytics/         # pure math: elo.py, features.py, betting_policy.py, props_engine.py
     services/          # business logic (see §5); tick.py orchestrates the pipeline
     repositories/, etl/
-  alembic/versions/    # 001 → ad04e02dc85c → 4125a71b06bf → 9c3e5a7d1f42 → b7d41e9a2c85 → c4e8a1d63f27 → d7a2f5b81c39 → e3f8b1a4c9d2 → f1a9c3d7e5b2 → a2c4e6f8b1d3 → b3d5f7a9c1e4 → c5e7a9b1d3f6 → d6f8b0c2e4a7 → a8c2e4f6b0d1 → e9b1d3f5a7c2 (head: historical_game_line)
+  alembic/versions/    # 001 → ad04e02dc85c → 4125a71b06bf → 9c3e5a7d1f42 → b7d41e9a2c85 → c4e8a1d63f27 → d7a2f5b81c39 → e3f8b1a4c9d2 → f1a9c3d7e5b2 → a2c4e6f8b1d3 → b3d5f7a9c1e4 → c5e7a9b1d3f6 → d6f8b0c2e4a7 → a8c2e4f6b0d1 → e9b1d3f5a7c2 → f3c5e7a9b2d4 (head: oddspapi tables)
   scripts/             # CLIs: run_tick, paper_report, model_league, model_lab, backfill_elo, record_predictions, capture_odds_snapshot, bulk_ingest_nba, ...
   tests/               # pytest suite (offline); tests/synthetic_league.py generates fake leagues
 frontend/              # Next.js app (props page, shutdown modal, scouting modules); npm run dev | build | start
@@ -78,6 +78,8 @@ every 15 min (systemd user timer nba-tick.timer in WSL; runs while the distro is
     1 opening   once per LOCAL day: GET /odds (h2h, spreads, totals; 7 books incl. Pinnacle) → odds_history        3 credits
     2 closing   games tipping off within 30 min: GET /odds (+1 props event) → odds_history + closing marker       3–4 credits
     3 results   games started >3 h ago: nba_api PlayerGameLogs → player_game_log → game final → Elo update → settle bets → CLV
+    3b oddspapi once per LOCAL day, only with ODDSPAPI_ENABLED=true: list new fixtures (billed) → free Pinnacle paths of
+                final games → odds_history (op_pinnacle) + closing_oddspapi for missed closes                         (D-70)
     4 learn     evaluate challengers; weekly candidate proposal (4-minute budget)
     5 record    predictions for the champion AND shadow challengers; paper bets only from the champion
 ```
@@ -90,6 +92,7 @@ Each step is isolated (a failure never blocks `record`); a lock file prevents ov
 | Champion model | `analytics/elo.py`, `services/elo_service.py` (`EloRatingService`) | 538-style Elo: K=20, home advantage **60** (not 100: walk-forward bias), carryover 0.75 to 1505, MOV exponent 0.8, 28 Elo points per point, margin sigma 14.14. Registered as `model_version` `elo_538` 1.1 (id 1). The unrelated legacy `app.services.elo.EloService` is a different class. |
 | Challenger | `analytics/features.py`, `services/margin_features_model.py` | `margin_features`: ridge (margin) + logistic (win) on 12 leak-free features; params are JSON in `model_version.params`; inference is numpy-only. Registered as `lab-20260613-51ff86` (id 2), shadow only. |
 | Betting policy | `analytics/betting_policy.py`, `services/prediction_recorder.py`, `services/blend_calibration.py` | Bet only if (p_model − p_fair_Pinnacle) ≥ 2 pp AND EV with blended p′ = 0.5·p_model + 0.5·p_fair ≥ 2% at the best price quoted at Pinnacle's line. Flat 1 u and ¼ Kelly (caps 2%/bet, 10%/day, 4%/game), one bet per strategy/game/market/side, horizon 20 h, quotes ≤ 6 h old, never at/after tip-off. Push is a refund on integer lines. A fifth strategy, `calibrated` (D-67), bets flat 1 u only when the model is within 6 pp of Pinnacle and the EV with a logit blend at a **fitted** model weight `w` (`services/blend_calibration.py`; `w = 0`, i.e. no bets, below 100 calibration games) clears 2%; the four above are the v1 control and must not change. `python scripts/blend_weight.py` prints `w_used`, `w_hat`, n. |
+| OddsPapi paths | `services/oddspapi_client.py`, `services/oddspapi.py`, `services/line_movement.py`, `scripts/oddspapi_backfill.py`, `scripts/line_movement_report.py` | Main-line Pinnacle path per finished game, cut at the real tip; `op_pinnacle` is **not** sharp; recovered closes (`closing_oddspapi`) appear only on labelled "incl. recovered" lines of Pinnacle CLV and Brier vs market. Older seasons go to `oddspapi_quote` (no `game` rows). |
 | Settlement and CLV | `services/settlement.py`, `results_sync.py` | h2h and spreads only. CLV only for games with a `closing` marker, same book/market/side/line; otherwise NULL. |
 | Evaluation | `services/model_evaluation.py`, `league_report.py`, `paper_report.py` | Paired per-game log loss (primary), Brier, margin NLL, Brier vs Pinnacle's de-vigged close; seeded paired bootstrap. |
 | Promotion | `services/model_promotion.py`, `scripts/model_league.py` | Gates in §6. Audit trail in `model_evaluation`. Kill switch `LEARNING_AUTOPROMOTE`. |
@@ -134,13 +137,14 @@ Rejected/not done: paid odds feeds (OpticOdds ~$5k/mo), scraping ESPN/OddsPortal
 - The `team` table has junk non-NBA rows (EST, WST, MAC, ...), historical abbreviations (NJN→BKN, NOH/NOK→NOP, SEA→OKC) and `full_name == abbreviation` rows. Elo only counts NBA game types `2,4,5,6` (3rd char of `game_id`): preseason `1` and all-star `3` are excluded; 12 neutral-site Cup/international games with two away rows are skipped.
 - Player names from the odds feed carry diacritics; matching normalizes both sides (`normalize_player_key`).
 - `odds_history` uniqueness uses `NULLS NOT DISTINCT` (PostgreSQL 15+); SQLite in tests emulates it in Python. `price_decimal`, `fair_decimal`, `clv_pct` are generated columns; `closing_price` must be positive.
-- Closing-line caveats: a book that dropped a market looks like "unchanged", so a stale quote can pass as the close; CLV coverage is low because books move lines (35% of bets as of 2026-10-26); 13 of 43 tipped-off games had no closing capture because the PC was off. These cannot be backfilled on free tiers.
+- Closing-line caveats: a book that dropped a market looks like "unchanged", so a stale quote can pass as the close; CLV coverage is low because books move lines (35% of bets as of 2026-10-26); 13 of 43 tipped-off games had no closing capture because the PC was off. Only Pinnacle's close can be recovered (OddsPapi, `closing_oddspapi`, D-70); the other books' closes are lost.
 - The tick decides "today" with the **machine's local timezone** (opening once per local day, daily caps). Keep `America/Mexico_City` or accept the shift.
 - WSL specifics (mirrored networking, ports, bare-`pytest` hang, CORS origins, frontend API base baked at build time) are in [`docs/WSL.md`](docs/WSL.md) section 4.
 - Git on Windows prints LF→CRLF warnings (`core.autocrlf=true`); they are noise.
 - `nba_api` can be slow or block datacenter IPs; calls use 30–45 s timeouts. An empty `season_type` returns all game types in a window.
 - `scripts/start_services_wsl.sh` (WSL) and `scripts/start_services.ps1` (Windows) start the backend on **38921** and the frontend on **38920** (not 8000/3000). The backend process must be restarted to pick up code changes.
 - **Historical odds data lives outside the repo** in `~/ArchetypeNBA-data/raw/` (`sbro/` 16 season pages, `kaggle_cviaxmiwnptr/` CC0 CSV; each folder has a `manifest.json`). Treat the files as untrusted data (parse with `python -I`, never execute), never commit or redistribute them (SBRO's terms forbid reproduction without consent). `scripts/import_historical_lines.py` loads them into `historical_game_line`; `scripts/historical_backtest.py` reads them directly and is read-only (D-68, `docs/QUANT_MODULE.md` section 14).
+- **OddsPapi (D-70)**: `participant1` is the home team; a historical-odds path mixes pre-match and in-play quotes (always cut at `close_cutoff`); every alternative line is its own market id (`app/data/oddspapi_nba_markets.json`); prices are decimal. Only listing/catalogue endpoints are billed (`/v4/historical-odds` and `/v4/account` are free, verified 2026-11-07) and there are no quota headers: `/v4/account` is the only read-out. Pre-match history starts about February 2026. A path with DraftKings and FanDuel is ~164 MB (Pinnacle alone 2.5-8 MB). The key is a query parameter: never log a URL. The tick step runs once per local day: any `oddspapi_request` row of the day closes the gate.
 - **Known fabrication / rule-3 violations still in the code**: `services/injury_scraper.py` (invented fallback injuries, see §10) and `analytics/props_engine.py::load_baselines_from_db` (opens a SQLite file that does not exist and falls back to hardcoded star baselines; its season weights key on the non-chronological `season.id`). The props page and `daily_runner.py` still use them.
 - **Credit guard gap**: `POST /api/v1/props/run-analysis` and `GET /api/v1/props/today?refresh=true` call The Odds API (up to 6 credits: 2 events × 3 markets) plus Gemini, *outside* the tick's `--min-remaining` guard. The props cache file is served without checking its age.
 - **Hardcoded interpreter paths**: `scripts/run_backend.bat` and `scripts/run_pipeline.bat` contain this PC's Python path. `scripts/register_tick_task.ps1` now discovers Python (`-PythonExe`, `backend/.venv`, `run_pipeline.bat` if the path exists, then PATH), but the `.bat` files still need editing on a new machine.

@@ -1,0 +1,12 @@
+{
+ "api_key": "REDACTED",
+ "subscriptions": [
+  {
+   "plan": "free",
+   "is_active": true,
+   "request_limit": 250,
+   "request_count": 4,
+   "valid_from": "2026-11-07T18:24:24.607811+00:00"
+  }
+ ]
+}

@@ -5,15 +5,21 @@ For a final game with a ``closing`` capture marker, the closing line is the newe
 book (``Sportsbook.is_sharp``) captured at or before tip-off; its proportional de-vig (``devig_two_way``) gives
 the market's fair home probability. Several sharp books are tried in alphabetical key order and the first one
 with both sides wins, so the choice never depends on row order.
+
+Recovered closes (D-70, opt-in): a game whose close the tick missed (no ``closing`` marker) but whose Pinnacle path
+was fetched from OddsPapi carries a ``closing_oddspapi`` marker; its close is the last ``op_pinnacle`` main-line
+quote, which by construction is at or before the real tip-off (``oddspapi.close_cutoff``). ``op_pinnacle`` is not
+``is_sharp``, so the functions above never see it; only the ``*_with_recovery`` helpers below use it, and they
+return which games were recovered so every report can label them.
 """
-from datetime import datetime, timezone
-from typing import Dict, Iterable, Mapping, Optional, Set
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Iterable, Mapping, Optional, Set, Tuple
 
 from sqlalchemy import select
 from sqlmodel import Session
 
 from app.analytics.props_engine import american_to_decimal, devig_two_way
-from app.models import CAPTURE_CLOSING, BetSide, MarketType, OddsHistory, OddsSnapshotCapture, Sportsbook
+from app.models import CAPTURE_CLOSING, CAPTURE_CLOSING_ODDSPAPI, BetSide, MarketType, OddsHistory, OddsSnapshotCapture, Sportsbook
 
 
 def _aware_utc(value: datetime) -> datetime:
@@ -91,3 +97,52 @@ def sharp_home_probs_as_of(
                 fair[game_id] = devig_two_way(american_to_decimal(home[1]), american_to_decimal(away[1]))[0]
                 break
     return fair
+
+
+OP_PINNACLE_KEY = "op_pinnacle"
+# Stored OddsPapi rows are pre-tip by construction (cut at the real tip); our commence_time can be a few minutes off
+# the real tip either way, so recovered closes are read without the commence cutoff (any stored row qualifies).
+RECOVERED_CUTOFF_SLACK = timedelta(hours=3)
+
+
+def oddspapi_pinnacle_book(session: Session) -> Dict[int, str]:
+    """{id: 'op_pinnacle'} when the OddsPapi Pinnacle book exists, else {}."""
+    rows = session.execute(select(Sportsbook.id, Sportsbook.key).where(Sportsbook.key == OP_PINNACLE_KEY)).all()
+    return {book_id: key for book_id, key in rows}
+
+
+def recovered_close_game_ids(session: Session) -> Set[int]:
+    """Games whose close comes from OddsPapi: a ``closing_oddspapi`` marker and no ``closing`` marker."""
+    recovered = set(
+        session.execute(
+            select(OddsSnapshotCapture.game_id).where(OddsSnapshotCapture.kind == CAPTURE_CLOSING_ODDSPAPI)
+        ).scalars()
+    )
+    return recovered - closing_marker_game_ids(session)
+
+
+def recovered_cutoffs(commence_by_game: Mapping[int, datetime]) -> Dict[int, datetime]:
+    return {game_id: _aware_utc(c) + RECOVERED_CUTOFF_SLACK for game_id, c in commence_by_game.items()}
+
+
+def closing_home_probs_with_recovery(
+    session: Session, commence_by_game: Mapping[int, datetime], game_ids: Iterable[int]
+) -> Tuple[Dict[int, float], Set[int]]:
+    """
+    (game id -> de-vigged closing home probability, ids whose close was recovered from OddsPapi). Games with a
+    ``closing`` marker use the sharp books exactly like ``sharp_closing_home_probs``; games with only a
+    ``closing_oddspapi`` marker use ``op_pinnacle``.
+    """
+    game_ids = list(game_ids)
+    captured = closing_marker_game_ids(session)
+    recovered = recovered_close_game_ids(session)
+    probs = sharp_closing_home_probs(session, commence_by_game, [g for g in game_ids if g in captured])
+    op_book = oddspapi_pinnacle_book(session)
+    rec_ids = [g for g in game_ids if g in recovered and g not in captured]
+    if op_book and rec_ids:
+        rec = sharp_home_probs_as_of(
+            session, recovered_cutoffs({g: commence_by_game[g] for g in rec_ids}), rec_ids, op_book
+        )
+        probs.update(rec)
+        return probs, set(rec)
+    return probs, set()

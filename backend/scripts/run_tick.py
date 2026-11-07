@@ -71,9 +71,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--skip",
         nargs="*",
         default=[],
-        choices=[name for name, _ in DEFAULT_STEPS],
+        choices=[name for name, _ in DEFAULT_STEPS] + ["sgo", "oddspapi"],
         metavar="STEP",
-        help=f"steps to skip ({', '.join(name for name, _ in DEFAULT_STEPS)})",
+        help=f"steps to skip ({', '.join([name for name, _ in DEFAULT_STEPS] + ['sgo', 'oddspapi'])})",
     )
     return parser
 

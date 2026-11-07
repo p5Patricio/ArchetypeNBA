@@ -443,6 +443,7 @@ def _load_quotes_for_games(
         for book_id, key, sharp in session.execute(
             select(Sportsbook.id, Sportsbook.key, Sportsbook.is_sharp)
         )
+        if not key.startswith("op_")  # OddsPapi paths are fetched after the game (D-70): not what the system saw live
     }
 
     newest: Dict[Tuple[int, int, str], tuple] = {}

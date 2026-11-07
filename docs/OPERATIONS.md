@@ -166,6 +166,31 @@ The daily capture is wired as step `sgo` in the scheduled tick (`app/services/ti
 - **No Independent Bets**: The betting policy generates wagers only when model probabilities beat Pinnacle's de-vigged fair price by at least 2 pp. A feed without Pinnacle can never establish a fair market baseline.
 - **Best-Price Execution & Cross-Check Only**: SGO quotes act solely as execution candidates when a sharp edge exists and the quote is younger than `max_quote_age_minutes` (360 min). Daily quotes captured in the morning will naturally age out before evening tip-offs unless fresh, ensuring safety.
 
+## 2.2 OddsPapi: Pinnacle price paths of finished games (off by default, D-70)
+
+OddsPapi (https://oddspapi.io, free plan on the owner's account) supplies **timestamped Pinnacle paths** of finished games. The tick step `oddspapi` (after `results`, once per machine-local day) recovers Pinnacle's close of games the tick missed and stores open-to-close paths for the line-movement test ([`QUANT_MODULE.md`](QUANT_MODULE.md) section 15).
+
+### Budget (verified 2026-11-07)
+
+| Call | Billed? | Use |
+|------|---------|-----|
+| `GET /v4/account` | No (works even after the quota is spent) | Read `request_limit` / `request_count` at the start of every run |
+| `GET /v4/fixtures?tournamentId=132&from&to` | Yes, 1 request whatever the range | At most one season listing a day (only when final games are missing from the catalogue), plus one Jan-Jun 2026 listing ever |
+| `GET /v4/historical-odds` | No ("always free"; 7 calls left the count unchanged) | One per finished game, 5 s apart (5.5 s enforced) |
+
+The plan allows 250 billed requests a month (resets on the 1st). `ODDSPAPI_MONTHLY_BUDGET` (default 200) counts billed rows of the current UTC month in `oddspapi_request` and refuses the call before it is sent; `ODDSPAPI_MIN_REMAINING` (25) stops billed calls when the vendor's own count gets close to the limit. Expected use: about 30 billed listings a month. If the vendor starts billing historical odds, set `ODDSPAPI_HISTORICAL_BILLABLE=true` and they count too.
+
+### How to enable it
+
+1. Put the key in the repo-root `.env` (or `backend/.env`): `ODDSPAPI_API_KEY=...`. It is sent as the `apiKey` query parameter; httpx INFO logs are silenced and every error text is masked, so it never reaches `logs/tick.log`.
+2. See the plan without spending anything: `cd backend; python scripts/oddspapi_backfill.py --dry-run` (zero network, read-only).
+3. Catch up once by hand (recommended before enabling the tick): `python scripts/oddspapi_backfill.py --max-requests 60` (repeat; each run stores up to ~57 paths in ~6 minutes). `--no-backfill` skips the Jan-Jun 2026 fixtures; `--report` prints the coverage only.
+4. Turn on the daily step: `ODDSPAPI_ENABLED=true` in `.env`. Optional: `ODDSPAPI_MAX_PATHS_PER_RUN` (20), `ODDSPAPI_BOOKMAKERS` (default `pinnacle`; `pinnacle,draftkings,fanduel` multiplies each payload ~10x, 164 MB measured for one game).
+
+What to look for in `logs/tick.log`: `[ok] oddspapi: N listing(s), M path(s) fetched (...), K missed close(s) recovered; requests R (B billable)`. `[skipped] ... already ran on <day>` is normal for every later tick of the day. `budget guard` / `quota guard` mean the run stopped on purpose.
+
+Storage: paths of games with a `game` row go to `odds_history` under `op_pinnacle` (never `is_sharp`); older seasons go to `oddspapi_quote`; the catalogue and mapping live in `oddspapi_fixture` (`unmatched_reason` explains a fixture that could not be mapped: never guessed). Gzipped raw payloads (all alternative lines) are kept in `~/ArchetypeNBA-data/raw/oddspapi/paths`, outside git. Analysis: `python scripts/line_movement_report.py` (read-only; `--no-model` skips the backtest re-run).
+
 ## 3. Daily and weekly checks
 
 ### Daily
@@ -212,6 +237,8 @@ Deploy a change that includes a migration:
 | 5 | Dry runs | `python scripts/run_tick.py --dry-run` and `python scripts/paper_report.py` |
 | 6 | Resume | `Enable-ScheduledTask -TaskName NBA-Odds-Tick` |
 | 7 | Verify one real tick | `Start-ScheduledTask -TaskName NBA-Odds-Tick`, then read `logs\tick.log`: `exit code: 0` |
+
+Migration `f3c5e7a9b2d4` (OddsPapi, D-70) adds three tables and the `closing_oddspapi` capture kind. With the step disabled the new code only reads tables that already exist (the paper report finds no `closing_oddspapi` marker), but the `oddspapi` step and `scripts/oddspapi_backfill.py` need the migration: migrate in this order before setting `ODDSPAPI_ENABLED=true`. Its downgrade deletes `closing_oddspapi` markers (the `op_pinnacle` rows stay).
 
 Migration `a8c2e4f6b0d1` (the `calibrated` strategy: enum value plus `simulated_bet.blend_weight`) needs exactly this order: the new recorder writes the column and the enum value, so un-migrated schemas make the `record` step fail. After step 4, `python scripts/blend_weight.py` should print `w_used=0.000` or the fitted weight without error.
 
