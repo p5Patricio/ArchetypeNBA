@@ -36,7 +36,7 @@ Implement a polite, resumable, idempotent historical backfill tool (`backend/scr
 - [x] B1 Extend `backend/app/config.py` (`INJURY_USER_AGENT`) and `backend/app/services/injury_report_service.py` (dual-era timestamp parser, URL builders, game-date planner, slot resume check, shared store/backfill service).
 - [x] B2 Create CLI `backend/scripts/backfill_injuries.py` (`--start`, `--end`, `--per-day`, `--delay`, `--max-requests`, `--dry-run`, progress logging, `Ctrl-C` handling, summary output).
 - [x] B3 Add offline unit tests in `backend/tests/test_injury_backfill.py` (both naming eras, AM/PM edge cases, game-date planning from `player_game_log` and `game`, resume/idempotency, `--dry-run` zero-network assertion with fake transport, delay/cap enforcement with fake clock, 403/404/parse/HTTP failure handling, `Ctrl-C`).
-- [x] B4 Update documentation (`docs/OPERATIONS.md`, `docs/DECISIONS.md` D-68, `AGENTS.md`).
+- [x] B4 Update documentation (`docs/OPERATIONS.md`, `docs/DECISIONS.md` D-69, `AGENTS.md`).
 - [x] B5 Run full pytest suite (`cd backend && /home/patricio/proyectos/ArchetypeNBA/.venv/bin/python -m pytest tests -q`) and commit locally.
 
 ## Acceptance criteria
@@ -55,7 +55,7 @@ Implement a polite, resumable, idempotent historical backfill tool (`backend/scr
 ## Progress
 - 2026-11-06 B0 Completed ODD plan in `odd/tasks/injury-backfill.md`.
 - 2026-11-06 B1–B3 Implemented dual-era URL builder, timestamp parser, game-date planner, resumable backfill service, `backend/scripts/backfill_injuries.py`, and offline test suite `backend/tests/test_injury_backfill.py`.
-- 2026-11-06 B4–B5 Documented chunked execution in `docs/OPERATIONS.md`, decision D-68 in `docs/DECISIONS.md`, and `AGENTS.md`; verified full backend test suite.
+- 2026-11-06 B4–B5 Documented chunked execution in `docs/OPERATIONS.md`, decision D-69 in `docs/DECISIONS.md`, and `AGENTS.md`; verified full backend test suite.
 
 - 2026-11-06 Orchestrator review: offline suite re-run independently; dry run against the production database plans 2 slots per game date (5:00 PM ET and a 7:30 PM ET default, because historical tip times are not in `player_game_log`).
 

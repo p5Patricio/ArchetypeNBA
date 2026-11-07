@@ -663,7 +663,7 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Consequences**: until the champion adds information beyond Pinnacle, `w_hat` will be about 0 and `calibrated` places few or no bets; that is the intended answer, not a bug. Judge it by CLV and by `blend_weight`-segmented results, not raw ROI. Lockstep schema deploy needed (see [`OPERATIONS.md`](OPERATIONS.md) section 4).
 - **Source**: [`QUANT_MODULE.md`](QUANT_MODULE.md) section 6; `odd/tasks/calibrated-policy.md`; `backend/app/analytics/betting_policy.py`, `backend/app/services/blend_calibration.py`.
 
-### D-68 Historical NBA injury report PDF backfill tool under polite rate limits (pending owner go-ahead at scale)
+### D-69 Historical NBA injury report PDF backfill tool under polite rate limits (pending owner go-ahead at scale)
 - **Date**: 2026-11-06
 - **Decision**: Add `backend/scripts/backfill_injuries.py` and shared service helpers (`backfill_injury_reports`, `plan_backfill_slots`, `build_injury_pdf_url`, `build_candidate_pdf_urls`, `InjuryReportService.store_pdf_bytes` in `backend/app/services/injury_report_service.py`) for a one-time, chunked historical backfill of official NBA injury report PDFs from `--start 2018-12-17` (when the `ak-static.cms.nba.com` archive begins) through `--end`:
   1. **Game-date planning**: Queries NBA game dates from `player_game_log` (excluding `001` preseason and `003` All-Star game IDs) and non-postponed `game` rows (in `America/New_York`), skipping non-game days. Plans at most `--per-day 2` slots per game date: the latest report at or before `5:00 PM ET` (`17:00`) and the latest report at or before 60 minutes prior to the earliest tip-off when `game.commence_time` is known, else `7:30 PM ET` (`19:30`).
