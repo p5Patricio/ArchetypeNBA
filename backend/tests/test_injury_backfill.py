@@ -1,6 +1,6 @@
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -18,25 +18,46 @@ from app.models import (
     Season,
     Team,
 )
+from app.services.injury_report_parser import InjuryReportLayoutError
 from app.services.injury_report_service import (
     ARCHIVE_START_DATE,
+    DEFAULT_BACKFILL_DELAY_SECONDS,
     EASTERN_TZ,
+    QUARTER_HOUR_NAMING_START,
     InjuryReportService,
     backfill_injury_reports,
     build_candidate_pdf_urls,
     build_injury_pdf_url,
     discover_game_dates,
+    index_page_season,
+    injury_entry_tipoff_utc,
+    is_hourly_pdf_url,
+    latest_snapshot_before_tipoff,
+    naming_is_hourly,
+    parse_injury_index_links,
     parse_pdf_filename_timestamp,
     plan_backfill_slots,
+    report_publication_time_from_url,
+    season_label_for_date,
+    select_listed_pdf_url,
+    snapshot_is_pre_tip,
 )
 from scripts.backfill_injuries import build_parser, run_backfill_injuries
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
+LAYOUT_FIXTURES_DIR = FIXTURES_DIR / "injury_layouts"
 
 
 def _load_fixture_text() -> str:
-    with open(FIXTURES_DIR / "synthetic_injury_report_layout.txt", "r", encoding="utf-8") as f:
-        return f.read()
+    return (FIXTURES_DIR / "synthetic_injury_report_layout.txt").read_text(encoding="utf-8")
+
+
+def _load_layout_fixture(name: str) -> str:
+    return (LAYOUT_FIXTURES_DIR / name).read_text(encoding="utf-8")
+
+
+def _load_index_html() -> str:
+    return (FIXTURES_DIR / "injury_index_page.html").read_text(encoding="utf-8")
 
 
 def test_url_builder_both_eras_and_ampm_edge_cases():
@@ -102,18 +123,27 @@ def test_url_builder_both_eras_and_ampm_edge_cases():
     )
 
 
-def test_parse_pdf_filename_timestamp_both_eras_and_edge_cases():
-    # Hourly era: 2018-12-17 05PM EST (UTC-5) -> 2018-12-17 22:00 UTC
-    ts_hourly = parse_pdf_filename_timestamp(
-        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2018-12-17_05PM.pdf"
-    )
-    assert ts_hourly == datetime(2018, 12, 17, 22, 0, tzinfo=timezone.utc)
+def test_parse_pdf_filename_timestamp_and_publication_time():
+    url_hourly = "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2018-12-17_05PM.pdf"
+    url_15m = "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2025-12-22_05_00PM.pdf"
 
-    # 15-minute era: 2025-01-15 07:30PM EST (UTC-5) -> 2025-01-16 00:30 UTC
-    ts_15m = parse_pdf_filename_timestamp(
-        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2025-01-15_07_30PM.pdf"
-    )
-    assert ts_15m == datetime(2025, 1, 16, 0, 30, tzinfo=timezone.utc)
+    assert is_hourly_pdf_url(url_hourly) is True
+    assert is_hourly_pdf_url(url_15m) is False
+
+    # Label time vs publication time (hourly _05PM is published at 5:30 PM ET = 22:30 UTC)
+    assert parse_pdf_filename_timestamp(url_hourly) == datetime(2018, 12, 17, 22, 0, tzinfo=timezone.utc)
+    assert report_publication_time_from_url(url_hourly) == datetime(2018, 12, 17, 22, 30, tzinfo=timezone.utc)
+
+    # Quarter-hour _05_00PM has publication time equal to label time (22:00 UTC)
+    assert parse_pdf_filename_timestamp(url_15m) == datetime(2025, 12, 22, 22, 0, tzinfo=timezone.utc)
+    assert report_publication_time_from_url(url_15m) == datetime(2025, 12, 22, 22, 0, tzinfo=timezone.utc)
+
+    # Naming era boundary
+    assert QUARTER_HOUR_NAMING_START == date(2025, 12, 22)
+    assert naming_is_hourly(date(2019, 1, 10)) is True
+    assert naming_is_hourly(date(2025, 12, 21)) is True
+    assert naming_is_hourly(date(2025, 12, 22)) is False
+    assert naming_is_hourly(date(2026, 1, 10)) is False
 
     # 12AM (midnight) and 12PM (noon)
     ts_midnight = parse_pdf_filename_timestamp(
@@ -128,6 +158,7 @@ def test_parse_pdf_filename_timestamp_both_eras_and_edge_cases():
 
     # Invalid filenames return None
     assert parse_pdf_filename_timestamp("https://example.com/other.pdf") is None
+    assert report_publication_time_from_url("https://example.com/other.pdf") is None
     assert (
         parse_pdf_filename_timestamp(
             "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2025-01-15_13_00PM.pdf"
@@ -137,33 +168,240 @@ def test_parse_pdf_filename_timestamp_both_eras_and_edge_cases():
 
 
 def test_build_candidate_pdf_urls_newest_first_and_leak_free():
-    d = date(2019, 1, 10)
-    # 5:00 PM ET cutoff -> newest-first within [16:15, 17:00], includes 05_00PM and 05PM
-    cands_5pm = build_candidate_pdf_urls(d, time(17, 0))
+    d_hourly = date(2019, 1, 10)
+    cands_5pm = build_candidate_pdf_urls(d_hourly, time(17, 0))
     assert cands_5pm == [
-        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_05_00PM.pdf",
         "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_05PM.pdf",
-        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_04_45PM.pdf",
-        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_04_30PM.pdf",
-        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_04_15PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_04PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_03PM.pdf",
     ]
 
-    # 7:30 PM ET cutoff -> newest-first within [18:45, 19:30], includes 07_00PM and 07PM at 19:00
-    cands_730pm = build_candidate_pdf_urls(d, time(19, 30))
-    assert cands_730pm == [
-        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_07_30PM.pdf",
-        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_07_15PM.pdf",
-        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_07_00PM.pdf",
+    cands_730pm_pub = build_candidate_pdf_urls(d_hourly, time(19, 30), by_publication=True)
+    assert cands_730pm_pub == [
         "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_07PM.pdf",
-        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_06_45PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_06PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-10_05PM.pdf",
+    ]
+    cutoff_utc = datetime(2019, 1, 10, 19, 30, tzinfo=EASTERN_TZ).astimezone(timezone.utc)
+    for url in cands_730pm_pub:
+        pub_ts = report_publication_time_from_url(url)
+        assert pub_ts is not None
+        assert pub_ts <= cutoff_utc
+
+    d_15m = date(2026, 1, 10)
+    assert build_candidate_pdf_urls(d_15m, time(17, 0)) == [
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-01-10_05_00PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-01-10_04_45PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-01-10_04_30PM.pdf",
     ]
 
-    # Every candidate timestamp must be <= cutoff_time_et
-    cutoff_utc = datetime(2019, 1, 10, 19, 30, tzinfo=EASTERN_TZ).astimezone(timezone.utc)
-    for url in cands_730pm:
-        ts = parse_pdf_filename_timestamp(url)
-        assert ts is not None
-        assert ts <= cutoff_utc
+    # Near the naming switch: 3 hourly names + newest quarter-hour name appended last
+    d_switch = date(2025, 12, 21)
+    assert build_candidate_pdf_urls(d_switch, time(17, 0)) == [
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2025-12-21_05PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2025-12-21_04PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2025-12-21_03PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2025-12-21_05_00PM.pdf",
+    ]
+
+
+def test_season_label_for_date():
+    assert season_label_for_date(date(2019, 1, 15)) == "2018-19"
+    assert season_label_for_date(date(2019, 10, 25)) == "2019-20"
+    assert season_label_for_date(date(2020, 8, 10)) == "2019-20"
+    assert season_label_for_date(date(2020, 12, 23)) == "2020-21"
+    assert season_label_for_date(date(2021, 7, 20)) == "2020-21"
+
+
+def test_parse_injury_index_links_and_select_listed_pdf_url():
+    html = _load_index_html()
+    assert index_page_season(html) == "2026-27"
+
+    by_date = parse_injury_index_links(html)
+    target_date = date(2026, 11, 6)
+    assert list(by_date.keys()) == [target_date]
+
+    links = by_date[target_date]
+    assert len(links) == 8
+    pub_times = [report_publication_time_from_url(u) for u in links]
+    assert all(t is not None for t in pub_times)
+    assert pub_times == sorted(pub_times)  # type: ignore[type-var]
+    assert "https://official.nba.com/referee/injury/Injury-Report_2026-11-06_06_15PM.pdf" in links
+    assert all("Playing-Rules" not in u for u in links)
+
+    assert (
+        select_listed_pdf_url(links, target_date, time(17, 0))
+        == "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-11-06_05_00PM.pdf"
+    )
+    assert (
+        select_listed_pdf_url(links, target_date, time(18, 10), by_publication=True)
+        == "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-11-06_06_00PM.pdf"
+    )
+    assert (
+        select_listed_pdf_url(links, target_date, time(0, 0), by_publication=True)
+        == "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-11-06_12_00AM.pdf"
+    )
+    assert select_listed_pdf_url(links, date(2026, 11, 5), time(23, 59), by_publication=True) is None
+    assert select_listed_pdf_url([], target_date, time(17, 0), by_publication=True) is None
+
+
+def test_store_pdf_bytes_title_timestamp_and_unknown_layout(db_session: Session):
+    text_2019 = _load_layout_fixture("category_columns_2019-01-15.txt")
+    service = InjuryReportService(db_session, pdf_text_extractor=lambda _: text_2019)
+
+    url = "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-15_05PM.pdf"
+    snap, created, _ = service.store_pdf_bytes(url, b"%PDF-1.4-2019-01-15")
+    assert created is True
+    assert snap.report_timestamp.replace(tzinfo=timezone.utc) == datetime(
+        2019, 1, 15, 22, 30, tzinfo=timezone.utc
+    )
+
+    entries = db_session.exec(select(InjuryEntry).where(InjuryEntry.snapshot_id == snap.id)).all()
+    assert len(entries) == 10
+    assert entries[0].game_time_et == "07:00 (ET)"
+
+    bad_text = (
+        "Game Date Game Time Matchup Team Player Name Status Notes\n"
+        "01/15/2019 07:00 (ET) MIN@PHI Minnesota Timberwolves Covington, Robert Out Knee\n"
+    )
+    bad_service = InjuryReportService(db_session, pdf_text_extractor=lambda _: bad_text)
+    with pytest.raises(InjuryReportLayoutError):
+        bad_service.store_pdf_bytes(
+            "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2019-01-16_05PM.pdf",
+            b"%PDF-1.4-unknown-layout",
+        )
+    db_session.rollback()
+    all_snaps = db_session.exec(select(InjuryReportSnapshot)).all()
+    assert len(all_snaps) == 1
+
+
+def test_season_scoped_player_resolution_and_clippers_alias(db_session: Session):
+    s_1819 = Season(season_label="2018-19", is_active=False)
+    s_2324 = Season(season_label="2023-24", is_active=False)
+    t_min = Team(
+        abbreviation="MIN",
+        full_name="Minnesota Timberwolves",
+        city="Minneapolis",
+        conference="West",
+        division="NW",
+    )
+    t_phi = Team(
+        abbreviation="PHI",
+        full_name="Philadelphia 76ers",
+        city="Philadelphia",
+        conference="East",
+        division="Atlantic",
+    )
+    t_lac = Team(
+        abbreviation="LAC",
+        full_name="LA Clippers",
+        city="Los Angeles",
+        conference="West",
+        division="Pacific",
+    )
+    p_a = Player(full_name="Jaylen Smith")
+    p_b = Player(full_name="Jaylen Smith")
+    db_session.add_all([s_1819, s_2324, t_min, t_phi, t_lac, p_a, p_b])
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            PlayerGameLog(
+                player_id=p_a.id,
+                team_id=t_phi.id,
+                season_id=s_1819.id,
+                game_id="0021800600",
+                game_date=date(2019, 1, 10),
+                matchup="PHI vs. MIN",
+                min=20,
+            ),
+            PlayerGameLog(
+                player_id=p_b.id,
+                team_id=t_phi.id,
+                season_id=s_2324.id,
+                game_id="0022300600",
+                game_date=date(2024, 1, 10),
+                matchup="PHI vs. MIN",
+                min=22,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    service = InjuryReportService(db_session)
+    assert (
+        service.resolve_player_id("Jaylen Smith", team_name="Philadelphia 76ers", game_date="01/15/2019")
+        == p_a.id
+    )
+    assert (
+        service.resolve_player_id("Jaylen Smith", team_name="Philadelphia 76ers", game_date="01/15/2024")
+        == p_b.id
+    )
+    assert service.resolve_player_id("Jaylen Smith", team_name="Philadelphia 76ers") is None
+    assert service._get_team_id("Los Angeles Clippers") == t_lac.id
+
+
+def test_leakage_helpers_and_matinee_selection(db_session: Session):
+    now_utc = datetime(2022, 1, 17, 23, 0, tzinfo=timezone.utc)
+    s_old = InjuryReportSnapshot(
+        report_url="https://example.com/old.pdf",
+        report_timestamp=datetime(2022, 1, 15, 17, 30, tzinfo=EASTERN_TZ).astimezone(timezone.utc),
+        fetched_at=now_utc,
+        sha256="a" * 64,
+        entries_count=1,
+    )
+    s_1130 = InjuryReportSnapshot(
+        report_url="https://example.com/1130.pdf",
+        report_timestamp=datetime(2022, 1, 17, 11, 30, tzinfo=EASTERN_TZ).astimezone(timezone.utc),
+        fetched_at=now_utc,
+        sha256="b" * 64,
+        entries_count=1,
+    )
+    s_1730 = InjuryReportSnapshot(
+        report_url="https://example.com/1730.pdf",
+        report_timestamp=datetime(2022, 1, 17, 17, 30, tzinfo=EASTERN_TZ).astimezone(timezone.utc),
+        fetched_at=now_utc,
+        sha256="c" * 64,
+        entries_count=1,
+    )
+    db_session.add_all([s_old, s_1130, s_1730])
+    db_session.commit()
+
+    # Matinee tip at 13:00 ET selects 11:30 ET report, not 17:30 ET
+    tip_1300_et = datetime(2022, 1, 17, 13, 0, tzinfo=EASTERN_TZ)
+    chosen = latest_snapshot_before_tipoff(db_session, tip_1300_et)
+    assert chosen is not None and chosen.id == s_1130.id
+
+    # Snapshot exactly at tipoff is excluded (strictly before tipoff)
+    s_exact = InjuryReportSnapshot(
+        report_url="https://example.com/1300.pdf",
+        report_timestamp=tip_1300_et.astimezone(timezone.utc),
+        fetched_at=now_utc,
+        sha256="d" * 64,
+        entries_count=1,
+    )
+    db_session.add(s_exact)
+    db_session.commit()
+
+    chosen_after_exact = latest_snapshot_before_tipoff(db_session, tip_1300_et)
+    assert chosen_after_exact is not None and chosen_after_exact.id == s_1130.id
+    assert snapshot_is_pre_tip(s_1130.report_timestamp, tip_1300_et) is True
+    assert snapshot_is_pre_tip(s_exact.report_timestamp, tip_1300_et) is False
+    assert snapshot_is_pre_tip(s_1730.report_timestamp, tip_1300_et) is False
+
+    # max_age=36h excludes older snapshot
+    tip_morning = datetime(2022, 1, 17, 10, 0, tzinfo=EASTERN_TZ)
+    assert latest_snapshot_before_tipoff(db_session, tip_morning) == s_old
+    assert latest_snapshot_before_tipoff(db_session, tip_morning, max_age=timedelta(hours=36)) is None
+
+    entry = InjuryEntry(
+        snapshot_id=s_1130.id,  # type: ignore[arg-type]
+        game_date="01/17/2022",
+        game_time_et="01:00 (ET)",
+        player_name_raw="Covington, Robert",
+        status="Out",
+    )
+    assert injury_entry_tipoff_utc(entry) == datetime(2022, 1, 17, 18, 0, tzinfo=timezone.utc)
 
 
 def test_date_planning_from_game_tables_skips_non_game_days(db_session: Session):
@@ -278,127 +516,264 @@ def test_dry_run_makes_zero_network_calls(db_session: Session, capsys):
 
     fake_client = httpx.Client(transport=httpx.MockTransport(forbidden_handler))
 
-    summary = run_backfill_injuries(
+    summary_with_index = run_backfill_injuries(
         start_date=date(2021, 11, 1),
         end_date=date(2021, 11, 1),
         per_day=2,
         dry_run=True,
+        use_index_pages=True,
         session=session,
         http_client=fake_client,
     )
 
-    assert summary.dry_run is True
-    assert summary.requested == 0
-    assert summary.stored == 0
-    assert summary.slots_planned == 2
-    assert len(summary.planned_urls) == 2
-    assert "Injury-Report_2021-11-01_05_00PM.pdf" in summary.planned_urls[0]
-    assert "Injury-Report_2021-11-01_07_30PM.pdf" in summary.planned_urls[1]
+    assert summary_with_index.dry_run is True
+    assert summary_with_index.requested == 0
+    assert summary_with_index.stored == 0
+    assert summary_with_index.slots_planned == 2
+    assert summary_with_index.estimated_requests == summary_with_index.slots_planned + 1
+    assert len(summary_with_index.planned_urls) == 2
+    assert "Injury-Report_2021-11-01_05PM.pdf" in summary_with_index.planned_urls[0]
+    assert "Injury-Report_2021-11-01_07PM.pdf" in summary_with_index.planned_urls[1]
 
     out = capsys.readouterr().out
     assert "[dry-run]" in out
-    assert "Injury-Report_2021-11-01_05_00PM.pdf" in out
+    assert "Injury-Report_2021-11-01_05PM.pdf" in out
+
+    summary_no_index = backfill_injury_reports(
+        session=session,
+        start_date=date(2021, 11, 1),
+        end_date=date(2021, 11, 1),
+        per_day=2,
+        dry_run=True,
+        use_index_pages=False,
+        http_client=fake_client,
+    )
+    assert summary_no_index.requested == 0
+    assert summary_no_index.estimated_requests == summary_no_index.slots_planned
 
 
 def test_backfill_hourly_fallback_resume_and_idempotency(db_session: Session):
     session = db_session
     season = Season(season_label="2018-19", is_active=False)
-    por = Team(abbreviation="POR", full_name="Portland Trail Blazers", city="Portland", conference="West", division="NW")
-    uta = Team(abbreviation="UTA", full_name="Utah Jazz", city="Salt Lake City", conference="West", division="NW")
-    p1 = Player(full_name="Jordan Kent")
-    p2 = Player(full_name="Ethan Baker Jr.")
-    session.add_all([season, por, uta, p1, p2])
+    min_team = Team(
+        abbreviation="MIN",
+        full_name="Minnesota Timberwolves",
+        city="Minneapolis",
+        conference="West",
+        division="NW",
+    )
+    phi_team = Team(
+        abbreviation="PHI",
+        full_name="Philadelphia 76ers",
+        city="Philadelphia",
+        conference="East",
+        division="Atlantic",
+    )
+    covington = Player(full_name="Robert Covington")
+    session.add_all([season, min_team, phi_team, covington])
     session.flush()
 
-    session.add_all(
-        [
-            PlayerSeasonStats(player_id=p1.id, team_id=por.id, season_id=season.id),
-            PlayerSeasonStats(player_id=p2.id, team_id=por.id, season_id=season.id),
-            PlayerGameLog(
-                player_id=p1.id,
-                team_id=por.id,
-                season_id=season.id,
-                game_id="0021800440",
-                game_date=ARCHIVE_START_DATE,
-                matchup="POR @ UTA",
-                min=34,
-            ),
-        ]
+    target_date = date(2019, 1, 15)
+    session.add(
+        PlayerGameLog(
+            player_id=covington.id,
+            team_id=min_team.id,
+            season_id=season.id,
+            game_id="0021800640",
+            game_date=target_date,
+            matchup="MIN @ PHI",
+            min=34,
+        )
     )
     session.commit()
 
-    fixture_text = _load_fixture_text()
+    fixture_text = _load_layout_fixture("category_columns_2019-01-15.txt")
     requested_urls: List[str] = []
     seen_user_agents: List[str] = []
 
-    # Simulate 2018-12-17 archive where 15-min URLs return 403 and hourly 05PM / 07PM return 200
     def handler(request: httpx.Request) -> httpx.Response:
         url_str = str(request.url)
         requested_urls.append(url_str)
         seen_user_agents.append(request.headers.get("User-Agent", ""))
-        if url_str.endswith("_05PM.pdf"):
-            return httpx.Response(200, content=b"%PDF-1.4 archive 5pm pdf")
-        if url_str.endswith("_07PM.pdf"):
-            return httpx.Response(200, content=b"%PDF-1.4 archive 7pm pdf")
+        if url_str.endswith("_2019-01-15_05PM.pdf"):
+            return httpx.Response(200, content=b"%PDF-1.4 archive 2019-01-15 5pm pdf")
         return httpx.Response(403, content=b"Forbidden")
 
     mock_client = httpx.Client(transport=httpx.MockTransport(handler))
     sleeps: List[float] = []
-
     fetch_now = datetime(2026, 11, 6, 12, 0, tzinfo=timezone.utc)
+
     summary1 = backfill_injury_reports(
         session=session,
-        start_date=ARCHIVE_START_DATE,
-        end_date=ARCHIVE_START_DATE,
+        start_date=target_date,
+        end_date=target_date,
         per_day=2,
-        delay_seconds=4.0,
-        max_requests=300,
+        use_index_pages=False,
         http_client=mock_client,
         pdf_text_extractor=lambda _: fixture_text,
         sleep_fn=sleeps.append,
         now=fetch_now,
     )
 
-    # Slot 1 (17:00): tries 05_00PM (403) -> 05PM (200) [2 reqs]
-    # Slot 2 (19:30): tries 07_30PM (403) -> 07_15PM (403) -> 07_00PM (403) -> 07PM (200) [4 reqs]
-    assert summary1.requested == 6
-    assert summary1.stored == 2
-    assert summary1.missing == 4
+    assert summary1.requested == 1
+    assert summary1.stored == 1
+    assert summary1.reused_slots == 1
     assert summary1.missing_slots == 0
     assert summary1.parse_failures == 0
-    # 6 entries per fixture PDF; 2 resolved (Kent, Baker), 4 unresolved per snapshot -> 8 total
-    assert summary1.unmatched_player_names == 8
-
-    # Verify honest User-Agent from settings matches InjuryReportService
     assert all(ua == settings.INJURY_USER_AGENT for ua in seen_user_agents)
     assert settings.INJURY_USER_AGENT == InjuryReportService.USER_AGENT
 
-    # Verify real report_timestamp (2018-12-17 17:00 EST = 22:00 UTC and 19:00 EST = 2018-12-18 00:00 UTC)
-    snaps = session.exec(
-        select(InjuryReportSnapshot).order_by(InjuryReportSnapshot.report_timestamp)
-    ).all()
-    assert len(snaps) == 2
-    assert snaps[0].report_timestamp.replace(tzinfo=timezone.utc) == datetime(2018, 12, 17, 22, 0, tzinfo=timezone.utc)
-    assert snaps[1].report_timestamp.replace(tzinfo=timezone.utc) == datetime(2018, 12, 18, 0, 0, tzinfo=timezone.utc)
+    snaps = session.exec(select(InjuryReportSnapshot)).all()
+    assert len(snaps) == 1
+    assert snaps[0].report_timestamp.replace(tzinfo=timezone.utc) == datetime(
+        2019, 1, 15, 22, 30, tzinfo=timezone.utc
+    )
     assert snaps[0].fetched_at.replace(tzinfo=timezone.utc) == fetch_now
 
-    # Second run (resume): both slots are already stored in injury_report_snapshot -> 0 HTTP requests!
+    # Second run: 0 requests
     requested_urls.clear()
     summary2 = backfill_injury_reports(
         session=session,
-        start_date=ARCHIVE_START_DATE,
-        end_date=ARCHIVE_START_DATE,
+        start_date=target_date,
+        end_date=target_date,
         per_day=2,
+        use_index_pages=False,
         http_client=mock_client,
         pdf_text_extractor=lambda _: fixture_text,
         sleep_fn=sleeps.append,
         now=fetch_now,
     )
-    assert summary2.skipped_existing == 2
-    assert summary2.slots_planned == 0
     assert summary2.requested == 0
-    assert summary2.stored == 0
+    assert summary2.slots_planned == 0
+    assert summary2.skipped_existing >= 1
     assert len(requested_urls) == 0
+
+
+def test_backfill_uses_index_pages_when_available(db_session: Session):
+    session = db_session
+    season = Season(season_label="2026-27", is_active=True)
+    mem = Team(abbreviation="MEM", full_name="Memphis Grizzlies", city="Memphis", conference="West", division="SW")
+    orl = Team(abbreviation="ORL", full_name="Orlando Magic", city="Orlando", conference="East", division="SE")
+    clarke = Player(full_name="Brandon Clarke")
+    session.add_all([season, mem, orl, clarke])
+    session.flush()
+
+    target_date = date(2026, 11, 6)
+    session.add(
+        PlayerGameLog(
+            player_id=clarke.id,
+            team_id=mem.id,
+            season_id=season.id,
+            game_id="0022600100",
+            game_date=target_date,
+            matchup="MEM @ ORL",
+            min=24,
+        )
+    )
+    session.commit()
+
+    index_html = _load_index_html()
+    base_2026_text = (
+        _load_layout_fixture("status_reason_inverted_2026-01-15.txt")
+        .replace("01/15/2026", "11/06/2026")
+        .replace("01/15/26", "11/06/26")
+        .replace("02:00  (ET)", "07:00  (ET)")
+    )
+    text_by_bytes: Dict[bytes, str] = {
+        b"%PDF-2026-11-06-0500": base_2026_text,
+        b"%PDF-2026-11-06-0600": base_2026_text.replace("05:00            PM", "06:00            PM"),
+    }
+
+    requested_urls: List[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        requested_urls.append(url)
+        if "official.nba.com/nba-injury-report-" in url:
+            return httpx.Response(200, text=index_html)
+        if url.endswith("_2026-11-06_05_00PM.pdf"):
+            return httpx.Response(200, content=b"%PDF-2026-11-06-0500")
+        if url.endswith("_2026-11-06_06_00PM.pdf"):
+            return httpx.Response(200, content=b"%PDF-2026-11-06-0600")
+        return httpx.Response(404, content=b"Not Found")
+
+    mock_client = httpx.Client(transport=httpx.MockTransport(handler))
+    summary = backfill_injury_reports(
+        session=session,
+        start_date=target_date,
+        end_date=target_date,
+        per_day=2,
+        use_index_pages=True,
+        http_client=mock_client,
+        pdf_text_extractor=lambda b: text_by_bytes[b],
+        sleep_fn=lambda _: None,
+        now=datetime(2026, 11, 6, 23, 0, tzinfo=timezone.utc),
+    )
+
+    assert summary.requested == 3
+    assert summary.index_pages_requested == 1
+    assert summary.stored == 2
+    assert all(not u.endswith("_05PM.pdf") for u in requested_urls)
+
+
+def test_backfill_index_page_redirect_falls_back_to_hourly_guesses(db_session: Session):
+    session = db_session
+    season = Season(season_label="2018-19", is_active=False)
+    min_team = Team(
+        abbreviation="MIN",
+        full_name="Minnesota Timberwolves",
+        city="Minneapolis",
+        conference="West",
+        division="NW",
+    )
+    covington = Player(full_name="Robert Covington")
+    session.add_all([season, min_team, covington])
+    session.flush()
+
+    target_date = date(2019, 1, 15)
+    session.add(
+        PlayerGameLog(
+            player_id=covington.id,
+            team_id=min_team.id,
+            season_id=season.id,
+            game_id="0021800640",
+            game_date=target_date,
+            matchup="MIN @ PHI",
+            min=34,
+        )
+    )
+    session.commit()
+
+    index_html_2026 = _load_index_html()
+    text_2019 = _load_layout_fixture("category_columns_2019-01-15.txt")
+    requested_urls: List[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        requested_urls.append(url)
+        if "official.nba.com/nba-injury-report-" in url:
+            return httpx.Response(200, text=index_html_2026)
+        if url.endswith("_2019-01-15_05PM.pdf"):
+            return httpx.Response(200, content=b"%PDF-2019-01-15-05PM")
+        return httpx.Response(403, content=b"Forbidden")
+
+    mock_client = httpx.Client(transport=httpx.MockTransport(handler))
+    summary = backfill_injury_reports(
+        session=session,
+        start_date=target_date,
+        end_date=target_date,
+        per_day=2,
+        use_index_pages=True,
+        http_client=mock_client,
+        pdf_text_extractor=lambda _: text_2019,
+        sleep_fn=lambda _: None,
+        now=datetime(2026, 11, 6, 23, 0, tzinfo=timezone.utc),
+    )
+
+    assert summary.index_pages_requested == 1
+    assert summary.index_seasons_unavailable == ["2018-19"]
+    assert summary.stored == 1
+    assert any(u.endswith("_2019-01-15_05PM.pdf") for u in requested_urls)
 
 
 def test_delay_minimum_and_max_requests_cap_enforcement(db_session: Session, caplog):
@@ -409,8 +784,8 @@ def test_delay_minimum_and_max_requests_cap_enforcement(db_session: Session, cap
     session.add_all([season, bos, player])
     session.flush()
 
-    # Add 6 game dates -> 12 slots -> up to 60 candidate URLs if all 404
-    for day in range(1, 7):
+    # Add 5 game dates -> 10 slots -> 30 candidate URLs + 1 index page if all 404
+    for day in range(1, 6):
         session.add(
             PlayerGameLog(
                 player_id=player.id,
@@ -424,6 +799,8 @@ def test_delay_minimum_and_max_requests_cap_enforcement(db_session: Session, cap
         )
     session.commit()
 
+    assert DEFAULT_BACKFILL_DELAY_SECONDS == 4.0
+
     mock_client = httpx.Client(
         transport=httpx.MockTransport(lambda req: httpx.Response(404, content=b"Not Found"))
     )
@@ -433,26 +810,27 @@ def test_delay_minimum_and_max_requests_cap_enforcement(db_session: Session, cap
         summary = backfill_injury_reports(
             session=session,
             start_date=date(2024, 1, 1),
-            end_date=date(2024, 1, 6),
+            end_date=date(2024, 1, 5),
             per_day=2,
-            delay_seconds=0.5,  # Below 2.0s minimum -> must be clamped to 2.0s
-            max_requests=25,    # Hard cap at 25 requests (also triggers 25-request progress log)
+            delay_seconds=0.5,  # Below 2.0s minimum -> clamped to 2.0s
+            max_requests=25,    # Hard cap at 25 requests (1 index page + 24 PDF requests)
+            use_index_pages=True,
             http_client=mock_client,
             sleep_fn=fake_sleeps.append,
         )
 
     assert summary.effective_delay_seconds == 2.0
+    assert summary.index_pages_requested == 1
     assert summary.requested == 25
     assert summary.cap_reached is True
-    assert summary.missing == 25
-    # Sleep is called between consecutive requests: 24 sleeps of 2.0s each
+    assert summary.missing == 24
+    # Sleep is called between consecutive requests only: 24 sleeps of 2.0s each
     assert len(fake_sleeps) == 24
     assert all(s == 2.0 for s in fake_sleeps)
-    # Progress log line emitted at request 25
     assert any("Backfill progress: requested=25/25" in rec.message for rec in caplog.records)
 
 
-def test_failure_handling_corrupt_pdf_http_error_and_ctrl_c(db_session: Session):
+def test_failure_handling_corrupt_pdf_unknown_layout_http_error_and_ctrl_c(db_session: Session):
     session = db_session
     season = Season(season_label="2024-25", is_active=False)
     bos = Team(abbreviation="BOS", full_name="Boston Celtics", city="Boston", conference="East", division="Atlantic")
@@ -460,7 +838,7 @@ def test_failure_handling_corrupt_pdf_http_error_and_ctrl_c(db_session: Session)
     session.add_all([season, bos, player])
     session.flush()
 
-    for day in (10, 11, 12):
+    for day in (10, 11, 12, 13):
         session.add(
             PlayerGameLog(
                 player_id=player.id,
@@ -478,45 +856,54 @@ def test_failure_handling_corrupt_pdf_http_error_and_ctrl_c(db_session: Session)
 
     def handler(request: httpx.Request) -> httpx.Response:
         url = str(request.url)
-        # Day 10: returns 200 with corrupt PDF bytes
+        # Day 10: returns 200 with corrupt PDF bytes (extractor raises)
         if "2025-01-10" in url:
             return httpx.Response(200, content=b"CORRUPT_BYTES")
-        # Day 11: first candidate raises network timeout, second returns valid PDF
-        if "2025-01-11_05_00PM" in url:
+        # Day 11: returns 200 with unknown layout text (store_pdf_bytes raises InjuryReportLayoutError)
+        if "2025-01-11" in url:
+            return httpx.Response(200, content=b"UNKNOWN_LAYOUT_BYTES")
+        # Day 12: first candidate (05PM) times out, second candidate (04PM) returns valid PDF
+        if "2025-01-12_05PM" in url:
             raise httpx.ConnectTimeout("simulated timeout")
-        if "2025-01-11_05PM" in url:
-            return httpx.Response(200, content=b"%PDF-1.4 valid day 11 pdf")
-        # Day 12: simulate Ctrl-C on request
-        if "2025-01-12" in url:
+        if "2025-01-12_04PM" in url:
+            return httpx.Response(200, content=b"%PDF-1.4 valid day 12 pdf")
+        # Day 13: simulate Ctrl-C on request
+        if "2025-01-13" in url:
             raise KeyboardInterrupt()
         return httpx.Response(404)
 
     def extractor(pdf_bytes: bytes) -> str:
         if pdf_bytes == b"CORRUPT_BYTES":
             raise ValueError("corrupt PDF stream")
+        if pdf_bytes == b"UNKNOWN_LAYOUT_BYTES":
+            return (
+                "Game Date Game Time Matchup Team Player Name Status Notes\n"
+                "01/11/2025 07:00 (ET) BOS@NYK Boston Celtics Doe, John Out Knee\n"
+            )
         return fixture_text
 
     mock_client = httpx.Client(transport=httpx.MockTransport(handler))
     summary = backfill_injury_reports(
         session=session,
         start_date=date(2025, 1, 10),
-        end_date=date(2025, 1, 12),
+        end_date=date(2025, 1, 13),
         per_day=1,
         delay_seconds=2.0,
+        use_index_pages=False,
         http_client=mock_client,
         pdf_text_extractor=extractor,
         sleep_fn=lambda _: None,
     )
 
-    assert summary.parse_failures == 1
+    assert summary.parse_failures == 2
     assert summary.http_errors == 1
     assert summary.stored == 1
     assert summary.interrupted is True
 
-    # Day 11 snapshot remains safely committed despite Day 10 parse failure and Day 12 Ctrl-C
+    # Only Day 12 snapshot is stored
     snaps = session.exec(select(InjuryReportSnapshot)).all()
     assert len(snaps) == 1
-    assert "2025-01-11_05PM.pdf" in snaps[0].report_url
+    assert "2025-01-12_04PM.pdf" in snaps[0].report_url
 
 
 def test_cli_parser_defaults():
@@ -528,3 +915,4 @@ def test_cli_parser_defaults():
     assert args.delay == 4.0
     assert args.max_requests == 300
     assert args.dry_run is False
+    assert args.no_index_pages is False

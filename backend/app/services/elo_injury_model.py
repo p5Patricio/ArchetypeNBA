@@ -14,7 +14,8 @@ Design:
        p_home = Phi(mu_adj / sigma) under continuous normal margin distribution M ~ N(mu_adj, sigma).
 
 2. Serving:
-   - Latest ``InjuryReportSnapshot`` strictly before ``game_time`` (<= game_time) within ``max_snapshot_age_hours`` (36h).
+   - Latest ``InjuryReportSnapshot`` strictly before ``game_time`` (report_timestamp < game_time, via
+     ``latest_snapshot_before_tipoff``) within ``max_snapshot_age_hours`` (36h).
    - If no snapshot or stale -> NO adjustment (default to Elo; notes record the fallback).
    - Unmatched player names (player_id is None) are ignored and counted, never invented (Rule 3).
    - No look-ahead: only historical logs and snapshots strictly before the prediction instant are read.
@@ -65,6 +66,7 @@ from app.models import (
 from app.services import model_registry
 from app.services.elo_service import EloRatingService, GameRating, HistoricalGame, replay_games
 from app.services.injury_report_parser import STATUS_AVAILABILITY_PROBABILITIES
+from app.services.injury_report_service import latest_snapshot_before_tipoff
 from app.services.model_registry import ModelRegistryError, Prediction, register_family
 
 logger = logging.getLogger(__name__)
@@ -563,13 +565,8 @@ class EloInjuryFamily:
         mu_elo = elo_pred.expected_margin
 
         # 2. Latest injury snapshot before tip-off
-        stmt = (
-            select(InjuryReportSnapshot)
-            .where(InjuryReportSnapshot.report_timestamp <= game_time)
-            .order_by(InjuryReportSnapshot.report_timestamp.desc())
-            .limit(1)
-        )
-        snapshot = self.session.execute(stmt).scalar_one_or_none()
+        # Strictly before tip-off: a report published at the tip is already post-information.
+        snapshot = latest_snapshot_before_tipoff(self.session, game_time)
 
         if snapshot is None:
             self.last_notes = "no injury snapshot available; defaulted to Elo"
