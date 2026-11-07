@@ -1,0 +1,27 @@
+# Excerpt of pypdf layout text from an official NBA injury report PDF (Injury-Report_2019-01-15_05PM), for offline parser tests only. Not redistributable data.
+                                                                                                        Injury Report: 01/15/19 05:30 PM
+
+Game Date          Game Time         Matchup            Team                            Player Name                             Category                                Reason                                  Current Status                          Previous Status
+
+01/15/2019        07:00 (ET)         MIN@PHI            Minnesota                       Covington, Robert                       Injury/Illness                          Right Knee Bone Bruise                  Out                                     -
+                                                        Timberwolves
+                                                                                        Rose, Derrick                           Injury/Illness                          Sprained Right Ankle                    Questionable                            -
+
+                                                                                        Terrell, Jared                          G League Team                           -                                       Out                                     -
+
+                                                        Philadelphia 76ers              Fultz, Markelle                         Injury/Illness                          Thoracic outlet syndrome                Out                                     -
+                                     PHX@IND            Indiana Pacers                  Anigbogu, Ike                           G League Team                           -                                       Out                                     -
+
+                                                                                        Collison, Darren                        Injury/Illness                          Sore right leg                          Available                               Questionable
+                  08:00 (ET)         MIA@MIL            Miami Heat                      Dragic, Goran                           Injury/Illness                          Right Knee Surgery                      Out                                     -
+
+                                                                                                                                      Page 1 of
+                                                                                                         Injury Report: 01/15/19 05:30 PM
+
+Game Date          Game Time          Matchup            Team                            Player Name                             Category                                 Reason                                   Current Status                          Previous Status
+
+                                                                                         Maten, Yante                            G League Team                            -                                       Out                                      -
+
+                                                                                         Richardson, Josh                        Injury/Illness                           Right Knee Tendinitis                   Probable                                 -
+                                                        Milwaukee Bucks                  Antetokounmpo, Giannis                  Injury/Illness                           Right quadriceps soreness/Left          Probable                                 -
+                                                                                                                                                                          hip contusion

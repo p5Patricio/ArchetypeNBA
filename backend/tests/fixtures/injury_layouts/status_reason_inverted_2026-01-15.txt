@@ -1,0 +1,17 @@
+# Excerpt of pypdf layout text from an official NBA injury report PDF (Injury-Report_2026-01-15_05_00PM), for offline parser tests only. Not redistributable data.
+                                                                                                    Page 1 of 9
+                                                                Orlando  Magic                             Castleton, Colin                           Out                  Injury/Illness -Left Thumb;   Fracture
+                                                                                                           Small, Javon                               Out                  G League   -Two-Way
+                                                                                                           Prosper,  Olivier-Maxence                  Out                  G League   -Two-Way
+                                                                                                                                                                           Surgery  Recovery
+                                                                                                           Pippen  Jr.,Scotty                         Out
+                                                                                                                                                                           Injury/Illness -Left Great  Toe;
+                                                                                                           Morant,  Ja                                Out                  Injury/Illness -Right Calf; Contusion
+                                                                                                           Mashack,   Jahmai                          Out                  G League   -Two-Way
+                                                                                                           Jerome,  Ty                                Out                  Injury/Illness -Right Calf; Strain
+                                                                                                                                                                           Reaction
+                                                                                                           Edey, Zach                                 Out
+                                                                                                                                                                           Injury/Illness -Left Ankle; Stress
+01/15/2026               02:00  (ET)           MEM@ORL          Memphis    Grizzlies                       Clarke, Brandon                            Out                  Injury/Illness -Right Calf; Strain
+Game   Date              Game    Time          Matchup          Team                                       Player  Name                              Current    Status     Reason
+                                                                      Injury            Report:               01/15/26                   05:00            PM

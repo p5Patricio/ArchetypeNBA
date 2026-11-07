@@ -1,0 +1,15 @@
+# Excerpt of pypdf layout text from an official NBA injury report PDF (Injury-Report_2023-05-17_05PM), for offline parser tests only. Not redistributable data.
+                                                                                               Page  1 of1
+05/18/2023                                   LAL@DEN         Los Angeles  Lakers                                                                                   NOT   YET SUBMITTED
+                                                                                                      Gallinari,Danilo                         Out                 Injury/Illness- LeftKnee;  ACL Repair
+                                                                                                                                                                   Mask
+                                                             Boston  Celtics                          Brown,  Jaylen                           Available
+                                                                                                                                                                   Injury/Illness- FacialFracture; Face
+                                                                                                      Zeller,Cody                              Questionable        Injury/Illness- Head; Illness
+                                                                                                      Oladipo, Victor                          Out                 Injury/Illness- LeftKnee;  Surgery
+                                                                                                      Herro, Tyler                             Out                 Injury/Illness- Right Hand; Surgery
+                                                                                                                                                                   Discomfort
+05/17/2023              08:30  (ET)          MIA@BOS         Miami  Heat                              Adebayo,  Bam                            Available
+                                                                                                                                                                   Injury/Illness- Right Shoulder;
+Game   Date             Game    Time         Matchup         Team                                     Player  Name                             Current   Status    Reason
+                                                                   Injury           Report:              05/17/23                  05:30           PM

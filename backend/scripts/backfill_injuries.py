@@ -2,11 +2,14 @@
 """
 Historical backfill CLI for official NBA injury report PDFs (2018-12-17 onward).
 
-Downloads at most --per-day reports per NBA game date (default 2: latest <= 5:00 PM ET
-and latest <= 60 min before first tip-off when known, else 7:30 PM ET), trying both the
-15-minute (HH_MMAM|PM.pdf) and 2018-2022 hourly (HHAM|PM.pdf) naming variants with
-newest-first fallback within the hour. Enforces polite rate limits (default 4 s delay,
-2 s minimum, --max-requests 300 cap), resumability, and leak-free report_timestamp storage.
+Downloads at most --per-day reports per NBA game date (default 2: the report labelled
+5:00 PM ET, and the latest report published at or before the first tip-off - 60 min, the
+tip-off read from the stored 5 PM report when the database has no tip time). Exact file
+names come from the official season index pages when they list the date (one request per
+season); otherwise the file name of the date's naming era is guessed (hourly ``_05PM.pdf``
+through 2025-12-21, quarter-hour ``_05_00PM.pdf`` from 2025-12-22) with at most 3 guesses.
+Enforces polite rate limits (default 4 s delay, 2 s minimum, --max-requests 300 cap),
+resumability, and stores the publication time printed in the PDF title.
 """
 
 import argparse
@@ -28,7 +31,7 @@ from sqlmodel import Session
 from app.deps import engine
 from app.services.injury_report_service import (
     ARCHIVE_START_DATE,
-     BackfillSummary,
+    BackfillSummary,
     DEFAULT_BACKFILL_DELAY_SECONDS,
     DEFAULT_MAX_REQUESTS,
     EASTERN_TZ,
@@ -63,8 +66,24 @@ def format_summary(summary: BackfillSummary) -> str:
         f"  Missing (403/404)      : {summary.missing} (missing slots: {summary.missing_slots})",
         f"  Parse failures         : {summary.parse_failures}",
         f"  HTTP errors            : {summary.http_errors}",
+        f"  Entries stored         : {summary.entries_stored}",
         f"  Unmatched player names : {summary.unmatched_player_names}",
+        f"  Slots reused (stored)  : {summary.reused_slots}",
+        f"  Index pages requested  : {summary.index_pages_requested}"
+        + (f" (unavailable: {', '.join(summary.index_seasons_unavailable)})" if summary.index_seasons_unavailable else ""),
     ]
+    if summary.dry_run:
+        lo, hi = summary.estimated_requests_min, summary.estimated_requests
+        delay = summary.effective_delay_seconds
+        cap = max(1, summary.max_requests)
+        lines.append(
+            f"  Estimated requests     : ~{lo}..{hi} (low: hourly-era pre-tip slots reuse the 5 PM file; "
+            f"high: one per planned slot; index pages included; 403/404 fallbacks add more)"
+        )
+        lines.append(
+            f"  Estimated duration     : ~{lo * delay / 60.0:.0f}..{hi * delay / 60.0:.0f} min at {delay:.1f}s spacing, "
+            f"{-(-lo // cap)}..{-(-hi // cap)} run(s) of --max-requests {summary.max_requests}"
+        )
     if summary.cap_reached:
         lines.append("  Status                 : stopped at --max-requests cap (re-run to resume)")
     elif summary.interrupted:
@@ -82,6 +101,7 @@ def run_backfill_injuries(
     delay_seconds: float = DEFAULT_BACKFILL_DELAY_SECONDS,
     max_requests: int = DEFAULT_MAX_REQUESTS,
     dry_run: bool = False,
+    use_index_pages: bool = True,
     session: Optional[Session] = None,
     http_client: Optional[httpx.Client] = None,
     pdf_text_extractor: Optional[Callable[[bytes], str]] = None,
@@ -106,6 +126,7 @@ def run_backfill_injuries(
             delay_seconds=delay_seconds,
             max_requests=max_requests,
             dry_run=dry_run,
+            use_index_pages=use_index_pages,
             http_client=http_client,
             pdf_text_extractor=pdf_text_extractor,
             sleep_fn=sleep_fn,
@@ -120,11 +141,14 @@ def run_backfill_injuries(
                 f"{summary.slots_planned} slot(s) planned."
             )
             for idx, slot in enumerate(summary.planned_slots[: max(0, max_requests)], start=1):
-                tip_label = "tip-60m" if slot.tipoff_known else "default"
+                if slot.kind == "pre_tip":
+                    tip_label = "pre-tip, tip known" if slot.tipoff_known else "pre-tip, re-planned from the 5 PM report"
+                else:
+                    tip_label = slot.kind
                 print(
                     f"[dry-run] {idx:03d}. {slot.game_date.isoformat()} "
                     f"<= {slot.cutoff_time_et.strftime('%H:%M')} ET ({tip_label}): "
-                    f"{slot.primary_url} (+{len(slot.candidate_urls) - 1} fallback variants)"
+                    f"{slot.primary_url} (+{max(0, len(slot.candidate_urls) - 1)} fallback guesses)"
                 )
 
         summary_text = format_summary(summary)
@@ -173,6 +197,11 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Hard cap on HTTP requests per run (default: {DEFAULT_MAX_REQUESTS})",
     )
     parser.add_argument(
+        "--no-index-pages",
+        action="store_true",
+        help="Do not read the official season index pages; guess file names for every date",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="List planned URLs with zero network requests and zero database writes",
@@ -200,6 +229,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         delay_seconds=args.delay,
         max_requests=args.max_requests,
         dry_run=args.dry_run,
+        use_index_pages=not args.no_index_pages,
     )
     return 0
 
