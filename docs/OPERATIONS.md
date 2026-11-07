@@ -264,6 +264,22 @@ Every manual change writes an audit row whose reason starts with `manual:`. A re
   ```
 - **Read API**: `GET /api/v1/injuries/latest` provides the latest snapshot with player entries grouped by team (`?include_available=true` to include Available players).
 - **Props pipeline**: `services/injury_scraper.fetch_injury_report()` automatically uses real database rows if the latest snapshot is less than 36 hours old (otherwise marks `available=False` with reason `'stale'`).
+- **Historical backfill (`scripts/backfill_injuries.py`, pending owner go-ahead to run at scale)**:
+  Downloads historical official NBA injury report PDFs across game dates present in `player_game_log` or `game` from `--start` (default `2018-12-17`, when the archive begins) to `--end` (default today ET). Supports both the 15-minute (`Injury-Report_YYYY-MM-DD_HH_MMAM|PM.pdf`) and 2018–2022 hourly (`Injury-Report_YYYY-MM-DD_HHAM|PM.pdf`) naming eras, newest-first fallback within the hour, and stores each snapshot with its real Eastern-to-UTC `report_timestamp` (leak-free for pre-tip-off models).
+  - **Polite limits**: default `--delay 4` s between requests (minimum `2` s enforced), hard `--max-requests 300` cap per run, `--per-day 2` (latest report $\le$ 5:00 PM ET and latest report $\le$ 60 min before first tip-off when known, else 7:30 PM ET), honest User-Agent (`settings.INJURY_USER_AGENT`), progress log every 25 requests, and graceful stop on `Ctrl-C`.
+  - **Running in chunks (resumable & idempotent)**:
+    ```bash
+    cd backend
+    # 1. Preview planned game dates and URLs (zero network calls, zero DB writes)
+    python scripts/backfill_injuries.py --start 2018-12-17 --end 2019-04-15 --dry-run
+
+    # 2. Run one polite chunk (stops at --max-requests 300; ~20 minutes at 4 s delay)
+    python scripts/backfill_injuries.py --start 2018-12-17 --end 2019-04-15 --max-requests 300 --delay 4
+
+    # 3. Re-run the exact same command to resume from where the previous chunk stopped
+    #    (already-stored dates/slots are skipped automatically with zero network calls)
+    python scripts/backfill_injuries.py --start 2018-12-17 --end 2019-04-15 --max-requests 300 --delay 4
+    ```
 
 ### Injury-aware challenger model (`elo_injury`)
 
