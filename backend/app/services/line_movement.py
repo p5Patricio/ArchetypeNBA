@@ -261,8 +261,7 @@ def format_movement(stats: Sequence[MoveStats]) -> List[str]:
         unit = "prob (home, de-vigged)" if s.market == "h2h" else "points"
         if s.n < MIN_GAMES:
             lines.append(f"  {s.market:<8} n {s.n}: insufficient data (n < {MIN_GAMES})")
-            if s.n == 0:
-                continue
+            continue
         q = ", ".join(f"{x:+.2f}" for x in s.quantiles)
         lines.append(
             f"  {s.market:<8} n {s.n} | mean move {s.mean:+.3f} {unit} (95% CI {s.ci[0]:+.3f} .. {s.ci[1]:+.3f}) | "
@@ -277,8 +276,7 @@ def format_strategies(results: Sequence[StrategyResult], title: str) -> List[str
     for r in results:
         if r.n < MIN_GAMES:
             lines.append(f"  {r.market:<8} {r.name:<26} n {r.n}: insufficient data (n < {MIN_GAMES})")
-            if r.n == 0:
-                continue
+            continue
         lines.append(
             f"  {r.market:<8} {r.name:<26} n {r.n} | CLV points {_fmt_ci(r.clv_points)} | CLV prob "
             f"{_fmt_ci(r.clv_prob, '{:+.4f}')} | close moved our way {r.beat_close:.1%} | ROI at Pinnacle's opening "
