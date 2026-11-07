@@ -76,6 +76,7 @@ Entries are grouped by area below; the IDs follow the index. To change a decisio
 | [D-60](#d-60-persist-player-prop-quotes-and-evaluate-props-shadow-model-props_nb-against-book-close) | 2026-10-28 | Persist player-prop quotes and evaluate props shadow model | Model |
 | [D-63](#d-63-sportsgameodds-daily-capture-player-props-and-consensus-snapshot-in-scheduled-tick) | 2026-10-31 | SportsGameOdds daily capture, player props, and consensus snapshot in scheduled tick | Capture |
 | [D-68](#d-68-free-historical-lines-sbro-kaggle-cc0-and-an-opening-to-closing-backtest) | 2026-11-06 | Free historical lines (SBRO, Kaggle CC0) and an opening-to-closing backtest | Data |
+| [D-69](#d-69-historical-nba-injury-report-pdf-backfill-tool-under-polite-rate-limits-pending-owner-go-ahead-at-scale) | 2026-11-06 | Historical NBA injury report PDF backfill under polite rate limits | Data |
 
 ## Data and scope
 
@@ -673,6 +674,21 @@ Added after the first version of this log: decisions of PR #18 (portable install
 - **Alternatives rejected**: waiting for live data only (five seasons for a 0.0026 gain, section 13 of QUANT_MODULE); paid historical odds (rule 2); aussportsbetting.com (Cloudflare, terms unverified); storing only a merged line (keeping each source's row makes disagreements auditable).
 - **Consequences**: the lines are not Pinnacle's and carry no prices or timestamps, so they rank ideas but cannot prove profit; any promising strategy still needs live validation with Pinnacle-referenced CLV. A timestamped multi-book history (research E3) is what can separate "the open is beatable" from "the open is posted before the news".
 - **Source**: `odd/tasks/historical-odds.md`; `backend/app/analytics/historical_lines.py`, `backend/app/services/historical_lines.py`, `backend/app/services/historical_backtest.py`.
+
+### D-69 Historical NBA injury report PDF backfill tool under polite rate limits (pending owner go-ahead at scale)
+- **Date**: 2026-11-06
+- **Decision**: Add `backend/scripts/backfill_injuries.py` and shared service helpers (`backfill_injury_reports`, `plan_backfill_slots`, `build_injury_pdf_url`, `build_candidate_pdf_urls`, `InjuryReportService.store_pdf_bytes` in `backend/app/services/injury_report_service.py`) for a one-time, chunked historical backfill of official NBA injury report PDFs from `--start 2018-12-17` (when the `ak-static.cms.nba.com` archive begins) through `--end`:
+  1. **Game-date planning**: Queries NBA game dates from `player_game_log` (excluding `001` preseason and `003` All-Star game IDs) and non-postponed `game` rows (in `America/New_York`), skipping non-game days. Plans at most `--per-day 2` slots per game date: the latest report at or before `5:00 PM ET` (`17:00`) and the latest report at or before 60 minutes prior to the earliest tip-off when `game.commence_time` is known, else `7:30 PM ET` (`19:30`).
+  2. **Dual naming eras & fallback**: Tries both the 15-minute naming pattern (`Injury-Report_YYYY-MM-DD_HH_MMAM|PM.pdf`) and the 2018–2022 hourly naming variant (`Injury-Report_YYYY-MM-DD_HHAM|PM.pdf`), stepping newest-first in 15-minute increments within the 1-hour window at or before the slot cutoff. HTTP 403 and 404 responses are treated as missing (never invented, Rule 3).
+  3. **Leak-free timestamps & shared storage**: Reuses `InjuryReportService.store_pdf_bytes` (`pypdf` layout extraction, `parse_injury_report_text`, team-scoped `resolve_player_id`, `sha256` deduplication) and records the real Eastern-to-UTC filename timestamp in `injury_report_snapshot.report_timestamp` so pre-game models (`elo_injury`) only see reports published before tip-off.
+  4. **Polite operational controls**: Uses `settings.INJURY_USER_AGENT` (`"ArchetypeNBA-research/1.0 (personal, low frequency)"`), enforces a configurable inter-request delay (default `4.0` s, minimum `2.0` s clamped), enforces a hard `--max-requests 300` cap per run, skips slots already stored in `injury_report_snapshot` for zero-network resume across chunks, supports `--dry-run` with zero network calls, logs progress every 25 requests, and stops gracefully on `Ctrl-C`. Running the backfill at scale against `ak-static.cms.nba.com` remains pending the owner's explicit go-ahead (Rule 9 / D-62).
+- **Context**: `elo_injury` (D-64) calibrates $\beta$ on post-game `player_game_log` absences (upper bound due to train/serve skew). Backfilling actual pre-game injury status snapshots from `2018-12-17` onward enables leak-free historical calibration and backtesting on pre-tip-off availability probabilities (`docs/RESEARCH_LONG_TERM_EDGE.md` §C.2, §E.2).
+- **Alternatives rejected**:
+  1. Unthrottled or high-concurrency scraping (rejected: violates polite research access and risks IP blocks).
+  2. Duplicating PDF text extraction or player resolution in the CLI script (rejected: shared `store_pdf_bytes` guarantees identical parsing and idempotency between live and backfilled snapshots).
+  3. Storing fetch wall-clock time as `report_timestamp` (rejected: would make historical snapshots appear published in 2026 and break pre-tip-off filtering).
+- **Consequences**: No schema migration needed (`injury_report_snapshot` and `injury_entry` already exist from `c5e7a9b1d3f6`). Chunks of 300 requests take ~20 minutes at 4 s spacing and resume cleanly.
+- **Source**: `odd/tasks/injury-backfill.md`; `backend/scripts/backfill_injuries.py`; `backend/app/services/injury_report_service.py`; [`OPERATIONS.md`](OPERATIONS.md).
 
 ## Next step
 
