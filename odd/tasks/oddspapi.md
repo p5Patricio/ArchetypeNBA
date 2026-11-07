@@ -26,13 +26,13 @@ spends no money.
   same-book CLV) changes silently; recovered closes are used only through explicit new code paths.
 - D2 Quote time: `book_last_update` = `captured_at` = the row's `createdAt` (the moment OddsPapi recorded that
   price). `odds_history`'s unique key includes `book_last_update`, so re-ingesting a path is idempotent.
-- D3 Request accounting in a small dedicated table `oddspapi_request` (every HTTP call, its endpoint, status, the
-  quota fields when known), because fixture listings have no game and `odds_snapshot_capture.game_id` is NOT NULL.
-  The monthly budget (`ODDSPAPI_MONTHLY_BUDGET`, default 200) counts the rows of the current UTC month that the
-  vendor bills; the budget is checked before every call, so it holds across runs and machines sharing the DB.
-- D4 Markers (`odds_snapshot_capture`): `oddspapi_path` (unique per game: its path was fetched and stored) and
-  `closing_oddspapi` (unique per game: the game had no `closing` marker and the path yields Pinnacle's last pre-tip
-  quotes). One hand-written migration (down_revision `e9b1d3f5a7c2`) adds the table and the two kinds.
+- D3 Request accounting in a small dedicated table `oddspapi_request` (every HTTP call, its endpoint, status, label,
+  the vendor quota fields when read), because fixture listings have no game and `odds_snapshot_capture.game_id` is
+  NOT NULL. The monthly budget (`ODDSPAPI_MONTHLY_BUDGET`, default 200) counts the billable rows of the current UTC
+  month, checked before every billable call, so it holds across runs and machines sharing the DB.
+- D4 One marker kind, `closing_oddspapi` (unique per game). Path state lives in a fixture catalogue
+  (`oddspapi_fixture`: mapping, path status, ETag) instead of a second marker. Seasons without `game` rows store
+  their paths in `oddspapi_quote` (D-70 explains why). One hand-written migration `f3c5e7a9b2d4`.
 - D5 Missed-close metrics: `market_close` gains an opt-in path that uses `op_pinnacle` quotes for games with a
   `closing_oddspapi` marker and no `closing` marker. The paper report keeps its captured-close numbers unchanged and
   prints the recovered ones next to them, labelled. Same-book CLV (`fill_clv`) and the promotion gate inputs
@@ -79,12 +79,25 @@ spends no money.
 
 ## Progress
 
-- (filled as tasks complete)
+- T1 done (15 of 20 requests, log in `~/ArchetypeNBA-data/raw/oddspapi/probe_log.txt`): sportId 11, tournamentId 132,
+  participant1 = home; one listing covers a 6-month range; request_limit 250; only listings/catalogue billed
+  (historical odds and account free: count stayed at 4 after 7 historical + 3 account calls); no quota headers;
+  ETag/304 verified; pre-match paths from ~February 2026 (Jan 15: 404, Jan 25: in-play only, Feb 5: full).
+  Pinnacle-only path 2.5-8 MB, with DK+FD 164 MB. Opener close matched The Odds API's Pinnacle close.
+- T2-T8 done (commits on `feat/oddspapi`). T9: `tests/test_oddspapi.py` (23 tests; generated through the
+  Antigravity delegation, audited; it found that `run_oddspapi` dropped the plan's budget notes, fixed).
+- T10 done: D-70, QUANT_MODULE section 15, OPERATIONS 2.2, AGENTS.md.
 
 ## Follow-ups
 
-- (filled at the end)
+- Owner: apply migration `f3c5e7a9b2d4` (lockstep deploy), run `scripts/oddspapi_backfill.py --dry-run`, then a
+  manual catch-up, then `ODDSPAPI_ENABLED=true`.
+- Decide whether recovered closes should also feed the promotion gate's market-Brier guard (`model_evaluation`); kept
+  out on purpose (rule 8: no silent change of promotion inputs).
+- Re-run `scripts/line_movement_report.py` once ~300 paths exist; the n >= 30 rule only prints numbers.
+- The NBA Cup tournament (OddsPapi tournamentId 40401) was not needed for 2026-27 so far (132 listed every final
+  game); recheck after the Cup knockout games.
 
 ## Next step
 
-T1, then T2.
+Owner review and deploy.

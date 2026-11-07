@@ -714,6 +714,7 @@ class OddsPapiPlan:
     paths: List[PathPlan] = field(default_factory=list)
     paths_due: Dict[int, int] = field(default_factory=dict)  # priority -> all due (before the per-run cap)
     unlinked_final_games: int = 0
+    budget_blocked: bool = False  # a needed billable listing was held back by the monthly budget
     notes: List[str] = field(default_factory=list)
 
     @property
@@ -809,7 +810,10 @@ def plan_run(
         if _recent_listing(session, now):
             plan.notes.append(f"{len(unlinked)} final game(s) not in the catalogue; a listing ran in the last 20 h")
         elif remaining < 1:
-            plan.notes.append("season listing needed but the monthly budget is used up")
+            plan.budget_blocked = True
+            plan.notes.append(
+                f"season listing needed but the monthly budget is used up ({plan.billable_used} of {monthly_budget})"
+            )
         else:
             start = max(unlinked[0] - timedelta(days=1), HISTORY_START)
             plan.listings.append(ListingPlan(LABEL_SEASON, start, now, f"{len(unlinked)} final game(s) not in the catalogue"))
@@ -884,6 +888,7 @@ class RunSummary:
     requests: int = 0
     billable: int = 0
     errors: List[str] = field(default_factory=list)
+    notes: List[str] = field(default_factory=list)  # the plan's notes (held-back listings and why)
 
 
 def raw_cache_path(raw_dir: Optional[Path], fixture_id: str, books: Sequence[str]) -> Optional[Path]:
@@ -923,6 +928,9 @@ def run_oddspapi(
 
     plan = plan_run(session, now, max_paths=max_paths, monthly_budget=client.monthly_budget,
                     include_backfill=include_backfill)
+    summary.notes.extend(plan.notes)
+    if plan.budget_blocked:
+        summary.status = "budget"
     try:
         for listing in plan.listings:
             if vendor_left is not None and vendor_left - 1 < min_remaining:
@@ -1039,6 +1047,8 @@ def format_run(summary: RunSummary) -> str:
         )
     if summary.closes_recovered:
         lines.append(f"  closing_oddspapi markers: games {', '.join(map(str, summary.closes_recovered[:20]))}")
+    for note in summary.notes:
+        lines.append(f"  note: {note}")
     for error in summary.errors[:10]:
         lines.append(f"  ERROR {error}")
     return "\n".join(lines)
