@@ -1,0 +1,26 @@
+# Excerpt of pypdf layout text from an official NBA injury report PDF (Injury-Report_2020-08-10_05PM), for offline parser tests only. Not redistributable data.
+                                                                                                           Injury Report: 08/10/20 05:30 PM
+
+Game Date                  Game Time                   Matchup                    Team                                           Player Name                                    Current Status                         Reason
+
+08/10/2020                 02:30 (ET)                 OKC@PHX                     Oklahoma City Thunder                          Adams, Steven                                  Out                                    Injury/Illness - Left Lower Leg; Contusion
+
+                                                                                                                                 Gallinari, Danilo                              Out                                    Injury/Illness - Left Ankle; Injury Maintenance
+                           08:00 (ET)                 IND@MIA                     Indiana Pacers                                 Lamb, Jeremy                                   Out                                    Injury/Illness - Left Knee; Torn Left ACL
+
+                                                                                                                                 Sabonis, Domantas                              Out                                    Injury/Illness - Left Foot; Left Foot Plantar Fasciitis
+
+                                                                                                                                 Warren, T.J.                                   Questionable                           Injury/Illness - Right Foot; Sore Right Foot
+
+                                                                                  Miami Heat                                     Butler, Jimmy                                  Questionable                           Injury/Illness - Right Foot; Soreness
+
+                                                                                                                                            Page 1 of
+                                                                                                           Injury Report: 08/10/20 05:30 PM
+
+Game Date                  Game Time                   Matchup                    Team                                           Player Name                                    Current Status                         Reason
+
+                                                                                                                                Dragic, Goran                                  Questionable                           Injury/Illness - Left Ankle; Sprain
+
+                                                                                                                                Nunn, Kendrick                                 Out                                    Not With Team - Self Isolating
+
+                                                                                                                                Okpala, KZ                                     Out                                    Personal Reasons
