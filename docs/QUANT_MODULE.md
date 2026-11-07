@@ -246,7 +246,7 @@ Elo cannot see offseason roster moves, so early on it disagrees with Pinnacle a 
 
 | Bias | Why it happens | Effect on the numbers |
 |------|----------------|----------------------|
-| Coverage | CLV needs a `closing` marker. Games are captured only when the PC is on and a tick runs inside the 30-minute window; 13 of 43 tipped-off games had no closing capture (2026-10-26). It cannot be backfilled on a free plan | Fewer bets carry a CLV; the sample is whatever the PC witnessed |
+| Coverage | CLV needs a `closing` marker. Games are captured only when the PC is on and a tick runs inside the 30-minute window; 13 of 43 tipped-off games had no closing capture (2026-10-26). Since D-70 Pinnacle's close of those games is recovered from OddsPapi (`closing_oddspapi`, section 15); the other books' closes cannot be | Same-book CLV keeps the gap; Pinnacle CLV and Brier vs the market print the recovered games on a separate line |
 | Stale close | The feed stores a row only when a book's own update stamp changes. A book that withdrew a market looks "unchanged", so an old quote could pass as the close. **Detected from migration `f1a9c3d7e5b2` on:** closing captures record payload presence in `odds_capture_presence`; quotes absent at close leave `closing_price` NULL and are counted as `absent_at_close` in CLV reports (legacy captures without presence rows retain old behavior) | Eliminates false 0 CLV on dropped markets for captures recorded from this release on |
 | Survivorship | Bets whose book moved the line have no comparable close and drop out | The average CLV is computed over lines that did not move; 35% of bets had a CLV (2026-10-26) |
 | Near-close, not the close | The tick captures the first time a game is inside the 30-minute window, typically 15 to 30 minutes before tip-off, so the last minutes (and late news) are missed | The "close" is slightly earlier than the true close |
@@ -417,7 +417,7 @@ Other limits to keep in mind:
 | Limit | Detail |
 |-------|--------|
 | Paper trading is optimistic | Best price across 7 books, no limits, no slippage, no account restrictions |
-| One reference | Pinnacle only; a second sharp source is on the roadmap |
+| One reference | Pinnacle only; OddsPapi supplies the same book's timestamped path, not a second sharp source |
 | Elo blind spots | Offseason moves, injuries, rest beyond the schedule |
 | In-sample parameter | The home advantage of 60 was tuned on the same seasons used to report its Brier |
 | Time zone | "Today" for the opening capture and the daily stake cap is the machine's local day |
@@ -475,6 +475,31 @@ Reading:
 
 Full report: `~/ArchetypeNBA-data/reports/historical_backtest_<timestamp>.md`; how to run it: [`OPERATIONS.md`](OPERATIONS.md) section 5.
 
+## 15. OddsPapi price paths and recovered closes
+
+Added 2026-11-07 (D-70). OddsPapi's free tier is the only free source of **timestamped** Pinnacle prices found so far. Two uses: recover the Pinnacle close of games the tick missed, and test live, with real prices and timestamps, whether Pinnacle's opener can be beaten by predicting the move (section 14).
+
+| Item | Detail |
+|------|--------|
+| Data | `GET /v4/historical-odds` per finished fixture (free, 5 s apart): every Pinnacle price change with `createdAt`, pre-match and in-play together, each alternative line as its own market id. Pre-match paths exist from about February 2026 |
+| Main line | At each `createdAt`, spreads/totals use the line whose two active sides are closest to even (smallest `|ln(p1/p2)|`, then larger limit, then smaller `|line|`); a pair is stored whenever the main line or one of its prices changes. Moneyline: both sides active |
+| Cutoff | `trueStartTime` (the real tip, e.g. 54 s after the listed start) when it lies within -1 h .. +3 h of the start, else the earlier of the listed start and our `commence_time`. Everything after it is in-play and is dropped |
+| Storage | Games with a `game` row: `odds_history`, books `op_pinnacle` (and `op_draftkings`/`op_fanduel` if enabled), `captured_at` = `book_last_update` = `createdAt`, American price rounded from the decimal. Older games (no `game` row): `oddspapi_quote`, keyed by the fixture and mapped to a `player_game_log` game id |
+| Open / close | Open = first stored pre-match pair; close = last pair at or before the cutoff |
+| Recovered close | A tipped-off game without a `closing` marker and with `op_pinnacle` rows gets `closing_oddspapi`. Brier vs the market and Pinnacle CLV show it on a separate "incl. recovered" line; the captured numbers, same-book CLV, the recorder, blend calibration and promotion gates do not use it |
+
+Known biases of the recovered close:
+
+| Bias | Effect |
+|------|--------|
+| Timestamp granularity | The close is the last `createdAt` before the real tip: usually seconds to a few minutes early (2026-10-20 opener: 3.6 min; a June 2026 game: 27 s). The tick's own capture is 15-30 minutes early, so a recovered close is, if anything, later than a captured one |
+| Last quote, not last offer | If Pinnacle suspended a market before the tip, the last active line counts as the close |
+| Main-line rule | When two lines are equally balanced, the chosen line can differ from Pinnacle's own main line by half a point |
+| One book only | Soft-book bets on those games still have no same-book close (NULL CLV) |
+| Rounding | `odds_history` stores integer American prices: a decimal 1.934 becomes -107 (1.9346); de-vigged probabilities move by < 0.001 |
+
+Line-movement test (`scripts/line_movement_report.py`, read-only): movement distribution (n, mean with a seeded bootstrap CI, sd, share unchanged, quantiles, hours from open to close) per market; naive baselines; and the D-68 line-move ridge regression re-run walk-forward with the Pinnacle open/close of path games added to the archive lines, so each game is predicted from earlier seasons only. Bets take Pinnacle's opener on the side the close is predicted to move toward (|move| >= 0.25 / 0.5 / 1); it reports CLV in points and in probability, how often the close moved our way, ROI at Pinnacle's **actual** opening price (not an assumed -110) and, when the line did not move, the price CLV against the de-vigged close. Under 30 games it prints "insufficient data". Caveats: the regression was trained mostly on SBRO opens of an unknown book posted at an unknown time, so a Pinnacle opener is a distribution shift; opening limits are small; at ~8 games a day a 0.5-point effect needs a few hundred games to separate from zero.
+
 ## Where each constant lives
 
 | Constants | File |
@@ -487,6 +512,7 @@ Full report: `~/ArchetypeNBA-data/reports/historical_backtest_<timestamp>.md`; h
 | Lab split, search ranges, historical gate, material differences | `backend/app/services/model_lab.py` |
 | Features and their shrinkage constants | `backend/app/analytics/features.py` |
 | Historical line parsing (total threshold 60, team maps), backtest grids and plausibility bounds | `backend/app/analytics/historical_lines.py`, `backend/app/services/historical_backtest.py` |
+| OddsPapi ids (sport 11, tournament 132), match tolerance 6 h, cutoff window, priorities, cooldowns, budget and floor | `backend/app/services/oddspapi.py`, `backend/app/services/oddspapi_client.py`, `ODDSPAPI_*` in `backend/app/config.py` |
 | Ridge and logistic grids | `backend/app/services/margin_features_model.py` |
 | Credit floor 25, props markets, window 45 min (manual CLI) | `backend/app/services/odds_snapshot.py` |
 | Tick window 30 min, props events 1, lock age 20 min, learn budget 240 s | `backend/app/services/tick.py` |
