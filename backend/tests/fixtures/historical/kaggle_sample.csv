@@ -1,0 +1,5 @@
+season,date,regular,playoffs,away,home,score_away,score_home,q1_away,q2_away,q3_away,q4_away,ot_away,q1_home,q2_home,q3_home,q4_home,ot_home,whos_favored,spread,total,moneyline_away,moneyline_home,h2_spread,h2_total,id_spread,id_total
+2008,2007-10-30,True,False,por,sa,97,106,24,25,25,23,0,26,26,26,28,0,home,13,189.5,900,-1400,0,0,0,0
+2008,2007-10-31,True,False,lac,gs,100,105,25,25,25,25,0,25,25,25,30,0,away,3,205,120,-140,0,0,0,0
+2024,2024-01-05,True,False,cle,no,110,115,25,25,30,30,0,28,28,29,30,0,home,0,220.5,,,0,0,0,0
+2026,2026-01-10,True,False,xyz,bos,90,100,20,20,25,25,0,25,25,25,25,0,home,5,215,-150,130,0,0,0,0

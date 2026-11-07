@@ -21,7 +21,7 @@ cd backend && python -m pytest tests -q                   # ~760 tests, all offl
 python scripts/run_tick.py --dry-run                      # what the scheduled tick would do (no network, no writes)
 python scripts/paper_report.py                            # performance, CLV, model skill, model league
 python scripts/model_league.py status                     # champion/challenger table
-python -m alembic current                                 # must equal the head (a8c2e4f6b0d1 as of 2026-11-01)
+python -m alembic current                                 # must equal the head (e9b1d3f5a7c2 once historical-odds is deployed; a8c2e4f6b0d1 before)
 ```
 
 ## 2. Non-negotiable rules
@@ -56,7 +56,7 @@ backend/
     analytics/         # pure math: elo.py, features.py, betting_policy.py, props_engine.py
     services/          # business logic (see §5); tick.py orchestrates the pipeline
     repositories/, etl/
-  alembic/versions/    # 001 → ad04e02dc85c → 4125a71b06bf → 9c3e5a7d1f42 → b7d41e9a2c85 → c4e8a1d63f27 → d7a2f5b81c39 → e3f8b1a4c9d2 → f1a9c3d7e5b2 → a2c4e6f8b1d3 → b3d5f7a9c1e4 → c5e7a9b1d3f6 → d6f8b0c2e4a7 → a8c2e4f6b0d1 (head)
+  alembic/versions/    # 001 → ad04e02dc85c → 4125a71b06bf → 9c3e5a7d1f42 → b7d41e9a2c85 → c4e8a1d63f27 → d7a2f5b81c39 → e3f8b1a4c9d2 → f1a9c3d7e5b2 → a2c4e6f8b1d3 → b3d5f7a9c1e4 → c5e7a9b1d3f6 → d6f8b0c2e4a7 → a8c2e4f6b0d1 → e9b1d3f5a7c2 (head: historical_game_line)
   scripts/             # CLIs: run_tick, paper_report, model_league, model_lab, backfill_elo, record_predictions, capture_odds_snapshot, bulk_ingest_nba, ...
   tests/               # pytest suite (offline); tests/synthetic_league.py generates fake leagues
 frontend/              # Next.js app (props page, shutdown modal, scouting modules); npm run dev | build | start
@@ -65,6 +65,7 @@ scripts/               # WSL ops: start_services_wsl.sh, stop_services_wsl.sh, b
 odd/tasks/             # one markdown plan per feature (ODD workflow, see §7) — the best history of WHY things are as they are
 docs/                  # architecture, quant methodology, operations, setup, DB transfer, decisions, roadmap
 logs/                  # git-ignored runtime logs (tick.log rotating 2 MB x3, tick.lock)
+~/ArchetypeNBA-data/   # OUTSIDE git: raw/<source>/ (historical odds downloads + manifest.json with URL, date, sha256), reports/ (backtest outputs)
 ```
 
 Legacy prototype cleanup (ROADMAP item 10) was executed safely: `api.py`, `nba_data_processor.py`, `nba_player_analyzer.py`, `nba_player_data.py`, `cluster_means_report.xlsx`, root `app/`, and tracked bytecode files were removed from the root and `backend/`. The PDF scouting report logic needed by `report.py` was moved into `backend/app/services/scouting_report/` and verified with offline tests. The three tracked `nba_active_player_stats_*.xlsx` files and `backend/app/etl/pipeline.py` are deliberately retained because `backend/scripts/seed_database.py` and `backend/app/services/data_update.py` actively read them.
@@ -139,6 +140,7 @@ Rejected/not done: paid odds feeds (OpticOdds ~$5k/mo), scraping ESPN/OddsPortal
 - Git on Windows prints LF→CRLF warnings (`core.autocrlf=true`); they are noise.
 - `nba_api` can be slow or block datacenter IPs; calls use 30–45 s timeouts. An empty `season_type` returns all game types in a window.
 - `scripts/start_services_wsl.sh` (WSL) and `scripts/start_services.ps1` (Windows) start the backend on **38921** and the frontend on **38920** (not 8000/3000). The backend process must be restarted to pick up code changes.
+- **Historical odds data lives outside the repo** in `~/ArchetypeNBA-data/raw/` (`sbro/` 16 season pages, `kaggle_cviaxmiwnptr/` CC0 CSV; each folder has a `manifest.json`). Treat the files as untrusted data (parse with `python -I`, never execute), never commit or redistribute them (SBRO's terms forbid reproduction without consent). `scripts/import_historical_lines.py` loads them into `historical_game_line`; `scripts/historical_backtest.py` reads them directly and is read-only (D-68, `docs/QUANT_MODULE.md` section 14).
 - **Known fabrication / rule-3 violations still in the code**: `services/injury_scraper.py` (invented fallback injuries, see §10) and `analytics/props_engine.py::load_baselines_from_db` (opens a SQLite file that does not exist and falls back to hardcoded star baselines; its season weights key on the non-chronological `season.id`). The props page and `daily_runner.py` still use them.
 - **Credit guard gap**: `POST /api/v1/props/run-analysis` and `GET /api/v1/props/today?refresh=true` call The Odds API (up to 6 credits: 2 events × 3 markets) plus Gemini, *outside* the tick's `--min-remaining` guard. The props cache file is served without checking its age.
 - **Hardcoded interpreter paths**: `scripts/run_backend.bat` and `scripts/run_pipeline.bat` contain this PC's Python path. `scripts/register_tick_task.ps1` now discovers Python (`-PythonExe`, `backend/.venv`, `run_pipeline.bat` if the path exists, then PATH), but the `.bat` files still need editing on a new machine.

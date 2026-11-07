@@ -182,7 +182,7 @@ The daily capture is wired as step `sgo` in the scheduled tick (`app/services/ti
 | Check | Command | What good looks like |
 |-------|---------|----------------------|
 | League | `cd backend; python scripts/model_league.py status` | A "last candidate proposal" within the last 7 days; challenger `paired n` growing; no promotion or retirement you did not expect |
-| Schema | `cd backend; python -m alembic current` | Equals the head (`a8c2e4f6b0d1` as of 2026-11-01) |
+| Schema | `cd backend; python -m alembic current` | Equals the head (`e9b1d3f5a7c2` once the historical-odds migration is deployed; `a8c2e4f6b0d1` before) |
 | Backup | `cd backend; python scripts/db_transfer.py export` ([section 9](#9-backups)) | A new `.dump` and `.manifest.json` pair that `verify` accepts, copied off the machine |
 | Code | `git status` and `git log -1` in the production checkout | Clean tree, on `main`, no unmerged work |
 | Disk | Size of `logs\` | A few MB (rotation caps `tick.log`; `backend.log` and `frontend.log` grow without rotation) |
@@ -311,6 +311,24 @@ Every manual change writes an audit row whose reason starts with `manual:`. A re
 - **Endpoint `GET /api/v1/league`**: A read-only JSON representation of the model league (champion, challengers with live evaluation metrics, paired $n$ vs the 150 target, log-loss gain with CI, margin NLL gain, Brier-vs-market gap, gate status in words, promotion/retirement history, and the last candidate proposal date). Responses are cached in-memory with a 5-minute TTL to avoid repeated bootstrap recomputations. The endpoint never writes to the database. An empty database returns status 200 with a clean empty structure.
 - **Promotion notifications (Telegram)**: Whenever a role change commits during the `learn` step (`promote`, `rollback`, `retire`, or a new challenger is registered by the candidate lab), the system dispatches a plain-text Telegram message summarizing what happened, model names, evidence numbers (paired $n$, gain and CI), and the date.
 - **How to enable notifications**: Notifications are opt-in. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `backend/.env` to valid Telegram bot credentials (real values; placeholders containing `your_` are treated as unset). If either is unset, notifications are skipped. A notification failure never causes the tick to fail or roll back: any error is logged as a warning with the token masked, and the tick proceeds normally.
+
+### Historical lines: import and backtest
+
+Free historical lines (SBRO archive 2007-08..2023-01-16 with open and close; Kaggle CC0 compilation 2007-08..2025-26 with one line per game) live outside git in `~/ArchetypeNBA-data/raw/` (override the base with `ARCHETYPE_DATA_DIR`). See [`DECISIONS.md`](DECISIONS.md) D-68 and [`QUANT_MODULE.md`](QUANT_MODULE.md) section 14.
+
+- **Re-download** (only if the files are lost; once, politely): the Kaggle zip is a public anonymous download from `https://www.kaggle.com/api/v1/datasets/download/cviaxmiwnptr/nba-betting-data-october-2007-to-june-2024`; SBRO pages are `https://www.sportsbookreviewsonline.com/scoresoddsarchives/nba-odds-YYYY-YY/`, one at a time, several seconds apart, generic User-Agent. Record URL, date and sha256 in the folder's `manifest.json`. Parse with `python -I` only; never execute downloaded files.
+- **Import** (needs migration `e9b1d3f5a7c2`, lockstep deploy in section 4 only if the tick code changes; this table is not read by the tick):
+  ```bash
+  cd backend
+  python scripts/import_historical_lines.py --dry-run   # parse + reconcile, read-only transaction, nothing written
+  python scripts/import_historical_lines.py             # idempotent upsert into historical_game_line, then commit
+  ```
+  The report lists rows per source and season, unmatched teams, lines not matched to a `player_game_log` game, final scores that differ from the box score (counted, never dropped), rows matched one day off their source date (only with an identical score), and SBRO/Kaggle agreement. Re-running is safe: rows upsert on `(source, game_date, home_team_id, away_team_id)`.
+- **Backtest** (read-only: sets the PostgreSQL transaction read-only, rolls back, parses the raw files directly, so it works before the import and without the migration):
+  ```bash
+  python scripts/historical_backtest.py [--availability] [--n-boot 1000] [--seed 42] [--no-save]
+  ```
+  Takes 2 to 5 minutes (one `margin_features` refit per season). Prints a markdown report and saves a copy to `~/ArchetypeNBA-data/reports/historical_backtest_<timestamp>.md`. `--availability` adds the post-game availability upper bound (loads `player_game_log` box scores). From a worktree, export `DATABASE_URL` deliberately (the worktree has no `.env`).
 
 ### Weekly View API and Frontend Page
 
