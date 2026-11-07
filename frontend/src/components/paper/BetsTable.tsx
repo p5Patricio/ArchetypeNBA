@@ -171,6 +171,7 @@ export function BetsTable({
               <option value="kelly_fractional">Quarter-Kelly</option>
               <option value="kelly_shrunk">Kelly Shrunk</option>
               <option value="market_edge">Market Benchmark</option>
+              <option value="calibrated">Calibrated</option>
             </select>
           </div>
 

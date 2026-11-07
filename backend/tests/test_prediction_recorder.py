@@ -928,3 +928,98 @@ def test_totals_predictions_do_not_pollute_model_league(world, db_session):
     with pytest.raises(ManualOverrideRefused, match="is a benchmark model"):
         manual_retire(db_session, bench.id, "try retire", NOW)
 
+
+
+# --- calibrated strategy -----------------------------------------------------------------------------------
+
+
+def _with_blend(monkeypatch, w_used, w_hat=0.4, n=500):
+    from app.services import prediction_recorder
+    from app.services.blend_calibration import BlendWeight
+
+    monkeypatch.setattr(prediction_recorder, "compute_blend_weight", lambda session, model_id=None: BlendWeight(w_used, w_hat, n))
+
+
+def test_calibrated_places_no_bet_while_the_model_has_no_weight(world, db_session):
+    game = world.game()
+    world.h2h(game, "pinnacle", -210, 180)  # the model is 3pp above the market: v1 bets, calibrated must not
+    world.quote(game, "draftkings", MarketType.h2h, BetSide.home, None, -180)
+
+    summary = world.recorder().run()  # no calibration history at all: w_used = 0
+
+    strategies = {b.strategy for b in _bets(db_session)}
+    assert StakingStrategy.flat in strategies
+    assert StakingStrategy.calibrated not in strategies
+    assert summary.bets_placed["calibrated"] == 0
+    assert summary.skipped["calibrated_no_model_weight"] >= 1
+    assert (summary.blend.w_used, summary.blend.w_hat, summary.blend.n) == (0.0, 0.0, 0)
+
+
+def test_calibrated_bets_with_its_weight_stored_when_the_model_is_close_enough_to_the_market(
+    world, db_session, monkeypatch
+):
+    _with_blend(monkeypatch, 0.3)
+    game = world.game()
+    world.h2h(game, "pinnacle", -210, 180)
+    best = world.quote(game, "draftkings", MarketType.h2h, BetSide.home, None, -180)
+
+    summary = world.recorder().run()
+
+    bet = _bets_of(db_session, game)[StakingStrategy.calibrated]
+    p_fair = float(bet.fair_prob_at_bet)
+    p_blend = policy.logit_blend(P_HOME, p_fair, 0.3)
+    assert summary.bets_placed["calibrated"] == 1 and summary.blend.w_used == 0.3
+    assert float(bet.blend_weight) == pytest.approx(0.3)
+    assert float(bet.stake_units) == 1.0 and bet.kelly_multiplier is None
+    assert bet.odds_taken_id == best.id
+    assert float(bet.ev_per_unit) == pytest.approx(p_blend * american(-180) - 1.0, abs=1e-5)
+    prediction = db_session.get(ModelPrediction, bet.prediction_id)
+    assert (prediction.market, prediction.side) == (MarketType.h2h, BetSide.home)
+    # every other strategy keeps blend_weight NULL
+    assert all(b.blend_weight is None for b in _bets(db_session) if b.strategy != StakingStrategy.calibrated)
+
+    again = world.recorder().run()  # idempotent
+    assert again.bets_placed["calibrated"] == 0
+    assert len([b for b in _bets(db_session) if b.strategy == StakingStrategy.calibrated]) == 1
+
+
+def test_calibrated_skips_a_disagreement_beyond_the_cap_while_v1_still_bets(world, db_session, monkeypatch):
+    _with_blend(monkeypatch, 0.3)
+    game = world.game()
+    world.h2h(game, "pinnacle", -170, 145)  # fair 0.607 vs model 0.685: 7.8pp apart
+
+    summary = world.recorder().run()
+
+    strategies = {b.strategy for b in _bets(db_session)}
+    assert StakingStrategy.flat in strategies and StakingStrategy.calibrated not in strategies
+    assert summary.skipped["calibrated_disagreement_too_large"] >= 1
+
+
+def test_calibrated_also_bets_spreads_and_a_dry_run_writes_nothing(world, db_session, monkeypatch):
+    _with_blend(monkeypatch, 0.3)
+    game = world.game()
+    world.spread(game, "pinnacle", -3.5, -110, -110)
+    fanduel_home, _ = world.spread(game, "fanduel", -3.5, 105, -125)
+
+    dry = world.recorder().run(dry_run=True)
+    assert _bets(db_session) == [] and dry.bets_placed["calibrated"] == 1
+
+    world.recorder().run()
+    bet = _bets_of(db_session, game)[StakingStrategy.calibrated]
+    prediction = db_session.get(ModelPrediction, bet.prediction_id)
+    assert (prediction.market, float(prediction.line)) == (MarketType.spreads, -3.5)
+    assert bet.odds_taken_id == fanduel_home.id and float(bet.blend_weight) == pytest.approx(0.3)
+
+
+def test_the_calibrated_bankroll_and_daily_cap_are_its_own(world, db_session, monkeypatch):
+    _with_blend(monkeypatch, 0.3)
+    game = world.game()
+    world.h2h(game, "pinnacle", -210, 180)
+    world.quote(game, "draftkings", MarketType.h2h, BetSide.home, None, -180)
+    other = world.game(home="CCC", away="DDD", hours=6.0)
+    world.bet(other, 1, strategy=StakingStrategy.calibrated, status=BetStatus.lost, profit=-1.0, placed_at=NOW - timedelta(days=5))
+
+    world.recorder().run()
+
+    bet = _bets_of(db_session, game)[StakingStrategy.calibrated]
+    assert float(bet.bankroll_before) == 99.0

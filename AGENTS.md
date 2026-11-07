@@ -21,7 +21,7 @@ cd backend && python -m pytest tests -q                   # ~760 tests, all offl
 python scripts/run_tick.py --dry-run                      # what the scheduled tick would do (no network, no writes)
 python scripts/paper_report.py                            # performance, CLV, model skill, model league
 python scripts/model_league.py status                     # champion/challenger table
-python -m alembic current                                 # must equal the head (e3f8b1a4c9d2 as of this snapshot)
+python -m alembic current                                 # must equal the head (a8c2e4f6b0d1 as of 2026-11-01)
 ```
 
 ## 2. Non-negotiable rules
@@ -56,7 +56,7 @@ backend/
     analytics/         # pure math: elo.py, features.py, betting_policy.py, props_engine.py
     services/          # business logic (see §5); tick.py orchestrates the pipeline
     repositories/, etl/
-  alembic/versions/    # 001 → ad04e02dc85c → 4125a71b06bf → 9c3e5a7d1f42 → b7d41e9a2c85 → c4e8a1d63f27 → d7a2f5b81c39 → e3f8b1a4c9d2 (head)
+  alembic/versions/    # 001 → ad04e02dc85c → 4125a71b06bf → 9c3e5a7d1f42 → b7d41e9a2c85 → c4e8a1d63f27 → d7a2f5b81c39 → e3f8b1a4c9d2 → f1a9c3d7e5b2 → a2c4e6f8b1d3 → b3d5f7a9c1e4 → c5e7a9b1d3f6 → d6f8b0c2e4a7 → a8c2e4f6b0d1 (head)
   scripts/             # CLIs: run_tick, paper_report, model_league, model_lab, backfill_elo, record_predictions, capture_odds_snapshot, bulk_ingest_nba, ...
   tests/               # pytest suite (offline); tests/synthetic_league.py generates fake leagues
 frontend/              # Next.js app (props page, shutdown modal, scouting modules); npm run dev | build | start
@@ -88,7 +88,7 @@ Each step is isolated (a failure never blocks `record`); a lock file prevents ov
 | Odds capture | `odds_api_service.py`, `odds_ingestion.py`, `odds_snapshot.py` | Per-bookmaker quotes (`odds_history`), `bookmakers=pinnacle,draftkings,fanduel,betmgm,williamhill_us,betrivers,bovada`; rows inserted only when `book_last_update` changes; markers `opening`/`closing`/`closing_props` per game. |
 | Champion model | `analytics/elo.py`, `services/elo_service.py` (`EloRatingService`) | 538-style Elo: K=20, home advantage **60** (not 100: walk-forward bias), carryover 0.75 to 1505, MOV exponent 0.8, 28 Elo points per point, margin sigma 14.14. Registered as `model_version` `elo_538` 1.1 (id 1). The unrelated legacy `app.services.elo.EloService` is a different class. |
 | Challenger | `analytics/features.py`, `services/margin_features_model.py` | `margin_features`: ridge (margin) + logistic (win) on 12 leak-free features; params are JSON in `model_version.params`; inference is numpy-only. Registered as `lab-20260613-51ff86` (id 2), shadow only. |
-| Betting policy | `analytics/betting_policy.py`, `services/prediction_recorder.py` | Bet only if (p_model − p_fair_Pinnacle) ≥ 2 pp AND EV with blended p′ = 0.5·p_model + 0.5·p_fair ≥ 2% at the best price quoted at Pinnacle's line. Flat 1 u and ¼ Kelly (caps 2%/bet, 10%/day, 4%/game), one bet per strategy/game/market/side, horizon 20 h, quotes ≤ 6 h old, never at/after tip-off. Push is a refund on integer lines. |
+| Betting policy | `analytics/betting_policy.py`, `services/prediction_recorder.py`, `services/blend_calibration.py` | Bet only if (p_model − p_fair_Pinnacle) ≥ 2 pp AND EV with blended p′ = 0.5·p_model + 0.5·p_fair ≥ 2% at the best price quoted at Pinnacle's line. Flat 1 u and ¼ Kelly (caps 2%/bet, 10%/day, 4%/game), one bet per strategy/game/market/side, horizon 20 h, quotes ≤ 6 h old, never at/after tip-off. Push is a refund on integer lines. A fifth strategy, `calibrated` (D-67), bets flat 1 u only when the model is within 6 pp of Pinnacle and the EV with a logit blend at a **fitted** model weight `w` (`services/blend_calibration.py`; `w = 0`, i.e. no bets, below 100 calibration games) clears 2%; the four above are the v1 control and must not change. `python scripts/blend_weight.py` prints `w_used`, `w_hat`, n. |
 | Settlement and CLV | `services/settlement.py`, `results_sync.py` | h2h and spreads only. CLV only for games with a `closing` marker, same book/market/side/line; otherwise NULL. |
 | Evaluation | `services/model_evaluation.py`, `league_report.py`, `paper_report.py` | Paired per-game log loss (primary), Brier, margin NLL, Brier vs Pinnacle's de-vigged close; seeded paired bootstrap. |
 | Promotion | `services/model_promotion.py`, `scripts/model_league.py` | Gates in §6. Audit trail in `model_evaluation`. Kill switch `LEARNING_AUTOPROMOTE`. |
@@ -151,7 +151,7 @@ Rejected/not done: paid odds feeds (OpticOdds ~$5k/mo), scraping ESPN/OddsPortal
 | Metric | Value |
 |--------|-------|
 | Tests | 970 backend tests pass (2026-10-31, with injuries and lineups in the database, the SportsGameOdds daily capture and gemini-3.8-flash); frontend `tsc --noEmit` clean |
-| Database | PostgreSQL 18.4, 229 MB, Alembic head `e3f8b1a4c9d2`; 23 seasons of game logs (2003-04..2025-26), 59k Elo rows per model |
+| Database | PostgreSQL 18.4, 229 MB, Alembic head `a8c2e4f6b0d1` once the `calibrated` migration is deployed (`d6f8b0c2e4a7` before); 23 seasons of game logs (2003-04..2025-26), 59k Elo rows per model |
 | Capture | Since 2026-10-06 (opening lines) and 2026-10-20 (full tick); Odds API credits left: 371 (resets on the 1st of each month); task healthy, 0 failed ticks |
 | Paper trading (2026-10-20 → 10-26) | flat: 56 bets (49 settled), P/L −5.28 u, ROI −11.4%; ¼ Kelly: 44 bets, −13.34 u. Bankrolls 94.7 u / 86.7 u. **Tiny samples, not evidence of anything.** |
 | CLV | average +3.5% flat / +4.8% Kelly over 18 / 12 bets with a comparable close (35% coverage; survivorship toward unchanged lines) — treat as noise |

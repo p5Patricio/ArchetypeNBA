@@ -40,7 +40,7 @@ interface StrategyStyle {
   color: string;
   borderColor: string;
   backgroundColor: string;
-  pointStyle: "circle" | "rect" | "triangle" | "rectRot" | "star";
+  pointStyle: "circle" | "rect" | "triangle" | "rectRot" | "star" | "crossRot";
   borderDash: number[];
   labelEs: string;
   labelEn: string;
@@ -92,6 +92,17 @@ const STRATEGY_STYLES: Record<string, StrategyStyle> = {
     labelEn: "Market Benchmark (No Model)",
     patternEs: "◆ Rombo, raya y punto",
     patternEn: "◆ Diamond, dash-dot line",
+  },
+  calibrated: {
+    color: "#0d9488",
+    borderColor: "#0d9488",
+    backgroundColor: "rgba(13, 148, 136, 0.08)",
+    pointStyle: "crossRot",
+    borderDash: [6, 3],
+    labelEs: "Calibrada (mezcla logit)",
+    labelEn: "Calibrated (logit blend)",
+    patternEs: "✕ Aspa, línea de trazos cortos",
+    patternEn: "✕ Cross, short-dash line",
   },
 };
 

@@ -1,7 +1,9 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { translations, type Language, type UnitSystem } from "@/lib/translations";
+import { DEFAULT_MODE, MODE_STORAGE_KEY, isAppMode, modeForPathname, type AppMode } from "@/lib/modes";
 import { getSeasons, type SeasonItem } from "@/lib/api";
 
 interface PreferencesContextType {
@@ -9,6 +11,9 @@ interface PreferencesContextType {
   setLanguage: (lang: Language) => void;
   unitSystem: UnitSystem;
   setUnitSystem: (units: UnitSystem) => void;
+  /** Active product mode: the route's own mode when it has one, else the persisted preference. */
+  mode: AppMode;
+  setMode: (mode: AppMode) => void;
   seasonId: number | null;
   seasonLabel: string;
   setSeason: (seasonId: number, seasonLabel?: string) => void;
@@ -23,6 +28,8 @@ const PreferencesContext = createContext<PreferencesContextType | undefined>(und
 export function PreferencesProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>("es");
   const [unitSystem, setUnitSystemState] = useState<UnitSystem>("metric");
+  const pathname = usePathname();
+  const [preferredMode, setPreferredMode] = useState<AppMode>(DEFAULT_MODE);
   const [seasons, setSeasons] = useState<SeasonItem[]>([]);
   const [seasonId, setSeasonId] = useState<number | null>(3);
   const [seasonLabel, setSeasonLabel] = useState<string>("2025-26");
@@ -37,10 +44,34 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
       if (savedUnits === "metric" || savedUnits === "imperial") {
         setUnitSystemState(savedUnits);
       }
+      const savedMode = localStorage.getItem(MODE_STORAGE_KEY);
+      if (isAppMode(savedMode)) {
+        setPreferredMode(savedMode);
+      }
     } catch {
       // ignore storage errors
     }
   }, []);
+
+  // A route that belongs to a mode always wins (deep links); remember it as the preference
+  // so unclassified routes (e.g. a 404) keep showing the side the user was last on.
+  const routeMode = modeForPathname(pathname);
+  const mode: AppMode = routeMode ?? preferredMode;
+
+  useEffect(() => {
+    if (!routeMode) return;
+    setPreferredMode(routeMode);
+    try {
+      localStorage.setItem(MODE_STORAGE_KEY, routeMode);
+    } catch {}
+  }, [routeMode]);
+
+  const setMode = (next: AppMode) => {
+    setPreferredMode(next);
+    try {
+      localStorage.setItem(MODE_STORAGE_KEY, next);
+    } catch {}
+  };
 
   useEffect(() => {
     let attempts = 0;
@@ -187,6 +218,8 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
         setLanguage,
         unitSystem,
         setUnitSystem,
+        mode,
+        setMode,
         seasonId,
         seasonLabel,
         setSeason,

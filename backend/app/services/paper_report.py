@@ -14,6 +14,7 @@ Paper-trading report: how the strategies are doing and whether the model has any
   predict, they never bet) and how many final games those predictions cover.
 * Model league: each challenger's live paired evaluation against the champion, its promotion gate in words and the
   promotion/retirement history (``app.services.league_report``).
+* Calibrated blend weight: ``w_used`` / ``w_hat`` / n of the ``calibrated`` strategy (``app.services.blend_calibration``).
 * Bankroll per strategy: ``START_BANKROLL`` plus settled P/L.
 """
 from collections import defaultdict
@@ -40,6 +41,7 @@ from app.models import (
     StakingStrategy,
 )
 from app.services import market_close, model_registry
+from app.services.blend_calibration import BlendWeight, compute_blend_weight
 from app.services.clv_report import PinnacleClvReport, build_pinnacle_clv_report
 from app.services.league_report import League, build_league, format_league
 
@@ -134,6 +136,7 @@ class PaperReport:
     clv: ClvCoverage = field(default_factory=ClvCoverage)
     pinnacle_clv: Optional[PinnacleClvReport] = None
     skill: ModelSkill = field(default_factory=ModelSkill)
+    blend: BlendWeight = field(default_factory=BlendWeight)
     models: List[ActiveModel] = field(default_factory=list)
     league: Optional[League] = None
     totals_shadow: Optional[Any] = None
@@ -151,6 +154,7 @@ def build_report(session: Session, now: Optional[datetime] = None) -> PaperRepor
         clv=_clv_coverage(session, now),
         pinnacle_clv=build_pinnacle_clv_report(session, now),
         skill=_model_skill(session),
+        blend=compute_blend_weight(session),
         models=_active_models(session),
         league=build_league(session, now),
         totals_shadow=audit_totals_shadow(session),
@@ -485,6 +489,9 @@ def format_report(report: PaperReport) -> str:
         )
     else:
         lines.append("  Cannot be computed yet: no final game has a closing capture, a model prediction and a sharp close.")
+    lines.append("")
+
+    lines.append(report.blend.report_line())
     lines.append("")
 
     lines.append("Active models (only the champion bets)")

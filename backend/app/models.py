@@ -432,6 +432,7 @@ class StakingStrategy(str, enum.Enum):
     kelly_fractional = "kelly_fractional"
     kelly_shrunk = "kelly_shrunk"
     market_edge = "market_edge"
+    calibrated = "calibrated"
 
 
 def _pg_enum(py_enum: type[enum.Enum], name: str) -> SAEnum:
@@ -743,6 +744,8 @@ class SimulatedBet(SQLModel, table=True):
     ev_per_unit: Decimal = Field(sa_column=Column(Numeric(7, 5), nullable=False))
     strategy: StakingStrategy = Field(sa_column=Column(_STAKING_STRATEGY, nullable=False))
     kelly_multiplier: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(4, 3)))
+    # Weight of the model in the logit blend used by the `calibrated` strategy; NULL for every other strategy.
+    blend_weight: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(4, 3)))
     stake_units: Decimal = Field(sa_column=Column(Numeric(8, 3), nullable=False))
     bankroll_before: Decimal = Field(sa_column=Column(Numeric(12, 3), nullable=False))
     closing_odds_id: Optional[int] = Field(

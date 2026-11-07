@@ -50,8 +50,8 @@ export function PropsHeader({
                 <TrendingUp className="h-3.5 w-3.5 text-orange-600" />
                 <span>
                   {isEs
-                    ? "MODELO CUANTITATIVO • MONTE CARLO (+EV)"
-                    : "QUANT MODEL • MONTE CARLO (+EV)"}
+                    ? "MODELO EXPERIMENTAL • MONTE CARLO (SIN VALIDAR)"
+                    : "EXPERIMENTAL MODEL • MONTE CARLO (UNVALIDATED)"}
                 </span>
               </div>
 
@@ -71,14 +71,14 @@ export function PropsHeader({
               id="props-page-title"
               className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-900 leading-tight"
             >
-              NBA Player Props & Expected Value
+              NBA Player Props Projections
             </h1>
 
             {/* Subtitle */}
             <p className="text-sm sm:text-base text-slate-600 font-normal leading-relaxed">
               {isEs
-                ? "Identificá valor matemático frente a las cuotas de las casas de apuestas. Integramos distribución Binomial Negativa (10,000 simulaciones), análisis cualitativo con Gemini AI y cuotas en vivo."
-                : "Identify mathematical edges against sportsbook lines using Negative Binomial distributions (10,000 Monte Carlo runs), Gemini AI qualitative injury adjustments, and live odds."}
+                ? "Proyecciones por jugador frente a las líneas de las casas de apuestas. Experimental y sin validar: no son recomendaciones. Integramos distribución Binomial Negativa (10,000 simulaciones), análisis cualitativo con Gemini AI y cuotas en vivo."
+                : "Per-player projections against sportsbook lines. Experimental and unvalidated: not recommendations. Uses Negative Binomial distributions (10,000 Monte Carlo runs), Gemini AI qualitative injury adjustments, and live odds."}
             </p>
 
             {/* Visible Paper Analysis Disclaimer */}

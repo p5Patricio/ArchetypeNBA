@@ -59,6 +59,15 @@ export function StrategyKpis({ strategies, loading }: StrategyKpisProps) {
           badge: isEs ? "Sin Modelo" : "No Model",
           badgeColor: "bg-purple-100 text-purple-700 border-purple-200",
         };
+      case "calibrated":
+        return {
+          title: isEs ? "Calibrada (mezcla logit)" : "Calibrated (logit blend)",
+          desc: isEs
+            ? "Flat de 1 u. Mezcla logit del modelo con Pinnacle usando un peso ajustado con evidencia propia; sólo apuesta si el modelo está a menos de 6 pp de Pinnacle y el peso es mayor que 0."
+            : "Flat 1 u. Logit blend of the model with Pinnacle using a weight fitted on its own record; bets only when the model is within 6 pp of Pinnacle and the weight is above 0.",
+          badge: isEs ? "Calibrada" : "Calibrated",
+          badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+        };
       default:
         return {
           title: key.replace(/_/g, " ").toUpperCase(),
