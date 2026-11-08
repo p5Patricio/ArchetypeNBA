@@ -16,7 +16,7 @@ Turn the D-68 line-move ridge (it predicts Pinnacle's open-to-close move) into a
 5. **Live recorder** `services/line_move_strategy.py`, run by the tick's `record` step after the champion recorder in its own transaction (a failure is rolled back and reported, never touching the champion). For a scheduled game within 20 h, both teams' previous games must be `final` AND present in `player_game_log` (the feature history); otherwise skip (`previous_game_not_final` / `previous_game_not_ingested`). One decision per game and market: at the first eligible tick a prediction is recorded (projection = predicted close-minus-current move, side = predicted direction, line = Pinnacle's current line), and a bet only when |pred| clears the threshold; later ticks skip (`already_decided`). This mirrors the offline one-shot evaluation and gives one bet per game/market at most (stricter than per side). Price: best fresh quote (<= 6 h) at Pinnacle's line across books, never at or after tip. Flat 1 unit under the usual caps on the strategy's own bankroll.
 6. **Attribution**: new enum value `line_move`; nullable `simulated_bet.predicted_move` and `simulated_bet.pinnacle_price_at_bet`; `fair_prob_at_bet` = Pinnacle de-vigged probability of the side at bet time; `model_prob` = that plus `Phi(|pred|/sigma) - 0.5` (the probability-scale move), `ev_per_unit` from it.
 7. **Existing strategies unchanged**: the champion recorder ignores bets of strategies it does not run (it would otherwise KeyError on a settled `line_move` bet); aggregate report lines (Pinnacle CLV, market breakdown, CLV coverage) exclude `line_move` so their numbers stay what they were; the live test gets its own section (bets, ROI with a bootstrap CI, Pinnacle price CLV with CI on the captured and recovered lines, points CLV against Pinnacle's close, share moved our way) in `paper_report.py` and `/api/v1/paper/summary`.
-8. **Migration**: hand-written, revision `c7e9a1b3d5f8`, down_revision `f3c5e7a9b2d4` (the `fix/injury-backfill-v2` branch may add another child of `f3c5e7a9b2d4`: chain one after the other before merging).
+8. **Migration**: hand-written, revision `c7e9a1b3d5f8`, down_revision `a4d6f8b0c3e5` (the `fix/injury-backfill-v2` migration, merged to main first; rechained on the coordinator's instruction).
 
 ## Constraints
 - Worktree `ArchetypeNBA-worktrees/line-move-shadow`, branch `feat/line-move-shadow`; commit locally, no push. No network. Production DB read-only (`SET TRANSACTION READ ONLY`).
@@ -25,14 +25,14 @@ Turn the D-68 line-move ridge (it predicts Pinnacle's open-to-close move) into a
 
 ## Tasks
 - [ ] L0 ODD file before the first source edit.
-- [ ] L1 `oddspapi.main_line_pairs`, `line_movement` readiness/entry/as-of features, backtest overrides and export, refactored move features.
-- [ ] L2 `line_movement_report.py` leak-safe section (naive at entry, leaky opener numbers, leak-safe by threshold, b2b split, month split, n < 30 flagged).
-- [ ] L3 Model + migration + `line_move_strategy.py` + tick wiring + recorder guard.
-- [ ] L4 `scripts/register_line_move.py --dry-run`.
-- [ ] L5 Paper report and API section.
+- [x] L1 `oddspapi.main_line_pairs`, `line_movement` readiness/entry/as-of features, backtest overrides and export, refactored move features.
+- [x] L2 `line_movement_report.py` leak-safe section (naive at entry, leaky opener numbers, leak-safe by threshold, b2b split, month split, n < 30 flagged).
+- [x] L3 Model + migration + `line_move_strategy.py` + tick wiring + recorder guard.
+- [x] L4 `scripts/register_line_move.py --dry-run`.
+- [x] L5 Paper report and API section.
 - [ ] L6 Tests (leak safety, readiness, uniqueness, tip guard, existing strategies unchanged, report/API).
-- [ ] L7 Docs: QUANT_MODULE section, DECISIONS D-71, OPERATIONS, AGENTS.
-- [ ] L8 Run the leak-safe evaluation read-only against production; record the headline.
+- [x] L7 Docs: QUANT_MODULE section, DECISIONS D-71, OPERATIONS, AGENTS.
+- [x] L8 Run the leak-safe evaluation read-only against production; record the headline.
 
 ## Acceptance criteria
 - A feature built for a bettable instant is unchanged when a game that ended after the instant changes its score.
@@ -42,10 +42,18 @@ Turn the D-68 line-move ridge (it predicts Pinnacle's open-to-close move) into a
 
 ## Checks
 - `cd backend && /home/patricio/proyectos/ArchetypeNBA/.venv/bin/python -m pytest tests -q`
-- `python -m alembic heads` shows one head (`c7e9a1b3d5f8`).
+- `python -m alembic heads` shows one head (`c7e9a1b3d5f8`) once `a4d6f8b0c3e5` is on the branch.
 
 ## Progress
 - 2026-11-07 L0 done.
+- 2026-11-07 L1-L5 implemented. Checked against production (read-only): the as-of feature rows equal the date-based ones for all 770 path games (max diff 0), the totals mu differs (mean 0.13, max 4.7 points: the league-mean leak); readiness came from tip times for all 770 games, 161 entries are after the opener; the exported fit reproduces the walk-forward predictions of the live season to 2.5e-16; the registration dry run fits on 20,437 games (SBRO 2007-08..2022-23 + 638 OddsPapi entries of 2025-26). The live recorder dry run (model injected in memory, production not migrated) skipped the one game in the horizon with `no_capture_after_bettable_instant`, as designed.
+- 2026-11-07 L8 headline (seed 42): leak-safe spreads >= 0.25 +0.39 pts (+0.20..+0.57, n 400), totals >= 0.5 +1.07 (+0.49..+1.68, n 83); ROI at Pinnacle's entry price spans zero. Full tables in docs/QUANT_MODULE.md section 16.
+- 2026-11-07 L7 docs written (QUANT_MODULE 16, D-71, OPERATIONS 2.3 and section 4 note, AGENTS).
+
+## Follow-ups
+- Register `line_move` 1 after the lockstep deploy (`scripts/register_line_move.py --dry-run`, then without).
+- Frontend: render `line_move_live_test` on the /betting page (the API field exists).
+- Revisit thresholds only as a new version after >= 300 live bets.
 
 ## Next step
-L1.
+L6 tests, then the full suite.

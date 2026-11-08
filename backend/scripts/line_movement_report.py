@@ -126,7 +126,7 @@ def leak_safe_section(session, paths: List[lm.GamePath], leaky_model, archive, a
     predicted, sigma, scores, result = model
     lm.attach_scores(entries, scores)
     out.extend(lm.format_strategies(lm.naive_strategies(entries, args.seed, args.n_boot),
-                                    "Naive baselines at the leak-safe entry"))
+                                    "Naive baselines at the leak-safe entry (here 'opening price' = the entry price)"))
     out.extend(lm.format_rows(
         [("all", r) for r in lm.model_strategies(entries, predicted, sigma, args.seed, args.n_boot)],
         "Line-move model at the leak-safe entry (target close - entry, walk-forward by season)",
@@ -173,6 +173,7 @@ def main(argv: Optional[List[str]] = None, session_factory=None) -> int:
         model = None if archive is None else model_predictions(session, paths, args, archive=archive)
         if model is not None:
             scores = model[2]
+            lm.attach_scores(paths, scores)  # before the leak-safe section, which reuses the opener paths
             if not args.no_leak_safe:
                 leak_safe = leak_safe_section(session, paths, model, archive, args)
         else:
