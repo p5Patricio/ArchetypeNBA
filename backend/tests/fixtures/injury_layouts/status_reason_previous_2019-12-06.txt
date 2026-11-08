@@ -1,0 +1,29 @@
+# Excerpt of pypdf layout text from an official NBA injury report PDF (Injury-Report_2019-12-06_05PM), for offline parser tests only. Not redistributable data.
+                                                                                                       Injury Report: 12/06/19 05:30 PM
+
+
+
+
+Game Date            Game Time             Matchup               Team                                 Player Name                                   Current Status                                Reason                                        Previous Status
+
+12/06/2019           07:00 (ET)            BKN@CHA              Brooklyn Nets                        Chandler, Wilson                              Out                                            League Suspension                             -
+
+                                                                                                     Durant, Kevin                                 Out                                            Injury/Illness - Right Achilles; Rehab        -
+
+                                                                                                     Ellenson, Henry                               Out                                            G League - Two-Way                            -
+
+                                                                                                     Irving, Kyrie                                 Out                                            Injury/Illness - Right Shoulder;              -
+                                                                                                                                                                                                  Impingement
+
+                                                                                                     Kurucs, Rodions                               Out                                            G League - On Assignment                      -
+
+                                                                                                     LeVert, Caris                                 Out                                            Injury/Illness - Right Thumb; Surgery         -
+
+                                                                                                     Luwawu-Cabarrot, Timothe                      Out                                            G League - Two-Way                            -
+
+                                                                Charlotte Hornets                    Franks, Robert                                Out                                            G League - Two-Way                            -
+
+                                                                                                     Martin, Caleb                                 Out                                            G League - On Assignment                      -
+
+                                                                                                     Martin, Cody                                  Out                                            G League - On Assignment                      Available
+

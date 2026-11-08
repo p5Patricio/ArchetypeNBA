@@ -1,0 +1,35 @@
+# Excerpt of pypdf layout text from an official NBA injury report PDF (Injury-Report_2019-11-15_05PM), for offline parser tests only. Not redistributable data.
+                                                                                                        Injury Report: 11/15/19 05:30 PM
+
+
+
+
+Game Date            Game Time             Matchup              Team                                 Player Name                                    Reason                                        Current Status                                Previous Status
+
+11/15/2019           07:00 (ET)            DET@CHA              Charlotte Hornets                    Bacon, Dwayne                                 Injury/Illness - Right Knee Soreness          Probable                                       -
+
+                                                                                                     Batum, Nicolas                                Injury/Illness - Fractured Third              Out                                            -
+                                                                                                                                                   Finger, Left Hand
+
+                                                                                                     Franks, Robert                                G League - Two-Way                            Out                                            -
+
+                                                                                                     McDaniels, Jalen                              G League - On Assignment                      Out                                            -
+
+                                                                                                     Simmons, Kobi                                 G League - Two-Way                            Out                                            -
+
+                                                                Detroit Pistons                      Bone, Jordan                                  G League - Two-Way                            Out                                            -
+
+                                                                                                     Doumbouya, Sekou                              G League - On Assignment                      Out                                            -
+
+                                                                                                     Jackson, Reggie                               Injury/Illness - Lumbar Stress                Out                                            -
+                                                                                                                                                   Reaction
+
+                                                                                                     King, Louis                                   G League - Two-Way                            Out                                            -
+
+                                                                                                     Snell, Tony                                   Injury/Illness - Left Hip Flexor Strain       Probable                                       -
+
+                                                                                                     Thomas, Khyri                                 Injury/Illness - Right Foot Surgery           Out                                            -
+
+                                           SAS@ORL              Orlando Magic                        Isaac, Jonathan                               Injury/Illness - Right ankle; Sprain          Questionable                                   Available
+
+                                                                                                     Johnson, BJ                                   G League - Two-Way                            Out                                            -

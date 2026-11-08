@@ -14,7 +14,17 @@ from sqlmodel import Session, select
 
 from app.analytics.props_engine import normalize_player_key, strip_player_suffix
 from app.config import settings
-from app.models import Game, InjuryEntry, InjuryReportSnapshot, Player, PlayerGameLog, PlayerSeasonStats, Season, Team
+from app.models import (
+    Game,
+    InjuryBackfillSlot,
+    InjuryEntry,
+    InjuryReportSnapshot,
+    Player,
+    PlayerGameLog,
+    PlayerSeasonStats,
+    Season,
+    Team,
+)
 from app.services.injury_report_parser import (
     InjuryReportLayoutError,
     ParsedInjuryReport,
@@ -701,6 +711,34 @@ class PlannedInjurySlot:
         return self.candidate_urls[0] if self.candidate_urls else ""
 
 
+OUTCOME_STORED = "stored"
+OUTCOME_MISSING = "missing"
+OUTCOME_PARSE_FAILED = "parse_failed"
+OUTCOME_HTTP_ERROR = "http_error"
+
+
+def slot_ledger_key(slot: "PlannedInjurySlot") -> str:
+    """Ledger key of a slot: its kind (``five_pm``, ``pre_tip``) or ``extra_HHMM`` for extra slots.
+    Not the cutoff: a pre-tip slot re-planned from the stored 5 PM report keeps its ledger row."""
+    if slot.kind == SLOT_EXTRA:
+        return f"{SLOT_EXTRA}_{slot.cutoff_time_et.strftime('%H%M')}"
+    return slot.kind
+
+
+@dataclass
+class SeasonCoverage:
+    """Cumulative backfill state of one season's planned slots (ledger + stored snapshots)."""
+
+    stored: int = 0
+    missing: int = 0
+    failed: int = 0
+    remaining: int = 0  # never attempted, or last attempt was an HTTP error
+
+    @property
+    def total(self) -> int:
+        return self.stored + self.missing + self.failed + self.remaining
+
+
 @dataclass
 class BackfillSummary:
     start_date: date
@@ -723,6 +761,12 @@ class BackfillSummary:
     index_pages_requested: int = 0
     index_seasons_unavailable: List[str] = field(default_factory=list)
     index_dates_listed: int = 0
+    skipped_missing: int = 0  # ledger outcome 'missing', not re-planned (see --retry-missing)
+    skipped_parse_failed: int = 0  # ledger outcome 'parse_failed', not re-planned (see --retry-failed)
+    retried_failed: int = 0  # planned slots whose ledger outcome was 'parse_failed'
+    retried_missing: int = 0
+    retried_http_error: int = 0
+    coverage: Dict[str, "SeasonCoverage"] = field(default_factory=dict)  # cumulative, by season label
     estimated_requests: int = 0  # upper planning estimate: one request per planned slot (+ index pages)
     estimated_requests_min: int = 0  # lower estimate: hourly-era pre-tip slots planned without a tip collapse into the 5 PM file
     effective_delay_seconds: float = DEFAULT_BACKFILL_DELAY_SECONDS
@@ -896,27 +940,73 @@ def _slot_already_stored(
     return False
 
 
-def plan_backfill_slots(
+@dataclass
+class BackfillPlan:
+    slots: List[PlannedInjurySlot] = field(default_factory=list)
+    game_dates: int = 0
+    skipped_existing: int = 0
+    skipped_missing: int = 0
+    skipped_parse_failed: int = 0
+    retried_failed: int = 0
+    retried_missing: int = 0
+    retried_http_error: int = 0
+    coverage: Dict[str, SeasonCoverage] = field(default_factory=dict)
+
+
+def load_backfill_ledger(session: Session) -> Dict[Tuple[date, str], InjuryBackfillSlot]:
+    return {(r.game_date, r.slot): r for r in session.exec(select(InjuryBackfillSlot)).all()}
+
+
+def _prefer_url(slot: PlannedInjurySlot, url: Optional[str]) -> PlannedInjurySlot:
+    """Moves ``url`` (the file that failed to parse) to the front when it is still a valid candidate."""
+    if not url or url not in slot.candidate_urls or slot.primary_url == url:
+        return slot
+    rest = tuple(u for u in slot.candidate_urls if u != url)
+    return PlannedInjurySlot(
+        game_date=slot.game_date,
+        cutoff_time_et=slot.cutoff_time_et,
+        candidate_urls=(url,) + rest,
+        tipoff_known=slot.tipoff_known,
+        kind=slot.kind,
+        by_publication=slot.by_publication,
+        listed=slot.listed,
+    )
+
+
+def plan_backfill(
     session: Session,
     start_date: date = ARCHIVE_START_DATE,
     end_date: Optional[date] = None,
     per_day: int = 2,
     base_url: str = NBA_PDF_BASE_URL,
     listed_urls_by_date: Optional[Dict[date, List[str]]] = None,
-) -> Tuple[List[PlannedInjurySlot], int, int]:
+    *,
+    retry_failed: bool = False,
+    retry_missing: bool = False,
+    reparse_failed_only: bool = False,
+) -> BackfillPlan:
     """
-    Plans historical injury report download slots in ``[start_date, end_date]``, skipping
-    slots already present in ``injury_report_snapshot``. Dates listed on an official index
-    page use the exact listed file (one request); other dates use guessed names
-    (``build_candidate_pdf_urls``). A pre-tip slot that resolves to the same file as the 5 PM
-    slot is dropped (no second request for the same report).
-    Returns ``(planned_slots, game_dates_count, skipped_existing_count)``.
+    Plans historical injury report download slots in ``[start_date, end_date]`` (zero network).
+
+    Skips slots already present in ``injury_report_snapshot`` or recorded ``stored`` in the
+    ``injury_backfill_slot`` ledger, and slots whose last outcome was ``missing`` (unless
+    ``retry_missing``) or ``parse_failed`` (unless ``retry_failed``); ``http_error`` slots are
+    always re-planned. ``reparse_failed_only`` plans only ``parse_failed`` slots (implies
+    ``retry_failed``); their failed file is tried first. Dates listed on an official index page use
+    the exact listed file; other dates use guessed names (``build_candidate_pdf_urls``). A pre-tip
+    slot that resolves to the same file as the 5 PM slot is dropped (no second request).
+    ``coverage`` counts every slot of the window by season, whatever the flags.
     """
+    if reparse_failed_only:
+        retry_failed = True
+    plan = BackfillPlan()
     resolved_end = end_date or datetime.now(EASTERN_TZ).date()
     dates_map = discover_game_dates(session, start_date, resolved_end)
     if not dates_map:
-        return [], 0, 0
+        return plan
+    plan.game_dates = len(dates_map)
     entry_tips = earliest_tipoffs_from_entries(session, start_date, resolved_end)
+    ledger = load_backfill_ledger(session)
 
     stored_urls: Set[str] = set()
     stored_by_date: Dict[date, List[Tuple[datetime, datetime]]] = {}
@@ -932,8 +1022,6 @@ def plan_backfill_slots(
         if label_ts is not None and pub_ts is not None:
             stored_by_date.setdefault(label_ts.astimezone(EASTERN_TZ).date(), []).append((label_ts, pub_ts))
 
-    planned: List[PlannedInjurySlot] = []
-    skipped_existing = 0
     for g_date, game_tip in dates_map.items():
         tip = game_tip or entry_tips.get(g_date)
         date_slots: List[PlannedInjurySlot] = []
@@ -944,13 +1032,99 @@ def plan_backfill_slots(
             if slot.candidate_urls and any(s.primary_url == slot.primary_url for s in date_slots):
                 continue
             date_slots.append(slot)
+        cov = plan.coverage.setdefault(season_label_for_date(g_date), SeasonCoverage())
         for slot in date_slots:
-            if _slot_already_stored(slot, stored_urls, stored_by_date):
-                skipped_existing += 1
+            row = ledger.get((g_date, slot_ledger_key(slot)))
+            outcome = row.outcome if row is not None else None
+            if _slot_already_stored(slot, stored_urls, stored_by_date) or (
+                outcome == OUTCOME_STORED and row.snapshot_id is not None
+            ):
+                plan.skipped_existing += 1
+                cov.stored += 1
                 continue
-            planned.append(slot)
+            if outcome == OUTCOME_MISSING:
+                cov.missing += 1
+                if not retry_missing or reparse_failed_only:
+                    plan.skipped_missing += 1
+                    continue
+                plan.retried_missing += 1
+            elif outcome == OUTCOME_PARSE_FAILED:
+                cov.failed += 1
+                if not retry_failed:
+                    plan.skipped_parse_failed += 1
+                    continue
+                plan.retried_failed += 1
+                slot = _prefer_url(slot, row.url)
+            else:
+                cov.remaining += 1
+                if reparse_failed_only:
+                    continue
+                if outcome == OUTCOME_HTTP_ERROR:
+                    plan.retried_http_error += 1
+            plan.slots.append(slot)
 
-    return planned, len(dates_map), skipped_existing
+    return plan
+
+
+def plan_backfill_slots(
+    session: Session,
+    start_date: date = ARCHIVE_START_DATE,
+    end_date: Optional[date] = None,
+    per_day: int = 2,
+    base_url: str = NBA_PDF_BASE_URL,
+    listed_urls_by_date: Optional[Dict[date, List[str]]] = None,
+    **ledger_flags: bool,
+) -> Tuple[List[PlannedInjurySlot], int, int]:
+    """``plan_backfill`` as ``(planned_slots, game_dates_count, skipped_existing_count)``."""
+    plan = plan_backfill(
+        session, start_date, end_date, per_day, base_url, listed_urls_by_date, **ledger_flags
+    )
+    return plan.slots, plan.game_dates, plan.skipped_existing
+
+
+def record_slot_outcome(
+    session: Session,
+    slot: PlannedInjurySlot,
+    outcome: str,
+    *,
+    url: Optional[str] = None,
+    urls_tried: int = 0,
+    http_status: Optional[int] = None,
+    layout_header: Optional[str] = None,
+    error: Optional[str] = None,
+    snapshot_id: Optional[int] = None,
+    now: Optional[datetime] = None,
+) -> InjuryBackfillSlot:
+    """Upserts the ledger row of ``slot`` with its latest outcome and commits."""
+    ts = now or datetime.now(timezone.utc)
+    ts = ts.replace(tzinfo=timezone.utc) if ts.tzinfo is None else ts.astimezone(timezone.utc)
+    key = slot_ledger_key(slot)
+    row = session.exec(
+        select(InjuryBackfillSlot).where(
+            InjuryBackfillSlot.game_date == slot.game_date, InjuryBackfillSlot.slot == key
+        )
+    ).first()
+    if row is None:
+        row = InjuryBackfillSlot(
+            game_date=slot.game_date,
+            slot=key,
+            outcome=outcome,
+            attempts=0,
+            first_attempted_at=ts,
+            last_attempted_at=ts,
+        )
+    row.outcome = outcome
+    row.url = url
+    row.urls_tried = urls_tried
+    row.http_status = http_status
+    row.layout_header = layout_header
+    row.error = (error or None) and error[:500]
+    row.snapshot_id = snapshot_id
+    row.attempts = (row.attempts or 0) + 1
+    row.last_attempted_at = ts
+    session.add(row)
+    session.commit()
+    return row
 
 
 def fetch_listed_report_urls(
@@ -984,6 +1158,18 @@ def fetch_listed_report_urls(
     return listed
 
 
+def _apply_plan(summary: BackfillSummary, plan: BackfillPlan) -> None:
+    summary.planned_slots = plan.slots
+    summary.slots_planned = len(plan.slots)
+    summary.skipped_existing = plan.skipped_existing
+    summary.skipped_missing = plan.skipped_missing
+    summary.skipped_parse_failed = plan.skipped_parse_failed
+    summary.retried_failed = plan.retried_failed
+    summary.retried_missing = plan.retried_missing
+    summary.retried_http_error = plan.retried_http_error
+    summary.coverage = plan.coverage
+
+
 def backfill_injury_reports(
     session: Session,
     *,
@@ -994,6 +1180,9 @@ def backfill_injury_reports(
     max_requests: int = DEFAULT_MAX_REQUESTS,
     dry_run: bool = False,
     use_index_pages: bool = True,
+    retry_failed: bool = False,
+    retry_missing: bool = False,
+    reparse_failed_only: bool = False,
     http_client: Optional[httpx.Client] = None,
     pdf_text_extractor: Optional[Callable[[bytes], str]] = None,
     sleep_fn: Callable[[float], None] = time_module.sleep,
@@ -1006,12 +1195,16 @@ def backfill_injury_reports(
       when ``use_index_pages``; dates not listed there use guessed names of the date's naming era.
     - Enforces minimum 2.0 s delay between HTTP requests (default 4.0 s) and a hard
       ``max_requests`` cap per run (index pages included).
-    - Skips slots already stored in ``injury_report_snapshot``; a pre-tip slot whose tip-off
-      was unknown at planning time is re-planned from the game times printed in the stored
-      5 PM report of that date, and is satisfied without a request when it resolves to a file
-      already stored.
-    - In ``dry_run`` mode, plans and lists URLs with zero network calls.
+    - Records every attempted slot in the ``injury_backfill_slot`` ledger (stored / missing /
+      parse_failed / http_error) and skips slots already stored, missing or unparseable on later
+      runs (``retry_missing``, ``retry_failed``, ``reparse_failed_only`` re-plan them; HTTP
+      errors are retried automatically). A pre-tip slot whose tip-off was unknown at planning
+      time is re-planned from the game times printed in the stored 5 PM report of that date, and
+      is satisfied without a request when it resolves to a file already stored.
+    - In ``dry_run`` mode, plans and lists URLs with zero network calls and zero writes.
     - Stores snapshots with the publication time printed in the PDF title.
+    - ``summary.coverage`` is the cumulative per-season state after the run (re-planned from
+      the ledger, zero network).
     """
     resolved_end = end_date or (
         now.astimezone(EASTERN_TZ).date()
@@ -1026,14 +1219,23 @@ def backfill_injury_reports(
             MIN_BACKFILL_DELAY_SECONDS,
             effective_delay,
         )
-
-    planned_slots, game_dates_count, skipped_existing = plan_backfill_slots(
-        session=session,
-        start_date=start_date,
-        end_date=resolved_end,
-        per_day=per_day,
-        base_url=base_url,
+    ledger_flags = dict(
+        retry_failed=retry_failed, retry_missing=retry_missing, reparse_failed_only=reparse_failed_only
     )
+
+    def _plan(listed: Optional[Dict[date, List[str]]] = None) -> BackfillPlan:
+        return plan_backfill(
+            session,
+            start_date=start_date,
+            end_date=resolved_end,
+            per_day=per_day,
+            base_url=base_url,
+            listed_urls_by_date=listed,
+            **ledger_flags,
+        )
+
+    plan = _plan()
+    planned_slots = plan.slots
     season_labels: List[str] = []
     for d in sorted({s.game_date for s in planned_slots}, reverse=True):
         label = season_label_for_date(d)
@@ -1043,10 +1245,7 @@ def backfill_injury_reports(
     summary = BackfillSummary(
         start_date=start_date,
         end_date=resolved_end,
-        game_dates_found=game_dates_count,
-        slots_planned=len(planned_slots),
-        skipped_existing=skipped_existing,
-        planned_slots=planned_slots,
+        game_dates_found=plan.game_dates,
         planned_urls=[s.primary_url for s in planned_slots[: max(0, max_requests)]],
         effective_delay_seconds=effective_delay,
         max_requests=max_requests,
@@ -1059,6 +1258,7 @@ def backfill_injury_reports(
         )
         + (len(season_labels) if use_index_pages else 0),
     )
+    _apply_plan(summary, plan)
 
     if dry_run or max_requests <= 0 or not planned_slots:
         if not dry_run and max_requests <= 0 and planned_slots:
@@ -1072,7 +1272,8 @@ def backfill_injury_reports(
     )
     client = service._get_http_client()
     close_client = http_client is None
-    attempted_urls: Set[str] = set()
+    # Outcome of every file requested in this run: a later slot reusing it records the same result.
+    attempted: Dict[str, Tuple[str, Optional[int], Optional[str], Optional[str]]] = {}
 
     def _log_progress_if_due() -> None:
         if summary.requested > 0 and summary.requested % PROGRESS_LOG_INTERVAL == 0:
@@ -1099,7 +1300,13 @@ def backfill_injury_reports(
         finally:
             _log_progress_if_due()
 
+    def _snapshot_id_for(url: str) -> Optional[int]:
+        return session.exec(
+            select(InjuryReportSnapshot.id).where(InjuryReportSnapshot.report_url == url)
+        ).first()
+
     try:
+        listed: Dict[date, List[str]] = {}
         if use_index_pages and season_labels:
 
             def _index_request(url: str) -> Optional[httpx.Response]:
@@ -1112,19 +1319,9 @@ def backfill_injury_reports(
 
             listed = fetch_listed_report_urls(season_labels, _index_request, summary)
             if listed:
-                planned_slots, _, skipped_existing = plan_backfill_slots(
-                    session=session,
-                    start_date=start_date,
-                    end_date=resolved_end,
-                    per_day=per_day,
-                    base_url=base_url,
-                    listed_urls_by_date=listed,
-                )
-                summary.planned_slots = planned_slots
-                summary.slots_planned = len(planned_slots)
-                summary.skipped_existing = skipped_existing
-        else:
-            listed = {}
+                plan = _plan(listed)
+                planned_slots = plan.slots
+                _apply_plan(summary, plan)
 
         stored_urls = _stored_report_urls(session)
 
@@ -1140,35 +1337,51 @@ def backfill_injury_reports(
                     _, cutoff, by_pub = specs[0]
                     slot = _build_slot(slot.game_date, SLOT_PRE_TIP, cutoff, by_pub, True, listed or None, base_url)
 
-            slot_satisfied = False
-            slot_had_failure = False
+            # (outcome, url, http_status, layout_header, error, snapshot_id); None = not decided
+            result: Optional[Tuple[str, Optional[str], Optional[int], Optional[str], Optional[str], Optional[int]]] = None
+            had_http_error: Optional[Tuple[str, Optional[int], str]] = None
+            last_missing: Optional[Tuple[str, int]] = None
+            tried = 0
 
             for url in slot.candidate_urls:
                 if url in stored_urls:
                     summary.reused_slots += 1
-                    slot_satisfied = True
+                    result = (OUTCOME_STORED, url, None, None, None, _snapshot_id_for(url))
                     break
-                if url in attempted_urls:
+                if url in attempted:
+                    prev_outcome, prev_status, prev_header, prev_error = attempted[url]
+                    if prev_outcome == OUTCOME_PARSE_FAILED:
+                        result = (OUTCOME_PARSE_FAILED, url, prev_status, prev_header, prev_error, None)
+                        break
+                    if prev_outcome == OUTCOME_MISSING:
+                        last_missing = (url, prev_status or 404)
+                    elif prev_outcome == OUTCOME_HTTP_ERROR:
+                        had_http_error = (url, prev_status, prev_error or "")
                     continue
-                attempted_urls.add(url)
                 try:
                     res = _request(url)
                 except httpx.HTTPError as exc:
                     summary.http_errors += 1
-                    slot_had_failure = True
+                    tried += 1
+                    attempted[url] = (OUTCOME_HTTP_ERROR, None, None, str(exc))
+                    had_http_error = (url, None, str(exc))
                     logger.warning("HTTP error fetching %s: %s", url, exc)
                     continue
                 if res is None:
                     break
+                tried += 1
 
                 if res.status_code in (403, 404):
                     summary.missing += 1
+                    attempted[url] = (OUTCOME_MISSING, res.status_code, None, None)
+                    last_missing = (url, res.status_code)
                     logger.debug("Report missing (HTTP %d): %s", res.status_code, url)
                     continue
 
                 if res.status_code >= 400:
                     summary.http_errors += 1
-                    slot_had_failure = True
+                    attempted[url] = (OUTCOME_HTTP_ERROR, res.status_code, None, f"HTTP {res.status_code}")
+                    had_http_error = (url, res.status_code, f"HTTP {res.status_code}")
                     logger.warning("Unexpected HTTP %d fetching %s", res.status_code, url)
                     continue
 
@@ -1181,22 +1394,48 @@ def backfill_injury_reports(
                 except Exception as exc:
                     session.rollback()
                     summary.parse_failures += 1
-                    slot_had_failure = True
+                    header = getattr(exc, "header", None)
+                    attempted[url] = (OUTCOME_PARSE_FAILED, res.status_code, header, str(exc))
+                    result = (OUTCOME_PARSE_FAILED, url, res.status_code, header, str(exc), None)
                     logger.warning("Failed to parse/store injury PDF %s: %s", url, exc)
                     break
 
                 stored_urls.add(url)
+                attempted[url] = (OUTCOME_STORED, res.status_code, None, None)
                 if created:
                     summary.stored += 1
                     summary.entries_stored += snap.entries_count
                     summary.unmatched_player_names += unresolved
                 else:
                     summary.duplicates += 1
-                slot_satisfied = True
+                result = (OUTCOME_STORED, url, res.status_code, None, None, snap.id)
                 break
 
-            if not slot_satisfied and not slot_had_failure and not summary.cap_reached:
-                summary.missing_slots += 1
+            if result is None:
+                if summary.cap_reached:
+                    break  # slot not fully tried: no ledger row, re-planned next run
+                if had_http_error is not None:
+                    url, status, err = had_http_error
+                    result = (OUTCOME_HTTP_ERROR, url, status, None, err, None)
+                elif last_missing is not None:
+                    summary.missing_slots += 1
+                    result = (OUTCOME_MISSING, last_missing[0], last_missing[1], None, None, None)
+                else:
+                    continue  # nothing to try (listed date without a file at or before the cutoff)
+
+            outcome, url, status, header, err, snap_id = result
+            record_slot_outcome(
+                session,
+                slot,
+                outcome,
+                url=url,
+                urls_tried=tried,
+                http_status=status,
+                layout_header=header,
+                error=err,
+                snapshot_id=snap_id,
+                now=now,
+            )
 
     except KeyboardInterrupt:
         session.rollback()
@@ -1210,4 +1449,8 @@ def backfill_injury_reports(
         if close_client:
             client.close()
 
+    try:
+        summary.coverage = _plan(listed or None).coverage
+    except Exception as exc:  # coverage is informative; never lose the run summary over it
+        logger.warning("Could not compute cumulative coverage: %s", exc)
     return summary

@@ -10,6 +10,13 @@ season); otherwise the file name of the date's naming era is guessed (hourly ``_
 through 2025-12-21, quarter-hour ``_05_00PM.pdf`` from 2025-12-22) with at most 3 guesses.
 Enforces polite rate limits (default 4 s delay, 2 s minimum, --max-requests 300 cap),
 resumability, and stores the publication time printed in the PDF title.
+
+Every attempted slot is recorded in the ``injury_backfill_slot`` ledger (stored / missing /
+parse_failed / http_error). Later runs skip slots whose outcome is missing or parse_failed;
+``--retry-failed`` re-plans parse failures (fresh download, re-parse, e.g. after a parser fix),
+``--retry-missing`` re-plans missing slots, ``--reparse-failed-only`` plans nothing but the parse
+failures. HTTP errors are retried automatically. The summary ends with the cumulative coverage
+per season from the ledger.
 """
 
 import argparse
@@ -57,7 +64,11 @@ def format_summary(summary: BackfillSummary) -> str:
         f"  Date window            : {summary.start_date.isoformat()} .. {summary.end_date.isoformat()}",
         f"  Game dates found       : {summary.game_dates_found}",
         f"  Slots skipped (stored) : {summary.skipped_existing}",
-        f"  Slots planned          : {summary.slots_planned}",
+        f"  Slots skipped (ledger) : {summary.skipped_missing} missing, {summary.skipped_parse_failed} parse-failed"
+        " (--retry-missing / --retry-failed re-plan them)",
+        f"  Slots planned          : {summary.slots_planned}"
+        f" (retrying: {summary.retried_failed} parse-failed, {summary.retried_missing} missing,"
+        f" {summary.retried_http_error} http-error)",
         f"  Delay enforced         : {summary.effective_delay_seconds:.1f}s (min {MIN_BACKFILL_DELAY_SECONDS:.1f}s)",
         f"  Max requests cap       : {summary.max_requests}",
         f"  Requested              : {summary.requested}",
@@ -84,6 +95,16 @@ def format_summary(summary: BackfillSummary) -> str:
             f"  Estimated duration     : ~{lo * delay / 60.0:.0f}..{hi * delay / 60.0:.0f} min at {delay:.1f}s spacing, "
             f"{-(-lo // cap)}..{-(-hi // cap)} run(s) of --max-requests {summary.max_requests}"
         )
+    if summary.coverage:
+        lines.append("  Coverage by season (cumulative, ledger + stored snapshots):")
+        lines.append(f"    {'season':<8} {'stored':>7} {'missing':>8} {'failed':>7} {'remaining':>10} {'total':>7}")
+        totals = [0, 0, 0, 0, 0]
+        for label in sorted(summary.coverage):
+            c = summary.coverage[label]
+            values = [c.stored, c.missing, c.failed, c.remaining, c.total]
+            totals = [a + b for a, b in zip(totals, values)]
+            lines.append(f"    {label:<8} {values[0]:>7} {values[1]:>8} {values[2]:>7} {values[3]:>10} {values[4]:>7}")
+        lines.append(f"    {'all':<8} {totals[0]:>7} {totals[1]:>8} {totals[2]:>7} {totals[3]:>10} {totals[4]:>7}")
     if summary.cap_reached:
         lines.append("  Status                 : stopped at --max-requests cap (re-run to resume)")
     elif summary.interrupted:
@@ -102,6 +123,9 @@ def run_backfill_injuries(
     max_requests: int = DEFAULT_MAX_REQUESTS,
     dry_run: bool = False,
     use_index_pages: bool = True,
+    retry_failed: bool = False,
+    retry_missing: bool = False,
+    reparse_failed_only: bool = False,
     session: Optional[Session] = None,
     http_client: Optional[httpx.Client] = None,
     pdf_text_extractor: Optional[Callable[[bytes], str]] = None,
@@ -127,6 +151,9 @@ def run_backfill_injuries(
             max_requests=max_requests,
             dry_run=dry_run,
             use_index_pages=use_index_pages,
+            retry_failed=retry_failed,
+            retry_missing=retry_missing,
+            reparse_failed_only=reparse_failed_only,
             http_client=http_client,
             pdf_text_extractor=pdf_text_extractor,
             sleep_fn=sleep_fn,
@@ -202,6 +229,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not read the official season index pages; guess file names for every date",
     )
     parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="Re-plan slots whose last outcome was parse_failed (fresh download and re-parse, e.g. after a parser fix)",
+    )
+    parser.add_argument(
+        "--retry-missing",
+        action="store_true",
+        help="Re-plan slots whose candidate files all returned 403/404 last time",
+    )
+    parser.add_argument(
+        "--reparse-failed-only",
+        action="store_true",
+        help="Plan ONLY slots whose last outcome was parse_failed (implies --retry-failed)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="List planned URLs with zero network requests and zero database writes",
@@ -230,6 +272,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         max_requests=args.max_requests,
         dry_run=args.dry_run,
         use_index_pages=not args.no_index_pages,
+        retry_failed=args.retry_failed,
+        retry_missing=args.retry_missing,
+        reparse_failed_only=args.reparse_failed_only,
     )
     return 0
 

@@ -9,6 +9,15 @@ The PDF format changed over time. Three layouts are known (verified on official 
     page. Long team names wrap onto the next line ("Minnesota" / "Timberwolves"), so cells are
     assigned to columns by their horizontal position under the header.
 
+Transition layouts (November-December 2019, verified on official PDFs, 2026-11-07)
+    Eight or nine columns parsed by column position like ``CATEGORY_COLUMNS``; the previous
+    status / previous reason cells are read into their own columns and dropped:
+    ``REASON_STATUS_PREVIOUS`` (2019-11-15..19): ... | Player Name | Reason | Current Status |
+    Previous Status; ``STATUS_REASON_PREVIOUS`` (2019-11-20..12-16): ... | Player Name |
+    Current Status | Reason | Previous Status; ``STATUS_REASON_PREVIOUS_REASON`` (2019-12-17):
+    the same plus Previous Reason. Columns move from page to page, so positions are re-read
+    from every page's header.
+
 ``STATUS_REASON_UPRIGHT`` (2019-20 through the 2022-23 regular season)
     Seven columns: ... | Player Name | Current Status | Reason (category and detail joined by " - ").
     Pages are extracted top-down with the header on every page.
@@ -29,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from enum import Enum
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel
@@ -100,12 +109,22 @@ REASON_CATEGORY_PREFIXES = (
 
 class InjuryReportLayout(str, Enum):
     CATEGORY_COLUMNS = "category_columns"
+    REASON_STATUS_PREVIOUS = "reason_status_previous"
+    STATUS_REASON_PREVIOUS = "status_reason_previous"
+    STATUS_REASON_PREVIOUS_REASON = "status_reason_previous_reason"
     STATUS_REASON_UPRIGHT = "status_reason_upright"
     STATUS_REASON_INVERTED = "status_reason_inverted"
 
 
 class InjuryReportLayoutError(ValueError):
-    """Raised when the text does not match any known injury report layout (rule 3: never guess)."""
+    """Raised when the text does not match any known injury report layout (rule 3: never guess).
+
+    ``header`` is the unrecognised column-header tail (after "Player Name"), when one was found.
+    """
+
+    def __init__(self, message: str, header: Optional[str] = None) -> None:
+        super().__init__(message)
+        self.header = header
 
 
 class ParsedInjuryRow(BaseModel):
@@ -181,35 +200,43 @@ HEADER_REGEX = re.compile(
     r"Game\s*Date\s+Game\s*Time\s+Matchup\s+Team\s+Player\s*Name\s+(?P<tail>.*\S)",
     re.IGNORECASE,
 )
-CATEGORY_HEADER_TAIL = re.compile(
-    r"^Category\s+Reason\s+Current\s*Status\s+Previous\s*Status$", re.IGNORECASE
-)
 STATUS_REASON_HEADER_TAIL = re.compile(r"^Current\s*Status\s+Reason$", re.IGNORECASE)
 GAME_TIME_REGEX = re.compile(r"^\s*(\d{1,2}):(\d{2})\s*(?:\(\s*ET\s*\))?\s*$", re.IGNORECASE)
-CELL_REGEX = re.compile(r"\S+(?: \S+)*")  # cells are separated by 2+ spaces in layout text
+WORD_REGEX = re.compile(r"\S+")
+# A word starts at most this many characters left of its column header (pypdf rounding).
+COLUMN_START_TOLERANCE = 2
 
-_CATEGORY_COLUMNS = (
-    "game_date",
-    "game_time",
-    "matchup",
-    "team",
-    "player",
-    "category",
-    "reason",
-    "current_status",
-    "previous_status",
+_BASE_COLUMNS: Tuple[Tuple[str, str], ...] = (
+    ("game_date", r"Game\s*Date"),
+    ("game_time", r"Game\s*Time"),
+    ("matchup", r"Matchup"),
+    ("team", r"Team"),
+    ("player", r"Player\s*Name"),
 )
-_CATEGORY_HEADER_LABELS = (
-    r"Game\s*Date",
-    r"Game\s*Time",
-    r"Matchup",
-    r"Team",
-    r"Player\s*Name",
-    r"Category",
-    r"Reason",
-    r"Current\s*Status",
-    r"Previous\s*Status",
+_CATEGORY = ("category", r"Category")
+_REASON = ("reason", r"Reason")
+_CURRENT_STATUS = ("current_status", r"Current\s*Status")
+_PREVIOUS_STATUS = ("previous_status", r"Previous\s*Status")
+_PREVIOUS_REASON = ("previous_reason", r"Previous\s*Reason")
+
+# Layouts parsed by column position: every column after "Player Name", in header order. Only
+# these exact header sequences are accepted (rule 3); previous_* columns are read and dropped.
+POSITIONAL_LAYOUT_COLUMNS: Dict[InjuryReportLayout, Tuple[Tuple[str, str], ...]] = {
+    InjuryReportLayout.CATEGORY_COLUMNS: (_CATEGORY, _REASON, _CURRENT_STATUS, _PREVIOUS_STATUS),
+    InjuryReportLayout.REASON_STATUS_PREVIOUS: (_REASON, _CURRENT_STATUS, _PREVIOUS_STATUS),
+    InjuryReportLayout.STATUS_REASON_PREVIOUS: (_CURRENT_STATUS, _REASON, _PREVIOUS_STATUS),
+    InjuryReportLayout.STATUS_REASON_PREVIOUS_REASON: (
+        _CURRENT_STATUS,
+        _REASON,
+        _PREVIOUS_STATUS,
+        _PREVIOUS_REASON,
+    ),
+}
+_POSITIONAL_HEADER_TAILS: Tuple[Tuple[InjuryReportLayout, re.Pattern], ...] = tuple(
+    (layout, re.compile("^" + r"\s+".join(label for _, label in cols) + "$", re.IGNORECASE))
+    for layout, cols in POSITIONAL_LAYOUT_COLUMNS.items()
 )
+
 _TEAM_KEYS: Dict[str, str] = {re.sub(r"\s+", "", t).lower(): t for t in NBA_TEAMS}
 
 
@@ -303,8 +330,9 @@ def detect_layout(text: str) -> Tuple[InjuryReportLayout, int]:
         if not m:
             continue
         tail = _clean(m.group("tail"))
-        if CATEGORY_HEADER_TAIL.match(tail):
-            return InjuryReportLayout.CATEGORY_COLUMNS, idx
+        for layout, tail_regex in _POSITIONAL_HEADER_TAILS:
+            if tail_regex.match(tail):
+                return layout, idx
         if STATUS_REASON_HEADER_TAIL.match(tail):
             has_rows_before_header = any(
                 STATUS_REGEX.search(l) and not _is_noise_line(l) for l in lines[:idx]
@@ -312,7 +340,7 @@ def detect_layout(text: str) -> Tuple[InjuryReportLayout, int]:
             if has_rows_before_header:
                 return InjuryReportLayout.STATUS_REASON_INVERTED, idx
             return InjuryReportLayout.STATUS_REASON_UPRIGHT, idx
-        raise InjuryReportLayoutError(f"Unknown injury report column header: {tail!r}")
+        raise InjuryReportLayoutError(f"Unknown injury report column header: {tail!r}", header=tail)
     raise InjuryReportLayoutError("No injury report column header found")
 
 
@@ -447,51 +475,77 @@ def _parse_status_reason(lines: List[str], layout: InjuryReportLayout) -> Tuple[
     return _finalize_teams(pairs), ctx.games
 
 
-def _category_column_starts(header_line: str) -> Optional[List[int]]:
+def _positional_columns(layout: InjuryReportLayout) -> Tuple[Tuple[str, str], ...]:
+    return _BASE_COLUMNS + POSITIONAL_LAYOUT_COLUMNS[layout]
+
+
+def _column_starts(header_line: str, layout: InjuryReportLayout) -> List[int]:
+    """Start offsets of every column label in a page header; the header must be the layout's own."""
+    m = HEADER_REGEX.search(header_line)
+    tail = _clean(m.group("tail")) if m else ""
+    expected = dict(_POSITIONAL_HEADER_TAILS)[layout]
+    if not expected.match(tail):
+        raise InjuryReportLayoutError(
+            f"Page header {tail!r} does not match the {layout.value} layout", header=tail or None
+        )
     starts: List[int] = []
     pos = 0
-    for label in _CATEGORY_HEADER_LABELS:
-        m = re.compile(label, re.IGNORECASE).search(header_line, pos)
-        if not m:
-            return None
-        starts.append(m.start())
-        pos = m.end()
+    for _, label in _positional_columns(layout):
+        lm = re.compile(label, re.IGNORECASE).search(header_line, pos)
+        if not lm:
+            raise InjuryReportLayoutError(f"{layout.value} header without all its columns", header=tail)
+        starts.append(lm.start())
+        pos = lm.end()
     return starts
 
 
-def _cells_by_column(line: str, starts: List[int]) -> Dict[str, str]:
+def _cells_by_column(line: str, starts: List[int], keys: Sequence[str]) -> Dict[str, str]:
+    """
+    Assigns every word to the rightmost column whose header starts at or before it (columns are
+    left-aligned; a word may start ``COLUMN_START_TOLERANCE`` characters early). Word-level
+    assignment also splits cells that pypdf joined with a single space ("...; Strain Out").
+    """
     cells: Dict[str, List[str]] = {}
-    for m in CELL_REGEX.finditer(line):
-        center_col = min(range(len(starts)), key=lambda i: abs(starts[i] - m.start()))
-        cells.setdefault(_CATEGORY_COLUMNS[center_col], []).append(m.group(0))
+    for m in WORD_REGEX.finditer(line):
+        col = 0
+        for i, start in enumerate(starts):
+            if start <= m.start() + COLUMN_START_TOLERANCE:
+                col = i
+        cells.setdefault(keys[col], []).append(m.group(0))
     return {k: _clean(" ".join(v)) for k, v in cells.items()}
 
 
-def _parse_category_columns(lines: List[str]) -> Tuple[List[ParsedInjuryRow], List[ParsedGame]]:
+def _parse_positional(
+    lines: List[str], layout: InjuryReportLayout
+) -> Tuple[List[ParsedInjuryRow], List[ParsedGame]]:
+    """
+    Parses a layout whose cells are assigned by horizontal position under each page header
+    (``POSITIONAL_LAYOUT_COLUMNS``). Wrapped team names and reasons continue on lines without a
+    player and a status; previous status / previous reason cells are dropped.
+    """
+    keys = [k for k, _ in _positional_columns(layout)]
     ctx = _Context()
     pairs: List[Tuple[ParsedInjuryRow, Optional[List[str]]]] = []
     starts: Optional[List[int]] = None
 
     for line in lines:
         if HEADER_REGEX.search(line):
-            starts = _category_column_starts(line)
-            if starts is None:
-                raise InjuryReportLayoutError("Category-column header without all nine columns")
+            starts = _column_starts(line, layout)
             continue
         if _is_noise_line(line):
             continue
         if starts is None:
-            raise InjuryReportLayoutError("Category-column row before any column header")
+            raise InjuryReportLayoutError(f"{layout.value} row before any column header")
 
         if NOT_SUBMITTED_REGEX.search(line):
             head = NOT_SUBMITTED_REGEX.split(line, maxsplit=1)[0]
-            cells = _cells_by_column(head, starts)
+            cells = _cells_by_column(head, starts, keys)
             ctx.set_game_fields(cells.get("game_date", ""), cells.get("game_time", ""), cells.get("matchup", ""))
             if cells.get("team"):
                 ctx.new_team(cells["team"])
             continue
 
-        cells = _cells_by_column(line, starts)
+        cells = _cells_by_column(line, starts, keys)
         player = cells.get("player", "")
         status = cells.get("current_status", "")
         ctx.set_game_fields(cells.get("game_date", ""), cells.get("game_time", ""), cells.get("matchup", ""))
@@ -510,12 +564,15 @@ def _parse_category_columns(lines: List[str]) -> Tuple[List[ParsedInjuryRow], Li
             continue
 
         if not player or not STATUS_REGEX.fullmatch(status):
-            raise InjuryReportLayoutError(f"Unrecognised category-column row: {_clean(line)!r}")
+            raise InjuryReportLayoutError(f"Unrecognised {layout.value} row: {_clean(line)!r}")
         if cells.get("team"):
             ctx.new_team(cells["team"])
-        category = cells.get("category", "")
         detail = cells.get("reason", "")
-        reason = f"{category} - {detail}" if detail and detail != "-" else category
+        if layout == InjuryReportLayout.CATEGORY_COLUMNS:
+            category = cells.get("category", "")
+            reason = f"{category} - {detail}" if detail and detail != "-" else category
+        else:
+            reason = "" if detail == "-" else detail
         row, block = _make_row(ctx, player, status, reason)
         pairs.append((row, block))
 
@@ -529,8 +586,8 @@ def parse_injury_report(text: str) -> ParsedInjuryReport:
     """
     layout, _ = detect_layout(text or "")
     lines = _reading_order_lines(text, layout)
-    if layout == InjuryReportLayout.CATEGORY_COLUMNS:
-        rows, games = _parse_category_columns(lines)
+    if layout in POSITIONAL_LAYOUT_COLUMNS:
+        rows, games = _parse_positional(lines, layout)
     else:
         rows, games = _parse_status_reason(lines, layout)
     return ParsedInjuryReport(

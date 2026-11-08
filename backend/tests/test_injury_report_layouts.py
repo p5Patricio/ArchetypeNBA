@@ -199,3 +199,179 @@ def test_parse_report_title_time():
 def test_canonical_team_name():
     assert canonical_team_name("Minnesota    Timberwolves") == "Minnesota Timberwolves"
     assert canonical_team_name("   Unknown   Team  Name  ") == "Unknown Team Name"
+
+
+def test_reason_status_previous_2019_11_15():
+    text = _read_layout_fixture("reason_status_previous_2019-11-15.txt")
+    report = parse_injury_report(text)
+
+    assert report.layout == InjuryReportLayout.REASON_STATUS_PREVIOUS
+    assert report.report_time_et == datetime(2019, 11, 15, 17, 30, tzinfo=EASTERN_TZ)
+    assert len(report.rows) == 13
+
+    row0 = report.rows[0]
+    assert row0.player_name == "Dwayne Bacon"
+    assert row0.raw_name == "Bacon, Dwayne"
+    assert row0.team == "Charlotte Hornets"
+    assert row0.status == "Probable"
+    assert row0.reason == "Injury/Illness - Right Knee Soreness"
+    assert row0.game_time == "07:00 (ET)"
+    assert row0.matchup == "DET@CHA"
+    assert row0.game_date == "11/15/2019"
+
+    by_name = {r.player_name: r for r in report.rows}
+
+    batum = by_name["Nicolas Batum"]
+    assert batum.reason == "Injury/Illness - Fractured Third Finger, Left Hand"
+    assert batum.status == "Out"
+
+    reggie = by_name["Reggie Jackson"]
+    assert reggie.reason == "Injury/Illness - Lumbar Stress Reaction"
+    assert reggie.team == "Detroit Pistons"
+
+    isaac = by_name["Jonathan Isaac"]
+    assert isaac.status == "Questionable"
+    assert isaac.reason == "Injury/Illness - Right ankle; Sprain"
+    assert isaac.team == "Orlando Magic"
+    assert isaac.matchup == "SAS@ORL"
+
+    valid_statuses = {"Out", "Questionable", "Doubtful", "Probable", "Available"}
+    status_suffixes = ("Available", "Probable", "Questionable", "Doubtful", "Out")
+    for r in report.rows:
+        assert not r.reason.endswith(status_suffixes)
+        assert r.reason != "-"
+        assert r.status in valid_statuses
+
+
+def test_reason_status_previous_2019_11_19_page_break_and_joined_cells():
+    text = _read_layout_fixture("reason_status_previous_2019-11-19.txt")
+    report = parse_injury_report(text)
+
+    assert report.layout == InjuryReportLayout.REASON_STATUS_PREVIOUS
+    assert len(report.rows) == 6
+
+    last_row = report.rows[-1]
+    assert last_row.player_name == "Nene Hilario"
+    assert last_row.status == "Out"
+    assert last_row.reason == "Injury/Illness - Left Adductor; Strain"
+    assert last_row.team == "Houston Rockets"
+    assert last_row.matchup == "HOU@DEN"
+    assert last_row.game_time == "09:00 (ET)"
+
+    by_name = {r.player_name: r for r in report.rows}
+    assert by_name["Eric Gordon"].reason == "Injury/Illness - Right Knee; Arthroscopy"
+
+    assert ParsedGame("11/19/2019", "10:00 (ET)", "BOS@LAC") in report.games
+    assert all(r.matchup != "BOS@LAC" for r in report.rows)
+
+
+def test_status_reason_previous_2019_12_06():
+    text = _read_layout_fixture("status_reason_previous_2019-12-06.txt")
+    report = parse_injury_report(text)
+
+    assert report.layout == InjuryReportLayout.STATUS_REASON_PREVIOUS
+    assert len(report.rows) == 10
+
+    by_name = {r.player_name: r for r in report.rows}
+
+    chandler = by_name["Wilson Chandler"]
+    assert chandler.reason == "League Suspension"
+    assert chandler.status == "Out"
+
+    assert by_name["Kyrie Irving"].reason == "Injury/Illness - Right Shoulder; Impingement"
+
+    cody = by_name["Cody Martin"]
+    assert cody.status == "Out"
+    assert cody.reason == "G League - On Assignment"
+    assert cody.team == "Charlotte Hornets"
+
+    assert by_name["Timothe Luwawu-Cabarrot"].team == "Brooklyn Nets"
+
+
+def test_status_reason_previous_reason_2019_12_17():
+    text = _read_layout_fixture("status_reason_previous_reason_2019-12-17.txt")
+    report = parse_injury_report(text)
+
+    assert report.layout == InjuryReportLayout.STATUS_REASON_PREVIOUS_REASON
+    assert len(report.rows) == 16
+
+    by_name = {r.player_name: r for r in report.rows}
+
+    batum = by_name["Nicolas Batum"]
+    assert batum.status == "Out"
+    assert batum.reason == "Injury/Illness - Left Hand; Discomfort"
+
+    mcdaniels = by_name["Jalen McDaniels"]
+    assert mcdaniels.status == "Out"
+    assert mcdaniels.reason == "G League - On Assignment"
+
+    allen = by_name["Grayson Allen"]
+    assert allen.game_date == "12/18/2019"
+    assert allen.matchup == "MEM@OKC"
+    assert allen.team == "Memphis Grizzlies"
+    assert allen.status == "Questionable"
+
+    bol = by_name["Bol Bol"]
+    assert bol.team == "Denver Nuggets"
+    assert bol.matchup == "ORL@DEN"
+    assert bol.game_time == "09:00 (ET)"
+    assert bol.reason == "Injury/Illness - Left Foot; Injury Management"
+
+    assert ParsedGame("12/18/2019", "08:00 (ET)", "NOP@MIN") in report.games
+    assert all("Timberwolves" not in r.team and "Minnesota" not in r.team for r in report.rows)
+
+
+def test_transition_layout_wrapped_team_name():
+    base_text = _read_layout_fixture("status_reason_previous_2019-12-06.txt")
+    header_line = next(line for line in base_text.splitlines() if "Player Name" in line)
+    t = header_line.index("Team")
+    p = header_line.index("Player Name")
+    s = header_line.index("Current Status")
+    r = header_line.index("Reason", s)
+    q = header_line.index("Previous Status")
+
+    line1 = (
+        " " * t
+        + "Minnesota".ljust(p - t)
+        + "Doe, John".ljust(s - p)
+        + "Out".ljust(r - s)
+        + "Rest".ljust(q - r)
+        + "-"
+    )
+    line2 = " " * t + "Timberwolves"
+    synthetic_text = f"{base_text.rstrip()}\n\n{line1}\n{line2}\n"
+
+    report = parse_injury_report(synthetic_text)
+    last_row = report.rows[-1]
+    assert last_row.player_name == "John Doe"
+    assert last_row.team == "Minnesota Timberwolves"
+    assert last_row.status == "Out"
+    assert last_row.reason == "Rest"
+
+
+def test_transition_layouts_unknown_header_still_raises():
+    unknown_order_text = (
+        "Game Date Game Time Matchup Team Player Name Current Status Previous Status Reason\n"
+        "12/06/2019 07:00 (ET) BKN@CHA Brooklyn Nets Doe, John Out - Rest\n"
+    )
+    with pytest.raises(InjuryReportLayoutError) as exc_info:
+        parse_injury_report(unknown_order_text)
+    assert exc_info.value.header == "Current Status Previous Status Reason"
+
+    base_text = _read_layout_fixture("status_reason_previous_2019-12-06.txt")
+    header_page1 = next(line for line in base_text.splitlines() if "Player Name" in line)
+    mixed_header_text = (
+        f"{header_page1}\n"
+        "Game Date   Game Time   Matchup   Team   Player Name   Reason   Current Status   Previous Status\n"
+    )
+    with pytest.raises(InjuryReportLayoutError, match="does not match the status_reason_previous layout") as mixed:
+        parse_injury_report(mixed_header_text)
+    assert mixed.value.header == "Reason Current Status Previous Status"
+
+
+def test_layout_error_carries_header():
+    text = "Game Date Game Time Matchup Team Player Name Status Notes\nx\n"
+    with pytest.raises(InjuryReportLayoutError) as exc_info:
+        parse_injury_report(text)
+    assert exc_info.value.header == "Status Notes"
+

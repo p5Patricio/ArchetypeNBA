@@ -942,6 +942,49 @@ class InjuryEntry(SQLModel, table=True):
     snapshot: Optional[InjuryReportSnapshot] = Relationship(back_populates="entries")
 
 
+INJURY_BACKFILL_OUTCOMES = ("stored", "missing", "parse_failed", "http_error")
+
+
+class InjuryBackfillSlot(SQLModel, table=True):
+    """
+    Ledger of historical injury report backfill attempts: the latest outcome per game date and slot
+    (``five_pm``, ``pre_tip``, ``extra_HHMM``), so resumed runs skip slots already known to be missing
+    or unparseable (``--retry-missing`` / ``--retry-failed`` re-plan them; ``http_error`` is always
+    retried). ``url`` is the file stored or that failed to parse, else the last name tried.
+    """
+
+    __tablename__ = "injury_backfill_slot"
+
+    __table_args__ = (
+        UniqueConstraint("game_date", "slot", name="uq_injury_backfill_slot"),
+        CheckConstraint(_in_list("outcome", INJURY_BACKFILL_OUTCOMES), name="ck_injury_backfill_slot_outcome"),
+        Index("ix_injury_backfill_slot_outcome", "outcome"),
+    )
+
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(_BIG_ID, primary_key=True, autoincrement=True)
+    )
+    game_date: date = Field(sa_column=Column(Date, nullable=False))
+    slot: str = Field(sa_column=Column(Text, nullable=False))
+    outcome: str = Field(sa_column=Column(Text, nullable=False))
+    url: Optional[str] = Field(default=None, sa_column=Column(Text))
+    urls_tried: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+    http_status: Optional[int] = Field(default=None, sa_column=Column(SmallInteger))
+    layout_header: Optional[str] = Field(default=None, sa_column=Column(Text))
+    error: Optional[str] = Field(default=None, sa_column=Column(Text))
+    snapshot_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(_BIG_ID, ForeignKey("injury_report_snapshot.id", ondelete="SET NULL")),
+    )
+    attempts: int = Field(
+        default=1, sa_column=Column(Integer, nullable=False, server_default=text("1"))
+    )
+    first_attempted_at: datetime = Field(sa_column=_timestamptz(nullable=False))
+    last_attempted_at: datetime = Field(sa_column=_timestamptz(nullable=False))
+
+
 class LineupSnapshot(SQLModel, table=True):
     """Pre-game lineup and inactives snapshot captured before tip-off."""
 
