@@ -45,8 +45,10 @@ from app.services import market_close, model_registry
 from app.services.blend_calibration import BlendWeight, compute_blend_weight
 from app.services.clv_report import PinnacleClvReport, build_pinnacle_clv_report
 from app.services.league_report import League, build_league, format_league
+from app.services.line_move_report import build_line_move_live_test, format_line_move_live_test
 
 _SETTLED = (BetStatus.won, BetStatus.lost, BetStatus.push)
+_LIVE_TESTS = (StakingStrategy.line_move,)  # D-71: own section; kept out of the aggregate lines below
 
 
 def _line(value) -> Optional[Decimal]:
@@ -148,6 +150,7 @@ class PaperReport:
     league: Optional[League] = None
     totals_shadow: Optional[Any] = None
     props_shadow: Optional[Any] = None
+    line_move: Optional[Any] = None  # LineMoveLiveTest (D-71)
 
 
 def build_report(session: Session, now: Optional[datetime] = None) -> PaperReport:
@@ -166,6 +169,7 @@ def build_report(session: Session, now: Optional[datetime] = None) -> PaperRepor
         league=build_league(session, now),
         totals_shadow=audit_totals_shadow(session),
         props_shadow=audit_props_shadow(session),
+        line_move=build_line_move_live_test(session, now),
     )
 
 
@@ -226,6 +230,7 @@ def _market_breakdown(session: Session) -> List[MarketPerformance]:
             SimulatedBet.clv_pct,
         )
         .join(ModelPrediction, ModelPrediction.id == SimulatedBet.prediction_id)
+        .where(SimulatedBet.strategy.notin_(_LIVE_TESTS))
     ).all()
     stakes: Dict[str, float] = defaultdict(float)
     pnl: Dict[str, float] = defaultdict(float)
@@ -267,6 +272,7 @@ def _clv_coverage(session: Session, now: datetime) -> ClvCoverage:
         .join(ModelPrediction, ModelPrediction.id == SimulatedBet.prediction_id)
         .join(Game, Game.id == ModelPrediction.game_id)
         .join(OddsHistory, OddsHistory.id == SimulatedBet.odds_taken_id)
+        .where(SimulatedBet.strategy.notin_(_LIVE_TESTS))
     ).all()
 
     # Games with closing capture marker
@@ -447,8 +453,9 @@ def format_report(report: PaperReport) -> str:
     if not any(p.bets for p in report.strategies):
         lines.append("  No paper bets recorded yet.")
     for perf in report.strategies:
+        label = perf.strategy + (" (LIVE TEST)" if perf.strategy in {s.value for s in _LIVE_TESTS} else "")
         lines.append(
-            f"  {perf.strategy:<18} bets {perf.bets} (settled {perf.settled}, pending {perf.pending}) | "
+            f"  {label:<18} bets {perf.bets} (settled {perf.settled}, pending {perf.pending}) | "
             f"win rate {_pct(perf.win_rate)} | P/L {perf.pnl_units:+.2f}u | ROI {_pct(perf.roi)} | "
             f"avg CLV {_pct(perf.avg_clv, 2)} | beat close {_pct(perf.beat_close_rate)} (over {perf.clv_bets} bets with CLV)"
         )
@@ -611,6 +618,10 @@ def format_report(report: PaperReport) -> str:
                 f"diff {ps.log_loss_diff:+.4f} (95% CI [{ps.log_loss_diff_ci_low:+.4f}, {ps.log_loss_diff_ci_high:+.4f}])"
             )
             lines.append(f"  voids = {ps.void_count} | unmatched names = {ps.unmatched_name_count}")
+        lines.append("")
+
+    if report.line_move is not None:
+        lines.extend(format_line_move_live_test(report.line_move))
         lines.append("")
 
     lines.append("Bankroll (start + settled P/L)")

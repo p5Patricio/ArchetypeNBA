@@ -36,7 +36,7 @@ def test_the_report_runs_on_empty_tables_and_says_so(world):
     report = build_report(world, NOW)
     text = format_report(report)
 
-    assert [s.strategy for s in report.strategies] == ["calibrated", "flat", "kelly_fractional", "kelly_shrunk", "market_edge"]
+    assert [s.strategy for s in report.strategies] == ["calibrated", "flat", "kelly_fractional", "kelly_shrunk", "line_move", "market_edge"]
     assert all(s.bets == 0 and s.win_rate is None and s.roi is None and s.avg_clv is None for s in report.strategies)
     assert report.clv.coverage is None and report.skill.brier_model is None
     assert "No paper bets recorded yet." in text

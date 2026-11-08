@@ -434,6 +434,7 @@ class StakingStrategy(str, enum.Enum):
     kelly_shrunk = "kelly_shrunk"
     market_edge = "market_edge"
     calibrated = "calibrated"
+    line_move = "line_move"  # live test of the line-move model (D-71); its own bankroll, never mixed into v1 numbers
 
 
 def _pg_enum(py_enum: type[enum.Enum], name: str) -> SAEnum:
@@ -747,6 +748,10 @@ class SimulatedBet(SQLModel, table=True):
     kelly_multiplier: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(4, 3)))
     # Weight of the model in the logit blend used by the `calibrated` strategy; NULL for every other strategy.
     blend_weight: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(4, 3)))
+    # `line_move` bets only (D-71): the predicted close-minus-current move (points, home line for spreads, total for
+    # totals) and Pinnacle's own price of the side at bet time (the bet may take a better price elsewhere).
+    predicted_move: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(5, 2)))
+    pinnacle_price_at_bet: Optional[Decimal] = Field(default=None, sa_column=Column(Numeric(8, 4)))
     stake_units: Decimal = Field(sa_column=Column(Numeric(8, 3), nullable=False))
     bankroll_before: Decimal = Field(sa_column=Column(Numeric(12, 3), nullable=False))
     closing_odds_id: Optional[int] = Field(
