@@ -8,7 +8,7 @@ price of the side when the bet was placed).
 Keep in sync with StakingStrategy and SimulatedBet in app/models.py.
 
 Chain note: this revision follows a4d6f8b0c3e5 (injury_backfill_slot, branch fix/injury-backfill-v2), which is
-merged to main first; until that lands on this branch, `alembic heads` here reports a missing down_revision.
+merged to main first.
 
 Downgrade note: PostgreSQL cannot drop an enum value, so 'line_move' stays (harmless). The columns are dropped;
 downgrading while 'line_move' bets exist is the operator's call (delete or keep them first).

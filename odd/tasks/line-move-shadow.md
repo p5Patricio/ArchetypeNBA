@@ -30,7 +30,7 @@ Turn the D-68 line-move ridge (it predicts Pinnacle's open-to-close move) into a
 - [x] L3 Model + migration + `line_move_strategy.py` + tick wiring + recorder guard.
 - [x] L4 `scripts/register_line_move.py --dry-run`.
 - [x] L5 Paper report and API section.
-- [ ] L6 Tests (leak safety, readiness, uniqueness, tip guard, existing strategies unchanged, report/API).
+- [x] L6 Tests (leak safety, readiness, uniqueness, tip guard, existing strategies unchanged, report/API).
 - [x] L7 Docs: QUANT_MODULE section, DECISIONS D-71, OPERATIONS, AGENTS.
 - [x] L8 Run the leak-safe evaluation read-only against production; record the headline.
 
@@ -55,5 +55,7 @@ Turn the D-68 line-move ridge (it predicts Pinnacle's open-to-close move) into a
 - Frontend: render `line_move_live_test` on the /betting page (the API field exists).
 - Revisit thresholds only as a new version after >= 300 live bets.
 
+- 2026-11-07 L6 tests: `tests/test_line_move_leak_safe.py` (7: readiness, entry rules, entry invariants, features_as_of leak safety by perturbing games final after the instant, backtest export reproduces the walk-forward predictions, params validation, points CLV) and `tests/test_line_move_strategy.py` (13: bet at the best price at Pinnacle's line with attribution, not-final / not-ingested guards, capture-before-instant guard, below threshold + already_decided, uniqueness, tip guard, dry run, unregistered, v1 strategies unchanged with settled/pending line_move bets (fails with a KeyError without the recorder guard: mutation-checked), tick isolation, report isolation, API flag, registration CLI). Rebased on origin/main; migration `c7e9a1b3d5f8` is the single head after `a4d6f8b0c3e5`.
+
 ## Next step
-L6 tests, then the full suite.
+Owner review, lockstep deploy, then `scripts/register_line_move.py --dry-run` and registration.
