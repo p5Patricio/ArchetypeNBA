@@ -1,0 +1,74 @@
+# Excerpt of pypdf layout text from an official NBA injury report PDF (Injury-Report_2019-12-17_05PM), for offline parser tests only. Not redistributable data.
+                                                                                                           Injury Report: 12/17/19 05:30 PM
+
+
+
+
+Game Date          Game Time          Matchup            Team                             Player Name                      Current Status             Reason                                                     Previous Status             Previous Reason
+
+12/17/2019         07:00 (ET)         LAL@IND            Indiana Pacers                   Oladipo, Victor                  Out                        Injury/Illness - Right Knee; Rehab                         -                          -
+
+                                                                                          Sampson, JaKarr                  Questionable               Injury/Illness - Back; Sore lower                          -                          -
+
+                                                         Los Angeles Lakers               Cousins, DeMarcus                Out                        Injury/Illness - Right Knee; Rehabilitation                -                          -
+
+                                                                                          Davis, Anthony                   Questionable               Injury/Illness - Right Ankle; Sprain                       -                          -
+
+                                                                                          Horton-Tucker, Talen             Out                        G League - On Assignment                                   -                          -
+
+                                                                                          Kuzma, Kyle                      Out                        Injury/Illness - Left Ankle; Sprain                        -                          -
+
+                                                                                          Rondo, Rajon                     Probable                   Injury/Illness - Left Hamstring; Strain                    -                          -
+
+                                      SAC@CHA            Charlotte Hornets                Batum, Nicolas                   Out                        Injury/Illness - Left Hand; Discomfort                     Questionable               Injury/Illness - Left Hand; Discomfort
+
+                                                                                          Franks, Robert                   Out                        G League - Two-Way                                         -                          -
+
+                                                                                          McDaniels, Jalen                 Out                        G League - On Assignment                                   Available                  -
+                                                                                                                                         Page 2 of
+                                                                                                           Injury Report: 12/17/19 05:30 PM
+
+
+
+
+Game Date          Game Time          Matchup            Team                             Player Name                     Current Status              Reason                                                    Previous Status            Previous Reason
+
+12/18/2019         07:00 (ET)         CHA@CLE            Charlotte Hornets                                                                           NOT YET SUBMITTED
+
+                                                                                                                                         Page 3 of
+                                                                                                       Injury Report: 12/17/19 05:30 PM
+
+
+
+
+Game Date         Game Time         Matchup            Team                           Player Name                     Current Status            Reason                                                   Previous Status           Previous Reason
+
+                  08:00 (ET)        MEM@OKC           Memphis Grizzlies               Allen, Grayson                  Questionable              Injury/Illness - Right Ankle; Soreness                   -                         -
+
+                                                                                      Iguodala, Andre                 Out                       Not With Team                                            -                         -
+
+                                                                                      Jackson, Josh                   Out                       G League - On Assignment                                 -                         -
+
+                                                                                      Konchar, John                   Out                       G League - Two-Way                                       -                         -
+
+                                                                                      Watanabe, Yuta                  Out                       G League - Two-Way                                       -                         -
+
+                                                      Oklahoma City Thunder                                                                     NOT YET SUBMITTED
+
+                                    NOP@MIN           Minnesota                                                                                 NOT YET SUBMITTED
+                                                      Timberwolves
+
+
+
+
+                                                                                                                                    Page 4 of
+                                                                                                    Injury Report: 12/17/19 05:30 PM
+
+
+
+
+ Game Date         Game Time         Matchup          Team                          Player Name                   Current Status           Reason                                                Previous Status          Previous Reason
+
+                                                      New Orleans Pelicans                                                                 NOT YET SUBMITTED
+
+                   09:00 (ET)       ORL@DEN           Denver Nuggets                Bol, Bol                      Out                      Injury/Illness - Left Foot; Injury Management         -                        -

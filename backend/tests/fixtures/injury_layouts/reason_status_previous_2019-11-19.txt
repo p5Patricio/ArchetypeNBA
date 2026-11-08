@@ -1,0 +1,46 @@
+# Excerpt of pypdf layout text from an official NBA injury report PDF (Injury-Report_2019-11-19_05PM), for offline parser tests only. Not redistributable data.
+                                                                                                            Injury Report: 11/19/19 05:30 PM
+
+
+
+
+Game Date             Game Time              Matchup               Team                                  Player Name                                     Reason                                          Current Status                                  Previous Status
+
+11/19/2019            08:00 (ET)            GSW@MEM                Golden State Warriors                 Curry, Stephen                                  Injury/Illness - Left Hand; Fracture            Out                                             -
+
+                                                                                                                                        Page 4 of
+                                                                                                         Injury Report: 11/19/19 05:30 PM
+
+
+
+
+Game Date            Game Time             Matchup               Team                                 Player Name                                    Reason                                         Current Status                                Previous Status
+
+                     09:00 (ET)            HOU@DEN              Denver Nuggets                                                                       NOT YET SUBMITTED
+
+                                                                Houston Rockets                       Clark, Gary                                    G League - On Assignment                      Out                                            -
+
+                                                                                                      Frazier, Michael                               G League - Two-Way                            Out                                            -
+
+                                                                                                      Gordon, Eric                                   Injury/Illness - Right Knee;                  Out                                            Available
+                                                                                                                                                     Arthroscopy
+
+                                                                                                      Green, Gerald                                  Injury/Illness - Left Cuneiform;              Out                                            -
+                                                                                                                                                     Fracture
+
+
+                                                                                                                                       Page 5 of
+                                                                                          Injury Report: 11/19/19 05:30 PM
+
+
+
+
+ Game Date          Game Time         Matchup           Team                            Player Name                            Reason                                 Current Status                         Previous Status
+
+                                                                                       Hilario, Nene                           Injury/Illness - Left Adductor; Strain Out                                    -
+
+                   10:00 (ET)         BOS@LAC           Boston Celtics                                                         NOT YET SUBMITTED
+
+                                                        LA Clippers                                                            NOT YET SUBMITTED
+
+
