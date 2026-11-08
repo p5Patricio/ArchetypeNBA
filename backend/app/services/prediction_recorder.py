@@ -486,6 +486,8 @@ class PredictionRecorder:
             .where(or_(ModelPrediction.game_id.in_(game_ids), SimulatedBet.placed_at >= recent))
         ):
             name = _enum_value(strategy)
+            if name not in self._game_stake:
+                continue  # a strategy this recorder does not run (e.g. `line_move`, D-71) keeps its own ledger
             amount = float(stake)
             if game_id in window:
                 self._placed.add((name, game_id, _enum_value(market), _enum_value(side)))
@@ -499,7 +501,8 @@ class PredictionRecorder:
             .where(SimulatedBet.status.in_(_SETTLED))
             .group_by(SimulatedBet.strategy)
         ):
-            self._bankroll[_enum_value(strategy)] += float(profit or 0.0)
+            if _enum_value(strategy) in self._bankroll:
+                self._bankroll[_enum_value(strategy)] += float(profit or 0.0)
 
     # ------------------------------------------------------------------ per game
 

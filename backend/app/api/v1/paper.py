@@ -46,6 +46,7 @@ class StrategySummary(BaseModel):
     avg_clv: Optional[float] = None
     beat_close_rate: Optional[float] = None
     clv_bets: int
+    live_test: bool = False  # D-71: a live test with its own bankroll, kept out of the aggregate lines
 
 
 class MarketSummary(BaseModel):
@@ -103,6 +104,46 @@ class PropsShadowSummaryResponse(BaseModel):
     unmatched_name_count: int = 0
 
 
+class CiResponse(BaseModel):
+    mean: float
+    ci_low: float
+    ci_high: float
+
+
+class LineMoveMarketResponse(BaseModel):
+    market: str
+    bets: int
+    settled: int
+    roi: Optional[CiResponse] = None
+    points_clv: Optional[CiResponse] = None
+    points_n: int = 0
+    moved_our_way: Optional[float] = None
+
+
+class LineMoveLiveTestResponse(BaseModel):
+    """The `line_move` LIVE TEST (D-71): paper only, judged by Pinnacle CLV and ROI; n < 30 is insufficient."""
+
+    label: str
+    model: Optional[str] = None
+    bets: int
+    settled: int
+    pending: int
+    pnl_units: float
+    roi: Optional[CiResponse] = None
+    points_clv: Optional[CiResponse] = None
+    points_n: int = 0
+    points_n_recovered: int = 0
+    moved_our_way: Optional[float] = None
+    pinnacle_price_clv_games: int = 0
+    pinnacle_price_clv_mean: Optional[float] = None
+    pinnacle_price_clv_std_err: Optional[float] = None
+    pinnacle_price_clv_games_with_recovered: int = 0
+    pinnacle_price_clv_mean_with_recovered: Optional[float] = None
+    pinnacle_price_clv_std_err_with_recovered: Optional[float] = None
+    insufficient: bool = True
+    markets: List[LineMoveMarketResponse] = []
+
+
 class PaperSummaryResponse(BaseModel):
     strategies: List[StrategySummary]
     markets: Optional[List[MarketSummary]] = None
@@ -110,6 +151,7 @@ class PaperSummaryResponse(BaseModel):
     champion_model: Optional[str] = None
     brier: ChampionSkillResponse
     props_shadow: Optional[PropsShadowSummaryResponse] = None
+    line_move_live_test: Optional[LineMoveLiveTestResponse] = None
 
 
 class BetGameInfo(BaseModel):
@@ -169,6 +211,7 @@ def get_paper_summary(session: Session = Depends(get_db_session)) -> PaperSummar
             avg_clv=s.avg_clv,
             beat_close_rate=s.beat_close_rate,
             clv_bets=s.clv_bets,
+            live_test=s.strategy == StakingStrategy.line_move.value,
         )
         for s in report.strategies
     ]
@@ -252,12 +295,52 @@ def get_paper_summary(session: Session = Depends(get_db_session)) -> PaperSummar
         )
 
     return PaperSummaryResponse(
+        line_move_live_test=_line_move_response(report.line_move),
         strategies=strategies_resp,
         markets=markets_resp,
         pinnacle_clv=pinnacle_resp,
         champion_model=report.skill.model,
         brier=brier_resp,
         props_shadow=props_shadow_resp,
+    )
+
+
+def _ci_response(t) -> Optional[CiResponse]:
+    return None if t is None else CiResponse(mean=t[0], ci_low=t[1], ci_high=t[2])
+
+
+def _line_move_response(t) -> Optional[LineMoveLiveTestResponse]:
+    if t is None:
+        return None
+    p = t.pinnacle_clv
+    captured = p.stats if p is not None else None
+    recovered = p.stats_with_recovered if p is not None else None
+    return LineMoveLiveTestResponse(
+        label=t.label,
+        model=t.model,
+        bets=t.bets,
+        settled=t.settled,
+        pending=t.pending,
+        pnl_units=t.pnl_units,
+        roi=_ci_response(t.roi),
+        points_clv=_ci_response(t.points_clv),
+        points_n=t.points_n,
+        points_n_recovered=t.points_n_recovered,
+        moved_our_way=t.moved_our_way,
+        pinnacle_price_clv_games=captured.n_games if captured else 0,
+        pinnacle_price_clv_mean=captured.mean_clv if captured else None,
+        pinnacle_price_clv_std_err=captured.std_err if captured else None,
+        pinnacle_price_clv_games_with_recovered=recovered.n_games if recovered else 0,
+        pinnacle_price_clv_mean_with_recovered=recovered.mean_clv if recovered else None,
+        pinnacle_price_clv_std_err_with_recovered=recovered.std_err if recovered else None,
+        insufficient=min(t.settled, t.points_n) < 30,
+        markets=[
+            LineMoveMarketResponse(
+                market=m.market, bets=m.bets, settled=m.settled, roi=_ci_response(m.roi),
+                points_clv=_ci_response(m.points_clv), points_n=m.points_n, moved_our_way=m.moved_our_way,
+            )
+            for m in t.markets
+        ],
     )
 
 

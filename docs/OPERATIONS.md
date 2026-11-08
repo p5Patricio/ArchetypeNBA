@@ -189,7 +189,17 @@ The plan allows 250 billed requests a month (resets on the 1st). `ODDSPAPI_MONTH
 
 What to look for in `logs/tick.log`: `[ok] oddspapi: N listing(s), M path(s) fetched (...), K missed close(s) recovered; requests R (B billable)`. `[skipped] ... already ran on <day>` is normal for every later tick of the day. `budget guard` / `quota guard` mean the run stopped on purpose.
 
-Storage: paths of games with a `game` row go to `odds_history` under `op_pinnacle` (never `is_sharp`); older seasons go to `oddspapi_quote`; the catalogue and mapping live in `oddspapi_fixture` (`unmatched_reason` explains a fixture that could not be mapped: never guessed). Gzipped raw payloads (all alternative lines) are kept in `~/ArchetypeNBA-data/raw/oddspapi/paths`, outside git. Analysis: `python scripts/line_movement_report.py` (read-only; `--no-model` skips the backtest re-run).
+Storage: paths of games with a `game` row go to `odds_history` under `op_pinnacle` (never `is_sharp`); older seasons go to `oddspapi_quote`; the catalogue and mapping live in `oddspapi_fixture` (`unmatched_reason` explains a fixture that could not be mapped: never guessed). Gzipped raw payloads (all alternative lines) are kept in `~/ArchetypeNBA-data/raw/oddspapi/paths`, outside git. Analysis: `python scripts/line_movement_report.py` (read-only; `--no-model` skips the backtest re-run; the leak-safe section at the bettable instant runs by default, `--no-leak-safe` skips it, `--entry-rule in_force` is the sensitivity; about 1 minute).
+
+## 2.3 `line_move` live test (D-71, paper only)
+
+The line-move model bets Pinnacle's line where it predicts the close will move, flat 1 unit under the staking strategy `line_move` (own bankroll of 100 units, the usual caps). It runs inside the `record` step after the champion, in its own transaction, and does nothing until the model is registered.
+
+1. After the lockstep deploy of migration `c7e9a1b3d5f8` (section 4), fit and inspect without writing: `cd backend; python scripts/register_line_move.py --dry-run` (read-only, ~35 s, needs the archive files in `~/ArchetypeNBA-data/raw`). It prints the thresholds, sigmas, both ridges and the training summary.
+2. Register: `python scripts/register_line_move.py` (writes `model_version` `line_move` `1`, role `shadow`). An existing version is never overwritten; a new parameter set or threshold is `--version 2` (rule 8). Refit once per season, after the season's first OddsPapi paths of the previous season are stored.
+3. What to look for in `logs/tick.log`: the `record` line ends with `line_move (line_move 1, LIVE TEST): N game(s), wrote D decision(s), bets B; skipped: ...`. `previous_game_not_final` / `previous_game_not_ingested` (a team's previous game is not final or its logs are not in yet) and `no_capture_after_bettable_instant` (no odds capture since both previous games became final + 30 min; usually the game is decided at the next day's opening capture) are normal. `already_decided` means the game and market were decided by an earlier tick: one decision per game and market, ever.
+4. Judge it in `python scripts/paper_report.py` (section "LIVE TEST (paper only): line_move") or `GET /api/v1/paper/summary` (`line_move_live_test`): points CLV against Pinnacle's close, ROI with a 95% CI, and Pinnacle price CLV at the same line (which excludes bets whose line moved, i.e. the strategy's best bets). Under 30 bets every number is flagged insufficient. The market breakdown, CLV coverage and per-game Pinnacle CLV lines exclude `line_move`, so the v1 numbers keep their meaning.
+5. To stop it without a deploy: `UPDATE model_version SET role = 'retired' WHERE name = 'line_move';` (the recorder only reads the newest `shadow` row; bets already placed stay and settle).
 
 ## 3. Daily and weekly checks
 
@@ -237,6 +247,8 @@ Deploy a change that includes a migration:
 | 5 | Dry runs | `python scripts/run_tick.py --dry-run` and `python scripts/paper_report.py` |
 | 6 | Resume | `Enable-ScheduledTask -TaskName NBA-Odds-Tick` |
 | 7 | Verify one real tick | `Start-ScheduledTask -TaskName NBA-Odds-Tick`, then read `logs\tick.log`: `exit code: 0` |
+
+Migration `c7e9a1b3d5f8` (`line_move`, D-71; down_revision `a4d6f8b0c3e5`, the injury backfill slots) adds the enum value `line_move` and the nullable `simulated_bet.predicted_move` / `pinnacle_price_at_bet`. The new code compares `simulated_bet.strategy` with `'line_move'`, which PostgreSQL rejects before the enum value exists, so `paper_report.py` and `/api/v1/paper/summary` fail on an un-migrated schema (the `record` step only queries it once a `line_move` model is registered, which needs the migration anyway): migrate in step 4 before resuming the tick.
 
 Migration `f3c5e7a9b2d4` (OddsPapi, D-70) adds three tables and the `closing_oddspapi` capture kind. With the step disabled the new code only reads tables that already exist (the paper report finds no `closing_oddspapi` marker), but the `oddspapi` step and `scripts/oddspapi_backfill.py` need the migration: migrate in this order before setting `ODDSPAPI_ENABLED=true`. Its downgrade deletes `closing_oddspapi` markers (the `op_pinnacle` rows stay).
 

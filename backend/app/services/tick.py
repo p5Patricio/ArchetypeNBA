@@ -29,7 +29,9 @@ Steps run in order, each isolated (one failing step never prevents the others):
                 At most ``ODDSPAPI_MAX_PATHS_PER_RUN`` paths and ``ODDSPAPI_STEP_BUDGET_SECONDS`` per run.
 5. ``record``   ``PredictionRecorder``: DB only, so it also runs when the capture or results steps failed or were
                 skipped. It comes after ``learn`` so predictions use the current champion and ratings that include
-                the latest games.
+                the latest games. Then, in its own transaction, the ``line_move`` live test (D-71,
+                ``LineMoveRecorder``; nothing when the model is not registered; a failure marks the step as an
+                error after the champion's work is already committed).
 Steps live in an ordered registry of ``(name, callable)`` pairs, so a new step is added by appending to
 ``DEFAULT_STEPS`` without touching the runner.
 
@@ -74,6 +76,7 @@ from app.services.odds_snapshot import (
     record_capture,
     run_snapshot,
 )
+from app.services.line_move_strategy import LineMoveRecorder
 from app.services.prediction_recorder import PredictionRecorder
 from app.services.promotion_notifier import PromotionNotifier
 from app.services.results_sync import NbaApiResultsProvider, sync_results
@@ -721,7 +724,21 @@ def record_step(ctx: TickContext) -> StepResult:
     shadows = [m for m in summary.models.values() if m.role != "champion"]
     if shadows:
         message += "; shadow: " + ", ".join(f"{m.name} {m.version}={m.predictions_written}" for m in shadows)
-    return StepResult("", STEP_OK, message, f"skipped: {skipped}")
+    # line_move live test (D-71): after the champion's work is committed, in its own transaction, never blocking it
+    status, detail = STEP_OK, f"skipped: {skipped}"
+    try:
+        line_move = LineMoveRecorder(ctx.session, now=ctx.now).run(dry_run=ctx.dry_run)
+        if line_move.model is not None:
+            message += "; " + line_move.message()
+    except Exception as exc:
+        logger.exception("tick: line_move recorder failed (rolled back; the champion's work is unaffected)")
+        try:
+            ctx.session.rollback()
+        except Exception:
+            logger.exception("tick: rollback after the line_move failure also failed")
+        status = STEP_ERROR
+        message += f"; line_move: {type(exc).__name__}: {exc}"
+    return StepResult("", status, message, detail)
 
 
 # Ordered registry: append a (name, callable) pair to add a step.

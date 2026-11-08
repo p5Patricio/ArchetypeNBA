@@ -500,6 +500,59 @@ Known biases of the recovered close:
 
 Line-movement test (`scripts/line_movement_report.py`, read-only): movement distribution (n, mean with a seeded bootstrap CI, sd, share unchanged, quantiles, hours from open to close) per market; naive baselines; and the D-68 line-move ridge regression re-run walk-forward with the Pinnacle open/close of path games added to the archive lines, so each game is predicted from earlier seasons only. Bets take Pinnacle's opener on the side the close is predicted to move toward (|move| >= 0.25 / 0.5 / 1); it reports CLV in points and in probability, how often the close moved our way, ROI at Pinnacle's **actual** opening price (not an assumed -110) and, when the line did not move, the price CLV against the de-vigged close. Under 30 games it prints "insufficient data". Caveats: the regression was trained mostly on SBRO opens of an unknown book posted at an unknown time, so a Pinnacle opener is a distribution shift; opening limits are small; at ~8 games a day a 0.5-point effect needs a few hundred games to separate from zero.
 
+## 16. Leak-safe line-move evaluation and the `line_move` live test
+
+Added 2026-11-07 (D-71). The section 15 test bets Pinnacle's **opener**, but the line-move features (Elo, `margin_features`, rolling totals) include each team's **previous** game, and the opener is typically ~22 h before the tip, often while last night's game is still being played (1% of openers come 2.3 h after a previous game's tip). That is a leak: the model knew a result the opening price did not.
+
+| Item | Definition |
+|------|-----------|
+| Previous game final | Its tip + 3 h (`GAME_DURATION`, overtime included; tips from `game.commence_time` and OddsPapi `start_time` / plausible `true_start_time`, the latest wins), else 07:00 UTC the day after its date (`END_OF_DAY_FINAL`) |
+| Bettable instant | `max(opener, latest final of the two teams' previous games + 30 min)` (`SAFETY_MARGIN`) |
+| Entry | `first_after` (default): the first stored Pinnacle main-line pair at or after the instant, before the tip; `in_force`: the pair in force at the instant (sensitivity). No pair = no bet |
+| Features | `line_movement.features_as_of`: `FeatureState` and `TotalsState` fed only with games final by the instant, in order of final time (each team's own chain stays chronological, so its Elo/form are the date-based ones; the totals league mean is what changes: up to 4.7 points early in a season). They replace the date-based rows in `run_backtest(feature_overrides=...)`, for test and training rows |
+| Target | `close - entry` (the line feature is the entry line), for evaluation and for the OddsPapi games of earlier seasons in training |
+| Results | CLV points, CLV probability, share moved our way, ROI at Pinnacle's **entry** price; seeded bootstrap (1,000, seed 42); rows under 30 games flagged |
+
+First run (2026-11-07, 770 Pinnacle paths Jan-Nov 2026, `scripts/line_movement_report.py`): readiness came from tip times for all 770 games; 161 entries (21%) are after the opener (95 with a back-to-back team), the rest are the opener itself.
+
+| Market, predicted move | Opener, LEAKY (n, CLV pts, 95% CI) | Leak-safe entry (n, CLV pts, 95% CI) | moved our way | CLV prob | ROI at Pinnacle's entry price (95% CI) |
+|------------------------|------------------------------------|--------------------------------------|---------------|----------|-----------------------------------------|
+| spreads >= 0.25 | 400, +0.41 (+0.22 .. +0.60) | 400, +0.39 (+0.20 .. +0.57) | 51.5% | +0.012 | -0.000 (-0.095 .. +0.091) |
+| spreads >= 0.5 | 180, +0.57 (+0.23 .. +0.92) | 180, +0.51 (+0.18 .. +0.85) | 52.8% | +0.016 | -0.024 (-0.170 .. +0.116) |
+| totals >= 0.25 | 318, +0.69 (+0.39 .. +1.02) | 314, +0.71 (+0.42 .. +1.00) | 56.1% | +0.016 | -0.024 (-0.125 .. +0.088) |
+| totals >= 0.5 | 83, +1.21 (+0.66 .. +1.83) | 83, +1.07 (+0.49 .. +1.68) | 63.9% | +0.024 | +0.022 (-0.187 .. +0.230) |
+| >= 1.0 (both) | 20 / 1 | 19 / 1: insufficient | | | |
+
+Naive baselines at the entry: always home -0.03 points, open favourite +0.01, always over +0.20 (+0.01 .. +0.41). The `in_force` rule gives the same picture (spreads >= 0.25 +0.39, totals >= 0.5 +1.13, n 84).
+
+Back-to-back split (leak-safe, either team played the day before):
+
+| Market, threshold | b2b (n, CLV pts, 95% CI) | no b2b (n, CLV pts, 95% CI) |
+|-------------------|--------------------------|-----------------------------|
+| spreads >= 0.25 | 171, +0.55 (+0.22 .. +0.85) | 229, +0.27 (+0.04 .. +0.51) |
+| spreads >= 0.5 | 120, +0.59 (+0.21 .. +0.94) | 60, +0.36 (-0.24 .. +0.99) |
+| totals >= 0.25 | 63, +1.57 (+0.75 .. +2.44) | 251, +0.50 (+0.20 .. +0.81) |
+| totals >= 0.5 | 13, +2.50: insufficient | 70, +0.81 (+0.30 .. +1.34) |
+
+Reading:
+
+- **The movement signal survives the leak fix**, at about the same size: the leaky opener numbers were not mostly leak, because when the previous game ends after the opener the line keeps moving afterwards and the model still sees where. The earlier "clean subset" check (490 games, EOD rule) under-counted the signal by throwing away exactly those games instead of betting them later.
+- Half of the spread signal and two thirds of the totals signal sit in back-to-back games (fatigue/rest news priced during the day); the non-b2b games still show +0.27 (spreads) and +0.50 / +0.81 (totals) with intervals above zero.
+- **It is not profit at Pinnacle's price.** A point of CLV is worth about 1.2-2.4 probability points here, while Pinnacle's two-way margin costs about 2.6% (spreads) and 3.5% (totals) per bet (price CLV when the line does not move: -0.026 / -0.036). Every ROI interval spans zero, with point estimates near 0. Profit would need a better price than Pinnacle's at Pinnacle's line (line shopping), which is what the live test takes.
+- By month the spread signal is weakest in January-February and May-June (small n) and strongest in October-November 2026, the only months predicted by a model trained on OddsPapi entries as well as SBRO opens.
+
+### The live test: `line_move` v1 (shadow, paper only)
+
+| Item | Detail |
+|------|--------|
+| Registration | `scripts/register_line_move.py [--dry-run]`: `run_backtest(config.export_season=<live season>)` exports exactly what the walk-forward evaluation uses to predict the season (margin_features refit on past seasons, both ridges trained through the last completed season with SBRO opens plus the earlier OddsPapi entries, sigmas 12.5 / 17.7). `model_version` `line_move` `1`, role `shadow` (no h2h probability, so never in the league or the promotion gates). Params: ridges (mean, scale, coef, intercept, alpha, n), feature lists, thresholds (spreads 0.25, totals 0.5), margin_features params, default Elo/totals params, entry rule, training summary. Inference is numpy-only (`LineMoveModel`) and refuses a feature list or parameter set this code does not build |
+| Decision | `services/line_move_strategy.py`, in the tick's `record` step after the champion, own transaction. A scheduled game within 20 h is decidable when no earlier game of either team within 3 days is still scheduled/live, every earlier final game is in `player_game_log` (the feature history), and the game's newest odds capture is at or after the bettable instant (previous tip + 3 h + 30 min). Then, once per game and market: Pinnacle's current main pair (most balanced sharp pair), the predicted close-minus-current move, a `model_prediction` (side = predicted direction, projection = the move) and, when `|move|` clears the threshold, a flat 1-unit `simulated_bet` at the best fresh quote (<= 6 h) at Pinnacle's line across books, never at or after tip. Later ticks: `already_decided` |
+| Attribution | `simulated_bet.predicted_move`, `pinnacle_price_at_bet`, `fair_prob_at_bet` (Pinnacle de-vigged probability of the side), `model_prob` = that + `Phi(|move| / sigma) - 0.5`, `ev_per_unit` = `model_prob * price - 1` |
+| Bankroll | 100 units plus its own settled P/L, caps 2% per bet / 10% per day / 4% per game; the champion's strategies never see its bets |
+| Evaluation | `paper_report.py` section "LIVE TEST (paper only): line_move" and `/api/v1/paper/summary` `line_move_live_test`: points CLV against Pinnacle's close (captured close, or the OddsPapi-recovered one, counted separately), share moved our way, ROI with a bootstrap CI, and the existing per-game Pinnacle price CLV restricted to `line_move` (captured and incl. recovered; it excludes bets whose line moved, i.e. this strategy's best bets, so read it with the points CLV). Under 30 bets: insufficient. The aggregate market breakdown, CLV coverage and Pinnacle CLV lines exclude `line_move` |
+
+Expected sample: ~8 games a day; offline about half cleared the spread threshold and one in ten the totals threshold, so ~4-5 bets a day, ~120-150 a month; a 0.4-point CLV needs a few hundred bets to separate from zero, ROI thousands.
+
 ## Where each constant lives
 
 | Constants | File |
@@ -512,6 +565,8 @@ Line-movement test (`scripts/line_movement_report.py`, read-only): movement dist
 | Lab split, search ranges, historical gate, material differences | `backend/app/services/model_lab.py` |
 | Features and their shrinkage constants | `backend/app/analytics/features.py` |
 | Historical line parsing (total threshold 60, team maps), backtest grids and plausibility bounds | `backend/app/analytics/historical_lines.py`, `backend/app/services/historical_backtest.py` |
+| Bettable instant (game duration 3 h, safety margin 30 min, end-of-day 07:00 UTC, entry rules) | `backend/app/services/line_movement.py` |
+| `line_move` thresholds, horizon 20 h, quote age 6 h, not-final lookback 3 days | `backend/app/services/line_move_strategy.py` (thresholds also in the model's params) |
 | OddsPapi ids (sport 11, tournament 132), match tolerance 6 h, cutoff window, priorities, cooldowns, budget and floor | `backend/app/services/oddspapi.py`, `backend/app/services/oddspapi_client.py`, `ODDSPAPI_*` in `backend/app/config.py` |
 | Ridge and logistic grids | `backend/app/services/margin_features_model.py` |
 | Credit floor 25, props markets, window 45 min (manual CLI) | `backend/app/services/odds_snapshot.py` |

@@ -114,11 +114,19 @@ class PinnacleClvReport:
     stats_with_recovered: Optional[ClvStats] = None  # captured + recovered closes (include_recovered only)
 
 
+LIVE_TEST_STRATEGIES = ("line_move",)  # D-71: reported on their own, never mixed into the v1 numbers
+
+
 def build_pinnacle_clv_report(
-    session: Session, now: Optional[datetime] = None, include_recovered: bool = False
+    session: Session,
+    now: Optional[datetime] = None,
+    include_recovered: bool = False,
+    strategies: Optional[Iterable[str]] = None,
+    exclude_strategies: Iterable[str] = LIVE_TEST_STRATEGIES,
 ) -> PinnacleClvReport:
     """
-    Builds the Pinnacle-referenced CLV report for all paper bets.
+    Builds the Pinnacle-referenced CLV report for the paper bets of ``strategies`` (default: every strategy except
+    the live tests in ``exclude_strategies``, so the existing numbers keep their meaning).
     Reuses existing sharp book lookup and devigging helpers.
     """
     now = _aware_utc(now) if now is not None else datetime.now(timezone.utc)
@@ -173,6 +181,12 @@ def build_pinnacle_clv_report(
         .join(Game, Game.id == ModelPrediction.game_id)
         .order_by(SimulatedBet.id)
     ).all()
+    only = None if strategies is None else {str(s) for s in strategies}
+    skip = {str(s) for s in exclude_strategies} if only is None else set()
+    rows = [
+        row for row in rows
+        if (only is None or _enum_value(row[0].strategy) in only) and _enum_value(row[0].strategy) not in skip
+    ]
 
     report.total_bets = len(rows)
     if not rows:
