@@ -292,11 +292,13 @@ Every manual change writes an audit row whose reason starts with `manual:`. A re
 - **Read API**: `GET /api/v1/injuries/latest` provides the latest snapshot with player entries grouped by team (`?include_available=true` to include Available players).
 - **Props pipeline**: `services/injury_scraper.fetch_injury_report()` automatically uses real database rows if the latest snapshot is less than 36 hours old (otherwise marks `available=False` with reason `'stale'`).
 - **Historical backfill (`scripts/backfill_injuries.py`, pending owner go-ahead to run at scale)**:
-  Downloads historical official NBA injury report PDFs for the game dates in `player_game_log` or `game` from `--start` (default `2018-12-17`, when the archive begins) to `--end` (default today ET), parses them with the era-aware parser (three layouts, see D-69) and stores each snapshot with the publication time printed in the PDF title (`Injury Report: 01/15/19 05:30 PM`).
+  Downloads historical official NBA injury report PDFs for the game dates in `player_game_log` or `game` from `--start` (default `2018-12-17`, when the archive begins) to `--end` (default today ET), parses them with the era-aware parser (three main layouts plus three November-December 2019 transition layouts, see D-69) and stores each snapshot with the publication time printed in the PDF title (`Injury Report: 01/15/19 05:30 PM`).
   - **File names (verified 2026-11-06)**: hourly names `Injury-Report_YYYY-MM-DD_05PM.pdf` through 2025-12-21 (an `_05PM` file is the **5:30 PM** report), quarter-hour names `..._05_00PM.pdf` from 2025-12-22. Hourly files are sparse in early seasons (2019-01-15 has `_01PM` and `_05PM` but no `_06PM`/`_07PM`).
   - **URL discovery**: one request per season to `official.nba.com/nba-injury-report-YYYY-YY-season/`; dates listed there use the exact file. In practice past-season URLs serve the current season's page, which lists only the current day's reports, so history falls back to guessing the date era's name (at most 3 guesses per slot, one step back each; both variants only within 2 days of 2025-12-22). `--no-index-pages` skips the index requests.
   - **Slots** (`--per-day 2`): the report labelled 5:00 PM ET, and the latest report *published* at or before the first tip-off minus 60 min. Historical tip times are not in the database, so the second slot is re-planned from the game times printed in the stored 5 PM report; in the hourly era a 7:00 PM first tip resolves to the same `_05PM` file and costs no request.
   - **Polite limits**: default `--delay 4` s between requests (minimum `2` s enforced), hard `--max-requests 300` cap per run (index pages count), honest User-Agent (`settings.INJURY_USER_AGENT`), progress log every 25 requests, graceful stop on `Ctrl-C`. A PDF with an unknown layout is a parse failure and stores nothing.
+  - **Slot ledger (`injury_backfill_slot`, migration `a4d6f8b0c3e5`)**: every attempted slot records its latest outcome (`stored`, `missing` = every guessed name returned 403/404, `parse_failed` with the unknown `layout_header`, `http_error`), the URL tried and the attempt time. Later runs skip `missing` and `parse_failed` slots with zero requests; `http_error` slots are retried automatically. `--retry-failed` re-plans parse failures (fresh download and re-parse, the failed file first; use it after a parser fix), `--retry-missing` re-plans missing slots, `--reparse-failed-only` plans nothing but the parse failures. A slot cut short by `--max-requests` records nothing and is re-planned. The summary ends with the cumulative coverage per season (stored / missing / failed / remaining).
+  - **First run after deploying the ledger**: the ledger starts empty, so the first run re-attempts the earlier failures once (the 32 November-December 2019 `_05PM` files now parse) and the missing slots once; from then on they are skipped.
   - **Expected cost of the full window** (dry run 2026-11-06 against production, read-only): 1,612 game dates, 3,222 planned slots, **~1,789..3,231 requests** plus 403/404 fallbacks, i.e. **~2.0..3.6 hours** of request spacing at 4 s, in **6..11 chunks** of 300 requests. Pilot one chunk per naming era first and check `Parse failures` and `Unmatched player names` in the summary.
   - **Running in chunks (resumable & idempotent)**:
     ```bash
@@ -307,9 +309,12 @@ Every manual change writes an audit row whose reason starts with `manual:`. A re
     # 2. Run one polite chunk (stops at --max-requests 300; ~20 minutes at 4 s delay)
     python scripts/backfill_injuries.py --max-requests 300 --delay 4
 
-    # 3. Re-run the same command to resume (stored slots are skipped with zero network calls);
-    #    repeat until the summary says "completed". A narrower --start/--end works the same way.
+    # 3. Re-run the same command to resume (stored, missing and parse-failed slots are skipped with
+    #    zero network calls); repeat until the summary says "completed". A narrower --start/--end works too.
     python scripts/backfill_injuries.py --max-requests 300 --delay 4
+
+    # 4. After a parser fix: re-download and re-parse only the slots that failed to parse
+    python scripts/backfill_injuries.py --reparse-failed-only --max-requests 300 --delay 4
     ```
   - **Using the data without leakage**: select reports for a game only with `report_timestamp` strictly before its tip-off: `latest_snapshot_before_tipoff(session, tipoff)` / `snapshot_is_pre_tip(...)`, with the tip-off from `injury_entry_tipoff_utc(entry)` (parses `game_time_et`, e.g. `'01:00  (ET)'` = 1:00 PM). Weekend and holiday matinees tip before the 5 PM report.
 
