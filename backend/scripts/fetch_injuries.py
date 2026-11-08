@@ -6,7 +6,7 @@ Controlled by INJURY_PDF_ENABLED and INJURY_MAX_DOWNLOADS_PER_DAY.
 """
 
 import argparse
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 import logging
 import sys
 from pathlib import Path
@@ -75,11 +75,13 @@ def run_fetch_injuries(
                 print(f"[dry-run] No games scheduled for today ({today}). Exiting 0.")
             return 0
 
-        # 4. Find downloads today
+        # 4. Find live downloads today (historical backfill snapshots carry an old report_timestamp and must not
+        # count against the daily live limit)
         downloads_today_utc = session.exec(
             select(InjuryReportSnapshot.fetched_at).where(
                 InjuryReportSnapshot.fetched_at >= start_of_day_utc,
                 InjuryReportSnapshot.fetched_at <= end_of_day_utc,
+                InjuryReportSnapshot.report_timestamp >= start_of_day_utc - timedelta(days=1),
             )
         ).all()
         downloads_today_local = [d.astimezone(now_local.tzinfo) for d in downloads_today_utc]
