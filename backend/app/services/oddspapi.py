@@ -39,7 +39,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, exists, func, or_, select
@@ -328,31 +328,46 @@ class OpenClose:
     close_prices: Tuple[float, float]
 
 
-def open_close(rows: Iterable[Tuple[str, str, Optional[float], float, datetime]]) -> Dict[str, OpenClose]:
+PathPair = Tuple[datetime, Optional[float], Tuple[float, float]]  # (created_at, home line / total, (home|over, away|under))
+
+
+def main_line_pairs(rows: Iterable[Tuple[str, str, Optional[float], float, datetime]]) -> Dict[str, List[PathPair]]:
     """
-    market -> OpenClose from (market, side, line, price_decimal, created_at) rows of ONE book and game. Only
-    instants where both sides were written together count (they always are for stored paths).
+    market -> chronological main-line pairs from (market, side, line, price_decimal, created_at) rows of ONE book and
+    game. Only instants where both sides were written together count (they always are for stored paths).
     """
     first_side = {"h2h": "home", "spreads": "home", "totals": "over"}
     by_market: Dict[str, Dict[datetime, Dict[str, Tuple[Optional[float], float]]]] = defaultdict(lambda: defaultdict(dict))
     for market, side, line, price, ts in rows:
         by_market[market][_aware(ts)][side] = (None if line is None else float(line), float(price))
-    out: Dict[str, OpenClose] = {}
+    out: Dict[str, List[PathPair]] = {}
     for market, by_ts in by_market.items():
         if market not in first_side:
             continue
         a = first_side[market]
-        pairs = []
+        pairs: List[PathPair] = []
         for ts in sorted(by_ts):
             sides = by_ts[ts]
             if len(sides) != 2 or a not in sides:
                 continue
             b = next(s for s in sides if s != a)
-            line = sides[a][0]
-            pairs.append((ts, line, (sides[a][1], sides[b][1])))
+            pairs.append((ts, sides[a][0], (sides[a][1], sides[b][1])))
+        if pairs:
+            out[market] = pairs
+    return out
+
+
+def open_close_from_pairs(pairs_by_market: Mapping[str, Sequence[PathPair]]) -> Dict[str, OpenClose]:
+    out: Dict[str, OpenClose] = {}
+    for market, pairs in pairs_by_market.items():
         if pairs:
             out[market] = OpenClose(market, pairs[0][0], pairs[0][1], pairs[0][2], pairs[-1][0], pairs[-1][1], pairs[-1][2])
     return out
+
+
+def open_close(rows: Iterable[Tuple[str, str, Optional[float], float, datetime]]) -> Dict[str, OpenClose]:
+    """market -> OpenClose (first and last main-line pair) from the rows of ONE book and game (see main_line_pairs)."""
+    return open_close_from_pairs(main_line_pairs(rows))
 
 
 # ------------------------------------------------------------------------------------------------ mapping

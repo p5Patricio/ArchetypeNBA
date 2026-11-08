@@ -77,6 +77,7 @@ class BacktestConfig:
     n_boot: int = 1000
     min_line_seasons: int = 2  # past seasons with lines needed before a season is evaluated
     fit_margin_features: bool = True
+    export_season: Optional[str] = None  # season label whose walk-forward fits are exported (``BacktestResult.exports``)
 
 
 @dataclass
@@ -99,6 +100,7 @@ class BacktestResult:
     evaluated_seasons: List[str] = field(default_factory=list)
     implausible_values: int = 0
     b2b_any: Optional[np.ndarray] = None  # either team played the day before
+    exports: Dict[str, object] = field(default_factory=dict)  # fits used to predict ``config.export_season``
 
 
 # ------------------------------------------------------------------------------------------------ small fitters
@@ -177,7 +179,36 @@ def fit_predict_logistic(F_tr, y_tr, off_tr, s_tr, F_te, off_te) -> np.ndarray:
     return _sigmoid(Zte @ coef + b + (0 if off_te is None else off_te))
 
 
-def fit_predict_ridge(F_tr, y_tr, s_tr, F_te) -> np.ndarray:
+@dataclass(frozen=True)
+class RidgeFit:
+    """A standardized ridge fit, exportable as JSON: ``predict(F) = ((F - mean) / scale) @ coef + intercept``."""
+
+    mean: Tuple[float, ...]
+    scale: Tuple[float, ...]
+    coef: Tuple[float, ...]
+    intercept: float
+    alpha: float
+    n: int
+
+    def predict(self, F: np.ndarray) -> np.ndarray:
+        Z = (np.atleast_2d(np.asarray(F, dtype=float)) - np.asarray(self.mean)) / np.asarray(self.scale)
+        return Z @ np.asarray(self.coef) + self.intercept
+
+    def to_dict(self) -> Dict[str, object]:
+        return {"mean": list(self.mean), "scale": list(self.scale), "coef": list(self.coef),
+                "intercept": self.intercept, "alpha": self.alpha, "n": self.n}
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, object]) -> "RidgeFit":
+        fit = cls(tuple(float(v) for v in d["mean"]), tuple(float(v) for v in d["scale"]),
+                  tuple(float(v) for v in d["coef"]), float(d["intercept"]), float(d["alpha"]), int(d.get("n", 0)))
+        if not (len(fit.mean) == len(fit.scale) == len(fit.coef)) or any(v <= 0 for v in fit.scale):
+            raise ValueError("ridge params have inconsistent lengths or a non-positive scale")
+        return fit
+
+
+def fit_ridge_cv(F_tr, y_tr, s_tr) -> RidgeFit:
+    """Standardize, choose the ridge penalty by expanding-window CV over past seasons, refit on everything."""
     def score(alpha, tr, va):
         Ztr, Zva = _standardize(F_tr[tr], F_tr[va])
         coef, b = fit_ridge(Ztr, y_tr[tr], alpha)
@@ -185,9 +216,48 @@ def fit_predict_ridge(F_tr, y_tr, s_tr, F_te) -> np.ndarray:
         return float(r @ r)
 
     alpha = _select(RIDGE_GRID, _inner_folds(s_tr), score, 100.0)
-    Ztr, Zte = _standardize(F_tr, F_te)
-    coef, b = fit_ridge(Ztr, y_tr, alpha)
-    return Zte @ coef + b
+    mean, scale = F_tr.mean(axis=0), F_tr.std(axis=0)
+    scale[scale < 1e-12] = 1.0
+    coef, b = fit_ridge((F_tr - mean) / scale, y_tr, alpha)
+    return RidgeFit(tuple(mean.tolist()), tuple(scale.tolist()), tuple(coef.tolist()), float(b), float(alpha), len(y_tr))
+
+
+def fit_predict_ridge(F_tr, y_tr, s_tr, F_te) -> np.ndarray:
+    return fit_ridge_cv(F_tr, y_tr, s_tr).predict(F_te)
+
+
+# ------------------------------------------------------------------------------------------------ move features
+# One definition for the backtest, the registration script and live inference (no train/serve skew).
+
+SCHEDULE_FEATURES = ("rest_diff", "b2b_home", "b2b_away", "games7_diff", "margin10_diff", "winpct_diff", "season_progress")
+SPREAD_MOVE_FEATURES = ("mu_elo_plus_line", "mu_mf_plus_line", "line") + SCHEDULE_FEATURES
+TOTAL_MOVE_FEATURES = ("mu_total_minus_line", "line", "rest_diff", "b2b_home", "b2b_away", "games7_diff", "season_progress")
+
+
+def schedule_features(X: np.ndarray) -> np.ndarray:
+    """Schedule/form columns (``SCHEDULE_FEATURES``) from rows of the ``FEATURE_NAMES`` matrix."""
+    X = np.atleast_2d(X)
+    return np.column_stack([
+        X[:, _IDX["rest_home"]] - X[:, _IDX["rest_away"]],
+        X[:, _IDX["b2b_home"]], X[:, _IDX["b2b_away"]],
+        X[:, _IDX["games7_home"]] - X[:, _IDX["games7_away"]],
+        X[:, _IDX["margin10_home"]] - X[:, _IDX["margin10_away"]],
+        X[:, _IDX["winpct_home"]] - X[:, _IDX["winpct_away"]],
+        X[:, _IDX["season_progress"]],
+    ])
+
+
+def spread_move_features(mu_elo, mu_mf, line, sched: np.ndarray) -> np.ndarray:
+    """``SPREAD_MOVE_FEATURES``: model margins vs the (home) line we would bet, the line, schedule/form."""
+    mu_elo, mu_mf, line = (np.atleast_1d(np.asarray(v, dtype=float)) for v in (mu_elo, mu_mf, line))
+    return np.column_stack([mu_elo + line, mu_mf + line, line, np.atleast_2d(sched)])
+
+
+def total_move_features(mu_total, line, sched: np.ndarray) -> np.ndarray:
+    """``TOTAL_MOVE_FEATURES``: totals model vs the total we would bet, the total, schedule (no form diffs)."""
+    mu_total, line = (np.atleast_1d(np.asarray(v, dtype=float)) for v in (mu_total, line))
+    sched = np.atleast_2d(sched)
+    return np.column_stack([mu_total - line, line, sched[:, :4], sched[:, [6]]])
 
 
 # ------------------------------------------------------------------------------------------------ the run
@@ -209,17 +279,27 @@ def run_backtest(
     lines: Mapping[str, GameLines],
     config: Optional[BacktestConfig] = None,
     availability: Optional[Mapping[str, Tuple[float, float]]] = None,
+    feature_overrides: Optional[Mapping[str, Tuple[np.ndarray, float]]] = None,
 ) -> BacktestResult:
     """
     Walk-forward predictions for every game. ``games`` must be chronological (``EloRatingService.load_games``);
     ``lines`` maps ``nba_game_id`` to the market lines; ``availability`` (optional, UPPER BOUND) maps
-    ``nba_game_id`` to (missing impact home, missing impact away).
+    ``nba_game_id`` to (missing impact home, missing impact away). ``feature_overrides`` maps ``nba_game_id`` to
+    (``FEATURE_NAMES`` row, totals mu) computed as of an instant (``line_movement.features_as_of``); those rows
+    replace the date-based pass everywhere (training and test).
     """
     config = config or BacktestConfig()
     n = len(games)
     fs, _ = build_feature_set(games, EloParams())
     totals_fs, _ = build_totals_feature_set(games)
-    X = fs.X
+    X = fs.X.copy()
+    mu_total = totals_fs.mu.copy()
+    if feature_overrides:
+        for i, g in enumerate(games):
+            override = feature_overrides.get(g.game_id)
+            if override is not None:
+                X[i] = override[0]
+                mu_total[i] = override[1]
     labels = sorted({season_label_of[g.season_id] for g in games})
     s_index = {label: i for i, label in enumerate(labels)}
     season = np.array([s_index[season_label_of[g.season_id]] for g in games], dtype=int)
@@ -240,7 +320,6 @@ def run_backtest(
     edge = X[:, _IDX["elo_edge"]]
     p_elo = 1.0 / (1.0 + 10.0 ** (-edge / 400.0))
     mu_elo = edge / EloParams().elo_per_point
-    mu_total = totals_fs.mu
 
     nan = lambda: np.full(n, np.nan)  # noqa: E731
     p_mf, mu_mf, sig_s, sig_t = nan(), nan(), nan(), nan()
@@ -260,24 +339,20 @@ def run_backtest(
         b2b_any=(X[:, _IDX["b2b_home"]] + X[:, _IDX["b2b_away"]]) > 0,
     )
 
-    sched = np.column_stack([
-        X[:, _IDX["rest_home"]] - X[:, _IDX["rest_away"]],
-        X[:, _IDX["b2b_home"]], X[:, _IDX["b2b_away"]],
-        X[:, _IDX["games7_home"]] - X[:, _IDX["games7_away"]],
-        X[:, _IDX["margin10_home"]] - X[:, _IDX["margin10_away"]],
-        X[:, _IDX["winpct_home"]] - X[:, _IDX["winpct_away"]],
-        X[:, _IDX["season_progress"]],
-    ])
+    sched = schedule_features(X)
 
     for k in line_seasons:
         test = season == k
         past = season < k
         # --- margin_features, refit on every past season but the first (burn-in), as deployed
         train_mf = past & (season > 0)
+        exporting = config.export_season is not None and labels[k] == config.export_season
         if config.fit_margin_features and len(set(season[train_mf].tolist())) >= 1:
             params = fit_margin_features(X[train_mf], margin[train_mf], home_win[train_mf], season[train_mf], seed=config.seed)
             p, mu = MarginFeaturesModel(params).predict_matrix(X[test])
             p_mf[test], mu_mf[test] = p, mu
+            if exporting:
+                result.exports["margin_features"] = params
         # --- market sigmas from past seasons only
         ok_s = past & ~np.isnan(close_s)
         if ok_s.sum() >= 30:
@@ -285,6 +360,9 @@ def run_backtest(
         ok_t = past & ~np.isnan(close_t)
         if ok_t.sum() >= 30:
             sig_t[test] = float(np.std(game_total[ok_t] - close_t[ok_t]))
+        if exporting:
+            result.exports["sigma_spread"] = float(sig_s[test][0]) if test.any() else float("nan")
+            result.exports["sigma_total"] = float(sig_t[test][0]) if test.any() else float("nan")
         if not np.isnan(sig_s[test]).all():
             sigma = sig_s[test][0]
             from_spread = np.array([hl.spread_implied_prob(v, sigma) if not np.isnan(v) else np.nan for v in close_s[test]])
@@ -319,13 +397,14 @@ def run_backtest(
 
         # --- line-move models: target close - open, trained on past seasons with walk-forward model margins
         def move_features(mask, with_av=False):
-            cols = [mu_elo[mask] + open_s[mask], mu_mf[mask] + open_s[mask], open_s[mask], sched[mask]]
-            if with_av:
-                cols.append(miss[mask])
-            return np.column_stack(cols)
+            F = spread_move_features(mu_elo[mask], mu_mf[mask], open_s[mask], sched[mask])
+            return np.column_stack([F, miss[mask]]) if with_av else F
 
         base_ok = ~np.isnan(open_s) & ~np.isnan(close_s) & ~np.isnan(mu_mf)
         tr_m, te_m = past & base_ok, test & ~np.isnan(open_s) & ~np.isnan(mu_mf)
+        if exporting and tr_m.sum() >= 100:
+            result.exports["spreads"] = fit_ridge_cv(move_features(tr_m), close_s[tr_m] - open_s[tr_m], season[tr_m])
+            result.exports["spreads_train_seasons"] = sorted({labels[int(v)] for v in season[tr_m]})
         if tr_m.sum() >= 100 and te_m.sum():
             move_s[te_m] = fit_predict_ridge(move_features(tr_m), close_s[tr_m] - open_s[tr_m], season[tr_m], move_features(te_m))
             # ablation: the same regression without the two model-vs-open gaps (open line and schedule only)
@@ -341,10 +420,14 @@ def run_backtest(
                     )
         tot_ok = ~np.isnan(open_t) & ~np.isnan(close_t)
         tr_t, te_t = past & tot_ok, test & ~np.isnan(open_t)
-        if tr_t.sum() >= 100 and te_t.sum():
-            def tot_features(mask):
-                return np.column_stack([mu_total[mask] - open_t[mask], open_t[mask], sched[mask][:, :4], X[mask][:, [_IDX["season_progress"]]]])
 
+        def tot_features(mask):
+            return total_move_features(mu_total[mask], open_t[mask], sched[mask])
+
+        if exporting and tr_t.sum() >= 100:
+            result.exports["totals"] = fit_ridge_cv(tot_features(tr_t), close_t[tr_t] - open_t[tr_t], season[tr_t])
+            result.exports["totals_train_seasons"] = sorted({labels[int(v)] for v in season[tr_t]})
+        if tr_t.sum() >= 100 and te_t.sum():
             move_t[te_t] = fit_predict_ridge(tot_features(tr_t), close_t[tr_t] - open_t[tr_t], season[tr_t], tot_features(te_t))
 
         result.eval_mask |= te
