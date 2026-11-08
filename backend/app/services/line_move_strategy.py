@@ -324,14 +324,13 @@ class LineMoveRecorder:
     def _last_capture(self, game_ids: Sequence[int]) -> Dict[int, datetime]:
         """Newest capture of each game at or before ``now`` (an odds row or a capture marker)."""
         out: Dict[int, datetime] = {}
+        # compared in Python: SQLite hands back naive datetimes, so the guard never depends on the driver
         for stmt in (
-            select(OddsHistory.game_id, func.max(OddsHistory.captured_at))
+            select(OddsHistory.game_id, OddsHistory.captured_at)
             .where(OddsHistory.game_id.in_(list(game_ids)), OddsHistory.player_id.is_(None),
-                   OddsHistory.market.in_(MARKETS), OddsHistory.captured_at <= self.now)
-            .group_by(OddsHistory.game_id),
-            select(OddsSnapshotCapture.game_id, func.max(OddsSnapshotCapture.captured_at))
-            .where(OddsSnapshotCapture.game_id.in_(list(game_ids)), OddsSnapshotCapture.captured_at <= self.now)
-            .group_by(OddsSnapshotCapture.game_id),
+                   OddsHistory.market.in_(MARKETS)),
+            select(OddsSnapshotCapture.game_id, OddsSnapshotCapture.captured_at)
+            .where(OddsSnapshotCapture.game_id.in_(list(game_ids))),
         ):
             for game_id, at in self.session.execute(stmt):
                 if at is not None:
